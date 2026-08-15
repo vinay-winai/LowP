@@ -697,22 +697,41 @@ async function extractDataFromTab(tabId, cleanQ) {
   return null;
 }
 
-async function fetchViaEphemeralTab(url, cleanQ, delayMs = 10000) {
+async function fetchViaEphemeralTab(url, cleanQ, totalWaitMs = 10000) {
   if (typeof chrome === "undefined" || !chrome.tabs || !chrome.tabs.create) {
     return null;
   }
   let tabId = null;
   try {
-    logDebug("EphemeralTab", `Opening background tab for ${url} (waiting fixed ${delayMs / 1000}s)`);
+    logDebug("EphemeralTab", `Opening background tab for ${url} (waiting fixed ${totalWaitMs / 1000}s)`);
     const tab = await chrome.tabs.create({ url, active: false });
     tabId = tab.id;
 
-    // Fixed 10s delay to allow full page load and client-side hydration
-    await new Promise((r) => setTimeout(r, delayMs));
+    // 1. Wait for tab network load complete (or up to 4s)
+    await new Promise((resolve) => {
+      let isResolved = false;
+      const listener = (tid, changeInfo) => {
+        if (tid === tabId && changeInfo.status === "complete") {
+          chrome.tabs.onUpdated.removeListener(listener);
+          isResolved = true;
+          resolve();
+        }
+      };
+      chrome.tabs.onUpdated.addListener(listener);
+      setTimeout(() => {
+        if (!isResolved) {
+          try { chrome.tabs.onUpdated.removeListener(listener); } catch (e) {}
+          resolve();
+        }
+      }, 4000);
+    });
+
+    // 2. Fixed hydration delay for client SPA execution (remaining time to reach full 10s)
+    await new Promise((r) => setTimeout(r, 6000));
 
     const data = await extractDataFromTab(tabId, cleanQ);
     if (data && data.price > 0) {
-      logDebug("EphemeralTab", `Successfully extracted data from ${url} after fixed ${delayMs / 1000}s delay: "${data.title}" at ₹${data.price}`, data);
+      logDebug("EphemeralTab", `Successfully extracted data from ${url} after full ${totalWaitMs / 1000}s wait: "${data.title}" at ₹${data.price}`, data);
     }
     return data;
   } catch (err) {
