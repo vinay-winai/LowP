@@ -739,33 +739,38 @@ async function extractDataFromTab(tabId, cleanQ) {
 }
 
 async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 8000) {
-  if (typeof chrome === "undefined" || !chrome.tabs || !chrome.tabs.create) {
+  if (typeof chrome === "undefined" || (!chrome.tabs && !chrome.windows)) {
     return null;
   }
+  let winId = null;
   let tabId = null;
-  let origTabId = null;
   try {
-    // 1. Capture user's current active tab so we can restore focus
-    try {
-      const [currentActive] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (currentActive) origTabId = currentActive.id;
-    } catch (e) {}
+    logDebug("EphemeralTab", `Opening background window for ${url}`);
 
-    logDebug("EphemeralTab", `Launching foreground quick-switch tab for ${url}`);
-
-    // 2. Open tab in foreground to activate full GPU rendering & SPA layout
-    const tab = await chrome.tabs.create({ url, active: true });
-    tabId = tab.id;
-
-    // 3. Allow brief layout window (1.2s), then restore focus back to user's tab
-    await new Promise((r) => setTimeout(r, 1200));
-    if (origTabId && origTabId !== tabId) {
+    // Create a detached minimized window so the extension popup never loses focus
+    if (chrome.windows && chrome.windows.create) {
       try {
-        await chrome.tabs.update(origTabId, { active: true });
-      } catch (e) {}
+        const win = await chrome.windows.create({
+          url,
+          type: "popup",
+          focused: false,
+          state: "minimized"
+        });
+        winId = win.id;
+        tabId = win.tabs && win.tabs[0] ? win.tabs[0].id : null;
+      } catch (winErr) {
+        // Fallback to tab creation if window creation fails
+        const tab = await chrome.tabs.create({ url, active: false });
+        tabId = tab.id;
+      }
+    } else if (chrome.tabs && chrome.tabs.create) {
+      const tab = await chrome.tabs.create({ url, active: false });
+      tabId = tab.id;
     }
 
-    // 4. Poll every 500ms up to timeout (returns immediately once data is ready)
+    if (!tabId) return null;
+
+    // Poll every 500ms up to timeout (returns immediately once data is ready)
     const startTime = Date.now();
     let data = null;
     while (Date.now() - startTime < timeoutMs) {
@@ -779,10 +784,15 @@ async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 8000) {
 
     return data;
   } catch (err) {
-    logDebug("EphemeralTab", `Ephemeral tab error for ${url}: ${err.message}`);
+    logDebug("EphemeralTab", `Ephemeral extraction error for ${url}: ${err.message}`);
     return null;
   } finally {
-    if (tabId) {
+    if (winId && typeof chrome !== "undefined" && chrome.windows && chrome.windows.remove) {
+      try {
+        await chrome.windows.remove(winId);
+        logDebug("EphemeralTab", `Ephemeral window ${winId} closed successfully`);
+      } catch (e) {}
+    } else if (tabId && typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.remove) {
       try {
         await chrome.tabs.remove(tabId);
         logDebug("EphemeralTab", `Ephemeral tab ${tabId} closed successfully`);
