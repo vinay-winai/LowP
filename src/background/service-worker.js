@@ -833,8 +833,11 @@ class AmazonTezProvider extends BaseProvider {
         chrome.storage.local.get(["synced_amazon_tez"], (res) => resolve(res.synced_amazon_tez));
       });
       if (syncItem && syncItem.data && Date.now() - syncItem.timestamp < 300000) {
-        logDebug("AmazonTez", "Found live synced item from content script", syncItem.data);
-        return this.formatResult(syncItem.data, location, cleanQ);
+        const relevance = MatchingEngine.scoreRelevance(syncItem.data.title, cleanQ);
+        if (relevance >= 30) {
+          logDebug("AmazonTez", `Found relevant live synced item: "${syncItem.data.title}" (Score: ${relevance})`, syncItem.data);
+          return this.formatResult(syncItem.data, location, cleanQ);
+        }
       }
     }
 
@@ -849,8 +852,8 @@ class AmazonTezProvider extends BaseProvider {
           try {
             logDebug("AmazonTez", `Querying open Amazon Tez tab (${t.id}): ${t.url}`);
             const data = await extractDataFromTab(t.id, cleanQ);
-            if (data && data.price > 0) {
-              logDebug("AmazonTez", `Retrieved live price from open Amazon Tez tab: ${data.title} at ₹${data.price}`, data);
+            if (data && data.price > 0 && MatchingEngine.scoreRelevance(data.title, cleanQ) >= 30) {
+              logDebug("AmazonTez", `Retrieved relevant price from open Amazon Tez tab: ${data.title} at ₹${data.price}`, data);
               return this.formatResult(data, location, cleanQ);
             }
           } catch (e) {
@@ -1021,8 +1024,11 @@ class InstamartProvider extends BaseProvider {
         chrome.storage.local.get(["synced_instamart"], (res) => resolve(res.synced_instamart));
       });
       if (syncItem && syncItem.data && Date.now() - syncItem.timestamp < 300000) {
-        logDebug("Instamart", "Found live synced item from content script", syncItem.data);
-        return this.formatResult(syncItem.data, location);
+        const relevance = MatchingEngine.scoreRelevance(syncItem.data.title, cleanQ);
+        if (relevance >= 30) {
+          logDebug("Instamart", `Found relevant live synced item: "${syncItem.data.title}" (Score: ${relevance})`, syncItem.data);
+          return this.formatResult(syncItem.data, location, cleanQ);
+        }
       }
     }
 
@@ -1037,9 +1043,9 @@ class InstamartProvider extends BaseProvider {
           try {
             logDebug("Instamart", `Querying open Swiggy tab (${t.id}): ${t.url}`);
             const data = await extractDataFromTab(t.id, cleanQ);
-            if (data && data.price > 0) {
-              logDebug("Instamart", `Retrieved live price from open Swiggy tab: ${data.title} at ₹${data.price}`, data);
-              return this.formatResult(data, location);
+            if (data && data.price > 0 && MatchingEngine.scoreRelevance(data.title, cleanQ) >= 30) {
+              logDebug("Instamart", `Retrieved relevant price from open Swiggy tab: ${data.title} at ₹${data.price}`, data);
+              return this.formatResult(data, location, cleanQ);
             }
           } catch (e) {
             logDebug("Instamart", `Swiggy tab (${t.id}) query error: ${e.message}`);
@@ -1159,8 +1165,11 @@ class ZeptoProvider extends BaseProvider {
         chrome.storage.local.get(["synced_zepto"], (res) => resolve(res.synced_zepto));
       });
       if (syncItem && syncItem.data && Date.now() - syncItem.timestamp < 300000) {
-        logDebug("Zepto", "Found live synced item from content script", syncItem.data);
-        return this.formatResult(syncItem.data, location, cleanQ);
+        const relevance = MatchingEngine.scoreRelevance(syncItem.data.title, cleanQ);
+        if (relevance >= 30) {
+          logDebug("Zepto", `Found relevant live synced item: "${syncItem.data.title}" (Score: ${relevance})`, syncItem.data);
+          return this.formatResult(syncItem.data, location, cleanQ);
+        }
       }
     }
 
@@ -1175,8 +1184,8 @@ class ZeptoProvider extends BaseProvider {
           try {
             logDebug("Zepto", `Querying open Zepto tab (${t.id}): ${t.url}`);
             const data = await extractDataFromTab(t.id, cleanQ);
-            if (data && data.price > 0) {
-              logDebug("Zepto", `Retrieved live price from open Zepto tab: ${data.title} at ₹${data.price}`, data);
+            if (data && data.price > 0 && MatchingEngine.scoreRelevance(data.title, cleanQ) >= 30) {
+              logDebug("Zepto", `Retrieved relevant price from open Zepto tab: ${data.title} at ₹${data.price}`, data);
               return this.formatResult(data, location, cleanQ);
             }
           } catch (e) {
