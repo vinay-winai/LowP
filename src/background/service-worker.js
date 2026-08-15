@@ -212,8 +212,7 @@ class MatchingEngine {
   }
 
   static scoreRelevance(itemTitle, query, packSize = '') {
-    if (!itemTitle) return 0;
-    if (!query || !query.trim()) return 50;
+    if (!itemTitle || !query || !query.trim()) return 0;
 
     const normalize = (str) => (str || "").toLowerCase()
       .replace(/['’`"]/g, "")
@@ -369,8 +368,7 @@ function inPageExtract(searchQuery) {
   }
 
   function scoreRelevance(itemTitle, query, packSize = '') {
-    if (!itemTitle) return 0;
-    if (!query || !query.trim()) return 50;
+    if (!itemTitle || !query || !query.trim()) return 0;
 
     const normalize = (str) => (str || "").toLowerCase()
       .replace(/['’`"]/g, "")
@@ -834,6 +832,24 @@ async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 8000) {
   }
 }
 
+function isOpenTabMatchingQuery(tabUrl, query) {
+  if (!tabUrl || !query) return false;
+  const lowerUrl = tabUrl.toLowerCase();
+  const cleanQ = (typeof MatchingEngine !== "undefined" ? MatchingEngine.cleanSearchTerm(query) : query).toLowerCase();
+
+  // If it's a dedicated PDP (Product Detail Page), allow tab extraction (relevance will score the product)
+  if (lowerUrl.includes("/dp/") || lowerUrl.includes("/product/") || lowerUrl.includes("/pn/") || lowerUrl.includes("/item/")) {
+    return true;
+  }
+
+  // If it's a search results page, the search URL MUST contain at least one significant search term
+  const tokens = cleanQ.split(/\s+/).filter(t => t.length >= 2);
+  if (tokens.length > 0) {
+    return tokens.some(t => lowerUrl.includes(encodeURIComponent(t)) || lowerUrl.includes(t));
+  }
+  return true;
+}
+
 // --- AMAZON NOW / TEZ PROVIDER ---
 class AmazonTezProvider extends BaseProvider {
   constructor() {
@@ -851,12 +867,12 @@ class AmazonTezProvider extends BaseProvider {
 
     logDebug("AmazonTez", `Searching Amazon Tez for "${cleanQ}" (Live Direct Search)`);
 
-    // 1. Query open Amazon Tez tabs across all windows
+    // 1. Query open Amazon Tez tabs matching the search query
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
       try {
         const allTabs = await chrome.tabs.query({});
-        const tezTabs = allTabs.filter(t => t.url && t.url.includes("amazon.in") && (t.url.includes("/tez/") || t.url.includes("searchKeyword")));
-        logDebug("AmazonTez", `Found ${tezTabs.length} open Amazon Tez tab(s)`);
+        const tezTabs = allTabs.filter(t => t.url && t.url.includes("amazon.in") && (t.url.includes("/tez/") || t.url.includes("searchKeyword")) && isOpenTabMatchingQuery(t.url, cleanQ));
+        logDebug("AmazonTez", `Found ${tezTabs.length} open matching Amazon Tez tab(s)`);
 
         for (const t of tezTabs) {
           try {
@@ -920,7 +936,7 @@ class AmazonStandardProvider extends BaseProvider {
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
       try {
         const allTabs = await chrome.tabs.query({});
-        const standardTabs = allTabs.filter(t => t.url && t.url.includes("amazon.in") && !t.url.includes("/tez/"));
+        const standardTabs = allTabs.filter(t => t.url && t.url.includes("amazon.in") && !t.url.includes("/tez/") && isOpenTabMatchingQuery(t.url, cleanQ));
         for (const t of standardTabs) {
           try {
             const data = await extractDataFromTab(t.id, cleanQ);
@@ -1028,12 +1044,12 @@ class InstamartProvider extends BaseProvider {
 
     logDebug("Instamart", `Searching Instamart for "${cleanQ}" (Live Direct Search)`);
 
-    // 1. Query open Swiggy tabs across all windows
+    // 1. Query open Swiggy tabs matching search query
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
       try {
         const allTabs = await chrome.tabs.query({});
-        const swiggyTabs = allTabs.filter(t => t.url && t.url.includes("swiggy.com"));
-        logDebug("Instamart", `Found ${swiggyTabs.length} open Swiggy tab(s)`);
+        const swiggyTabs = allTabs.filter(t => t.url && t.url.includes("swiggy.com") && isOpenTabMatchingQuery(t.url, cleanQ));
+        logDebug("Instamart", `Found ${swiggyTabs.length} open matching Swiggy tab(s)`);
 
         for (const t of swiggyTabs) {
           try {
@@ -1155,12 +1171,12 @@ class ZeptoProvider extends BaseProvider {
 
     logDebug("Zepto", `Searching Zepto for "${cleanQ}" (Live Direct Search)`);
 
-    // 1. Query open Zepto tabs across all windows
+    // 1. Query open Zepto tabs matching search query
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
       try {
         const allTabs = await chrome.tabs.query({});
-        const zeptoTabs = allTabs.filter(t => t.url && (t.url.includes("zepto.com") || t.url.includes("zeptonow.com")));
-        logDebug("Zepto", `Found ${zeptoTabs.length} open Zepto tab(s)`);
+        const zeptoTabs = allTabs.filter(t => t.url && (t.url.includes("zepto.com") || t.url.includes("zeptonow.com")) && isOpenTabMatchingQuery(t.url, cleanQ));
+        logDebug("Zepto", `Found ${zeptoTabs.length} open matching Zepto tab(s)`);
 
         for (const t of zeptoTabs) {
           try {

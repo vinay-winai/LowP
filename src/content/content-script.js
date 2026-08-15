@@ -37,8 +37,7 @@
   }
 
   function scoreRelevance(itemTitle, query, packSize = '') {
-    if (!itemTitle) return 0;
-    if (!query || !query.trim()) return 50;
+    if (!itemTitle || !query || !query.trim()) return 0;
 
     const normalize = (str) => (str || "").toLowerCase()
       .replace(/['’`"]/g, "")
