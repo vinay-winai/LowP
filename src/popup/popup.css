@@ -246,14 +246,6 @@ body {
   color: #FFFFFF;
 }
 
-.delivery-badge {
-  font-size: 11px;
-  color: var(--text-sub);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
 .badges-row {
   display: flex;
   gap: 6px;
@@ -271,12 +263,6 @@ body {
   background: rgba(16, 185, 129, 0.15);
   color: var(--accent-green);
   border: 1px solid var(--accent-green);
-}
-
-.badge-fastest {
-  background: rgba(249, 115, 22, 0.15);
-  color: var(--accent-orange);
-  border: 1px solid var(--accent-orange);
 }
 
 .card-body {

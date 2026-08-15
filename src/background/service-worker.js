@@ -279,11 +279,10 @@ class MatchingEngine {
 // 4. PLATFORM PROVIDERS
 // ==========================================
 class BaseProvider {
-  constructor(platformId, platformName, logoColor, deliveryType) {
+  constructor(platformId, platformName, logoColor) {
     this.platformId = platformId;
     this.platformName = platformName;
     this.logoColor = logoColor;
-    this.deliveryType = deliveryType;
   }
 
   formatResult(item, location, fallbackQuery = "") {
@@ -681,7 +680,7 @@ async function extractDataFromTab(tabId, cleanQ) {
 // --- AMAZON INDIA PROVIDER ---
 class AmazonProvider extends BaseProvider {
   constructor() {
-    super("amazon", "Amazon Now / India", "#FF9900", "Quick Commerce (Amazon Tez / Now)");
+    super("amazon", "Amazon Now / India", "#FF9900");
   }
 
   getSearchUrl(query) {
@@ -746,7 +745,6 @@ class AmazonProvider extends BaseProvider {
           const mrpMatch = block.match(/class="a-price a-text-price"[^>]*><span class="a-offscreen">₹?([0-9,]+(?:\.[0-9]+)?)/i);
           const asinMatch = block.match(/data-asin="([A-Z0-9]{10})"/i);
           const imgMatch = block.match(/class="s-image"[^>]*src="([^"]+)"/i);
-          const isFresh = block.includes("Amazon Fresh") || block.includes("Fresh") || block.includes("Now");
 
           if (titleMatch && priceMatch) {
             const rawTitle = titleMatch[1].trim();
@@ -762,7 +760,6 @@ class AmazonProvider extends BaseProvider {
               quantity: "1 unit",
               mrp,
               price,
-              deliveryTime: "Today (Amazon Tez / Now)",
               image: imgMatch ? imgMatch[1] : "assets/icon48.png",
               productUrl: asin ? `https://www.amazon.in/dp/${asin}` : tezUrl,
               _score: MatchingEngine.scoreRelevance(title, cleanQ)
@@ -790,7 +787,7 @@ class AmazonProvider extends BaseProvider {
 // --- SWIGGY INSTAMART PROVIDER ---
 class InstamartProvider extends BaseProvider {
   constructor() {
-    super("instamart", "Swiggy Instamart", "#FC8019", "Quick Commerce (10-15 mins)");
+    super("instamart", "Swiggy Instamart", "#FC8019");
   }
 
   getSearchUrl(query) {
@@ -916,7 +913,7 @@ class InstamartProvider extends BaseProvider {
 // --- ZEPTO PROVIDER ---
 class ZeptoProvider extends BaseProvider {
   constructor() {
-    super("zepto", "Zepto", "#7C3AED", "Quick Commerce (5-9 mins)");
+    super("zepto", "Zepto", "#7C3AED");
   }
 
   getSearchUrl(query) {
@@ -971,7 +968,6 @@ class ZeptoProvider extends BaseProvider {
       quantity: "1 unit",
       mrp: 0,
       price: 0,
-      deliveryTime: "5-9 mins",
       image: "assets/icon48.png",
       productUrl: targetUrl
     }, location, cleanQ);
