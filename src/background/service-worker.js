@@ -894,6 +894,20 @@ class AmazonTezProvider extends BaseProvider {
       logDebug("AmazonTez", `Amazon Tez search error: ${err.message}`);
     }
 
+    // 3. Automated ephemeral background window extraction for Amazon Tez
+    if (typeof chrome !== "undefined" && (chrome.tabs || chrome.windows)) {
+      try {
+        logDebug("AmazonTez", `Attempting automated ephemeral background window extraction for "${cleanQ}"`);
+        const ephemeralData = await fetchViaEphemeralTab(tezUrl, cleanQ);
+        if (ephemeralData && ephemeralData.price > 0) {
+          logDebug("AmazonTez", `Retrieved live price via ephemeral background tab: ${ephemeralData.title} at ₹${ephemeralData.price}`, ephemeralData);
+          return this.formatResult(ephemeralData, location, cleanQ);
+        }
+      } catch (e) {
+        logDebug("AmazonTez", `Ephemeral extraction error: ${e.message}`);
+      }
+    }
+
     return this.formatResult(null, location, cleanQ);
   }
 }
@@ -988,6 +1002,20 @@ class AmazonStandardProvider extends BaseProvider {
       }
     } catch (err) {
       logDebug("AmazonStandard", `Amazon Standard search error: ${err.message}`);
+    }
+
+    // 3. Automated ephemeral background window extraction for Amazon Standard
+    if (typeof chrome !== "undefined" && (chrome.tabs || chrome.windows)) {
+      try {
+        logDebug("AmazonStandard", `Attempting automated ephemeral background window extraction for "${cleanQ}"`);
+        const ephemeralData = await fetchViaEphemeralTab(standardUrl, cleanQ);
+        if (ephemeralData && ephemeralData.price > 0) {
+          logDebug("AmazonStandard", `Retrieved live price via ephemeral background tab: ${ephemeralData.title} at ₹${ephemeralData.price}`, ephemeralData);
+          return this.formatResult(ephemeralData, location, cleanQ);
+        }
+      } catch (e) {
+        logDebug("AmazonStandard", `Ephemeral extraction error: ${e.message}`);
+      }
     }
 
     return this.formatResult(null, location, cleanQ);
