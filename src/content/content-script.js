@@ -92,32 +92,47 @@
     return score;
   }
 
+  function getSpacedText(node) {
+    if (!node) return "";
+    if (node.nodeType === 3) return (node.nodeValue || "") + " ";
+    let text = "";
+    const children = node.childNodes || [];
+    for (let i = 0; i < children.length; i++) {
+      text += getSpacedText(children[i]);
+    }
+    return text;
+  }
+
   function extractFromCard(cardNode, platformId) {
     if (!cardNode) return null;
+    const spacedCardText = getSpacedText(cardNode).replace(/\s+/g, " ").trim();
     const cardText = cardNode.textContent || "";
     
-    // 1. Price extraction (Robust: Literal Currency -> Price Element -> Numeric Node Fallback)
+    // 1. Price extraction (Priority: specific price element -> spaced currency match -> leaf numeric fallback)
     let price = null;
-    const literalMatch = cardText.match(/(?:₹|Rs\.?|INR)\s*([0-9,]+(?:\.[0-9]+)?)/i);
-    if (literalMatch) {
-      price = parseFloat(literalMatch[1].replace(/,/g, ""));
-    }
 
-    if (!price || isNaN(price)) {
-      const priceEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="EdlpPrice"], [data-testid*="price"], [data-testid*="item_price"], [class*="price"], [class*="Price"], [class*="_1yW90"], [class*="_3-M84"]') : null;
-      if (priceEl) {
-        const pTxt = priceEl.textContent?.trim() || "";
-        const m = pTxt.match(/([0-9,]+(?:\.[0-9]+)?)/);
-        if (m) {
-          const val = parseFloat(m[1].replace(/,/g, ""));
-          if (val >= 5 && val <= 500000) price = val;
-        }
+    const priceEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="EdlpPrice"], [data-testid*="price"], [data-testid*="item_price"], [data-testid*="offer-price"], [class*="_2jn41"], [class*="_1yW90"], [class*="_3-M84"]') : null;
+    if (priceEl) {
+      const pTxt = getSpacedText(priceEl).trim();
+      const m = pTxt.match(/([0-9,]+(?:\.[0-9]+)?)/);
+      if (m) {
+        const val = parseFloat(m[1].replace(/,/g, ""));
+        if (val >= 5 && val <= 500000) price = val;
       }
     }
 
     if (!price || isNaN(price)) {
-      const children = cardNode.querySelectorAll ? cardNode.querySelectorAll('div, span, p') : [];
+      const literalMatch = spacedCardText.match(/(?:₹|Rs\.?|INR)\s*([0-9,]+(?:\.[0-9]+)?)/i);
+      if (literalMatch) {
+        const val = parseFloat(literalMatch[1].replace(/,/g, ""));
+        if (val >= 5 && val <= 500000) price = val;
+      }
+    }
+
+    if (!price || isNaN(price)) {
+      const children = cardNode.querySelectorAll ? cardNode.querySelectorAll('div, span, p, b, strong') : [];
       for (const el of children) {
+        if (el.children && el.children.length > 0) continue;
         const txt = el.textContent?.trim();
         if (txt && /^\s*[0-9]{2,5}(?:\.[0-9]+)?\s*$/.test(txt)) {
           const val = parseFloat(txt);
@@ -165,7 +180,7 @@
 
     // 3. Clean Inline Fallback
     if (!title) {
-      const inlineTxt = cleanTitle(cardText);
+      const inlineTxt = cleanTitle(spacedCardText);
       if (inlineTxt.length >= 3 && inlineTxt.length <= 120 && !isBadTitle(inlineTxt)) {
         title = inlineTxt;
       }
@@ -177,10 +192,19 @@
     const qtyEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="PackSize"], [data-testid*="quantity"], [data-testid*="weight"], [data-testid*="item_quantity"], [class*="PackSize"], [class*="weight"], [class*="quantity"], span[class*="pack"], span[class*="unit"]') : null;
     const quantity = qtyEl ? qtyEl.textContent.trim() : "1 unit";
 
-    // 5. MRP
-    const mrpEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id*="mrp"], [class*="cx3iWL"], [class*="mrp"]') : null;
-    const mrpMatch = (mrpEl ? mrpEl.textContent : cardText).match(/₹\s*([0-9,]+)/);
-    const mrp = mrpMatch ? parseFloat(mrpMatch[1].replace(/,/g, "")) : Math.round(price * 1.15);
+    // 5. MRP (Check slashed / strikethrough elements)
+    const mrpEl = cardNode.querySelector ? cardNode.querySelector('s, del, strike, [class*="strike"], [class*="slashed"], [class*="_3eAjW"], [class*="cx3iWL"], [style*="line-through"], [data-slot-id*="mrp"], [class*="mrp"]') : null;
+    let mrp = null;
+    if (mrpEl) {
+      const mMatch = mrpEl.textContent.match(/([0-9,]+(?:\.[0-9]+)?)/);
+      if (mMatch) {
+        const val = parseFloat(mMatch[1].replace(/,/g, ""));
+        if (val >= price) mrp = val;
+      }
+    }
+    if (!mrp || mrp < price) {
+      mrp = Math.round(price * 1.15);
+    }
 
     const deliveryTime = (platformId === "instamart" || platformId === "amazon_tez") ? "10-15 mins" : (platformId === "zepto" ? "5-9 mins" : "Same Day");
     const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : "Amazon India"));
