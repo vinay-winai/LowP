@@ -249,6 +249,8 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       'div[class*="style__Card"]',
       'div[class*="item-card"]',
       'div[class*="card"]',
+      'div[class*="Product__"]',
+      'div[class*="tw-relative"]',
       'a[href*="/pn/"]',
       'a[href*="/product/"]',
       'a[href*="/item/"]',
@@ -256,7 +258,8 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       'a[href*="/prid/"]',
       'a[href*="/p/"]',
       'div[data-component-type="s-search-result"]',
-      'div[class*="s-result-item"]'
+      'div[class*="s-result-item"]',
+      'div[data-asin]'
     ];
 
     const cards = document.querySelectorAll(cardSelectors.join(', '));
@@ -265,6 +268,28 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       if (item && item.price > 0 && !candidates.some(c => c.title === item.title && c.price === item.price)) {
         candidates.push(item);
         if (candidates.length >= 20) break;
+      }
+    }
+
+    // 3. Proximity Fallback
+    if (candidates.length === 0) {
+      const allEls = document.querySelectorAll('*');
+      for (const el of allEls) {
+        const text = el.textContent || '';
+        if (/(?:₹|Rs\\.?|INR)\\s*[0-9,]+/i.test(text) && text.length < 30) {
+          let parent = el.parentElement;
+          let depth = 0;
+          while (parent && depth < 6 && parent !== document.body) {
+            const item = extractFromCard(parent, targetPlatformId);
+            if (item && item.price > 0 && !candidates.some(c => c.title === item.title && c.price === item.price)) {
+              candidates.push(item);
+              break;
+            }
+            parent = parent.parentElement;
+            depth++;
+          }
+          if (candidates.length >= 20) break;
+        }
       }
     }
 
@@ -281,19 +306,25 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     return (best && best._score >= 20) ? best : null;
   }
 
-  // Execute and poll
+  // Execute and poll up to 16 attempts (8 seconds)
   let attempts = 0;
   const pollInterval = setInterval(() => {
     attempts++;
     const bestItem = runExtraction();
-    if (bestItem || attempts >= 10) {
+    if (bestItem || attempts >= 16) {
       clearInterval(pollInterval);
       if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
         window.ReactNativeWebView.postMessage(JSON.stringify({
           type: 'SCRAPE_RESULT',
           platformId: targetPlatformId,
           success: !!bestItem,
-          data: bestItem
+          data: bestItem,
+          debug: {
+            url: window.location.href,
+            title: document.title,
+            attempts: attempts,
+            htmlLen: document.documentElement ? document.documentElement.outerHTML.length : 0
+          }
         }));
       }
     }

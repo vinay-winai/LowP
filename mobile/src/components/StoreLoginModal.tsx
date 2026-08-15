@@ -110,6 +110,7 @@ export const StoreLoginModal: React.FC<StoreLoginModalProps> = ({
           <WebView
             ref={webViewRef}
             source={{ uri: config.url }}
+            userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
             style={styles.webView}
             javaScriptEnabled={true}
             domStorageEnabled={true}

@@ -29,6 +29,9 @@ const STORES: { platformId: PlatformId; getUrl: (q: string) => string }[] = [
   }
 ];
 
+const DESKTOP_USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
+
 export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
   searchQuery,
   searchId,
@@ -36,6 +39,7 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
 }) => {
   const resolvedStores = useRef<Set<PlatformId>>(new Set());
   const activeSearchId = useRef<number>(searchId);
+  const webViewRefs = useRef<{ [key: string]: WebView | null }>({});
 
   useEffect(() => {
     resolvedStores.current.clear();
@@ -43,15 +47,18 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
 
     if (!searchQuery || !searchQuery.trim()) return;
 
-    // Safety fallback timeout (8s)
+    console.log(`[LowP Mobile] Initiating parallel search for: "${searchQuery}"`);
+
+    // Safety fallback timeout (10s)
     const timeout = setTimeout(() => {
       STORES.forEach(({ platformId }) => {
         if (!resolvedStores.current.has(platformId)) {
           resolvedStores.current.add(platformId);
+          console.log(`[LowP Mobile] Store timeout: ${platformId}`);
           onStoreResult(platformId, null);
         }
       });
-    }, 8000);
+    }, 10000);
 
     return () => clearTimeout(timeout);
   }, [searchId, searchQuery]);
@@ -62,7 +69,13 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
       if (payload && payload.type === 'SCRAPE_RESULT') {
         if (!resolvedStores.current.has(platformId)) {
           resolvedStores.current.add(platformId);
-          onStoreResult(platformId, payload.data || null);
+          if (payload.success && payload.data) {
+            console.log(`[LowP Mobile] ${platformId} SUCCESS: "${payload.data.title}" at ₹${payload.data.price}`);
+            onStoreResult(platformId, payload.data);
+          } else {
+            console.log(`[LowP Mobile] ${platformId} returned 0 candidates`, payload.debug || {});
+            onStoreResult(platformId, null);
+          }
         }
       }
     } catch (e) {}
@@ -77,19 +90,29 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
       {STORES.map((store) => {
         const targetUrl = store.getUrl(searchQuery);
         const scraperJs = generateScraperScript(searchQuery, store.platformId);
+        const key = `${store.platformId}_${searchId}`;
 
         return (
           <WebView
-            key={`${store.platformId}_${searchId}`}
+            key={key}
+            ref={(ref) => {
+              webViewRefs.current[store.platformId] = ref;
+            }}
             source={{ uri: targetUrl }}
+            userAgent={DESKTOP_USER_AGENT}
             style={styles.hiddenWebView}
             javaScriptEnabled={true}
             domStorageEnabled={true}
             sharedCookiesEnabled={true}
             thirdPartyCookiesEnabled={true}
             injectedJavaScript={scraperJs}
+            onLoadEnd={() => {
+              // Re-inject on load end to ensure SPAs execute script after hydration
+              webViewRefs.current[store.platformId]?.injectJavaScript(scraperJs);
+            }}
             onMessage={(e) => handleMessage(store.platformId, e)}
-            onError={() => {
+            onError={(err) => {
+              console.log(`[LowP Mobile] ${store.platformId} WebView error:`, err.nativeEvent);
               if (!resolvedStores.current.has(store.platformId)) {
                 resolvedStores.current.add(store.platformId);
                 onStoreResult(store.platformId, null);
