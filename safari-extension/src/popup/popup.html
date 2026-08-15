@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>LowP - Hyperlocal Price Comparator</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Top Header -->
+    <header class="header">
+      <div class="brand">
+        <div class="logo-circle">⚡</div>
+        <div>
+          <h1 class="logo-title">LowP</h1>
+          <span class="logo-sub">Hyperlocal Real-Time Comparator</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="clearCacheBtn" class="clear-cache-btn" title="Clear search cache">🗑️ Clear</button>
+        <div class="location-pill" id="locationPill" title="Change location">
+          <span class="loc-icon">📍</span>
+          <span class="loc-text" id="activeLocationText">Hyderabad (500085)</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Search Section -->
+    <section class="search-section">
+      <div class="search-box">
+        <input 
+          type="text" 
+          id="searchInput" 
+          placeholder="Search products (e.g. paneer 200g, butter 500g)..." 
+          autocomplete="off"
+        />
+        <button id="searchBtn" class="search-btn" title="Search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- Results Section -->
+    <main class="results-section" id="resultsSection">
+      <div class="loading-state" id="loadingState" style="display: none;">
+        <div class="spinner"></div>
+        <p class="loading-text">Comparing live prices across Amazon Tez, Instamart, Zepto & Blinkit...</p>
+      </div>
+
+      <div class="cards-grid" id="cardsGrid">
+        <!-- Injected dynamically -->
+      </div>
+    </main>
+
+    <!-- Footer & Debug Inspector -->
+    <footer class="footer">
+      <div class="footer-links">
+        <button id="toggleDebugBtn" class="debug-toggle-btn">🛠️ Debug Inspector</button>
+        <button id="copyDebugBtn" class="copy-debug-btn" style="display: none;">📋 Copy Log</button>
+      </div>
+
+      <div id="debugDrawer" class="debug-drawer" style="display: none;">
+        <div class="debug-header">
+          <span>Live Telemetry Log</span>
+          <button id="clearDebugBtn" class="clear-btn">Clear</button>
+        </div>
+        <pre id="debugOutput" class="debug-output">No logs recorded yet. Search a product to view telemetry.</pre>
+      </div>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

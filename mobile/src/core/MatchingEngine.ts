@@ -56,33 +56,6 @@ export class MatchingEngine {
       }
     });
 
-    // Core product category affinity & conflict penalty (e.g. paneer vs cheese vs butter)
-    const CORE_CATEGORIES = [
-      'paneer', 'cheese', 'butter', 'milk', 'ghee', 'curd', 'dahi', 'yogurt',
-      'rice', 'atta', 'flour', 'maida', 'besan', 'sooji', 'rava',
-      'oil', 'sugar', 'salt', 'tea', 'coffee', 'bread', 'eggs', 'biscuit', 'cookies',
-      'noodle', 'noodles', 'pasta', 'sauce', 'ketchup', 'chocolate', 'chips'
-    ];
-
-    const queryCategories = CORE_CATEGORIES.filter((cat) => queryTokens.includes(cat));
-    if (queryCategories.length > 0) {
-      queryCategories.forEach((cat) => {
-        if (fullText.includes(cat)) {
-          score += 50;
-        } else {
-          score -= 60;
-        }
-      });
-
-      // Penalize conflicting categories that appear in title but not in query
-      const conflictingCategories = CORE_CATEGORIES.filter(
-        (cat) => !queryCategories.includes(cat) && fullText.includes(cat)
-      );
-      if (conflictingCategories.length > 0) {
-        score -= 50;
-      }
-    }
-
     const qtyMatch = query.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
     if (qtyMatch) {
       const qNum = parseFloat(qtyMatch[1]);
