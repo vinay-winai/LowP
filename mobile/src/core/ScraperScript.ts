@@ -4,6 +4,17 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
 
   return `
 (function() {
+  // 1. Performance Boost: Disable image decoding and rendering in headless webview
+  try {
+    const styleId = '__lowp_perf_style';
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.innerHTML = 'img, video, iframe, picture, svg { content-visibility: hidden !important; }';
+      (document.head || document.documentElement).appendChild(style);
+    }
+  } catch (e) {}
+
   const searchQuery = ${sanitizedQuery};
   const targetPlatformId = ${sanitizedPlatformId};
 

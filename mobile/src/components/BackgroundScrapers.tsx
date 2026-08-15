@@ -47,9 +47,27 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
 
     if (!searchQuery || !searchQuery.trim()) return;
 
-    console.log(`[LowP Mobile] Initiating parallel search for: "${searchQuery}"`);
+    console.log(`[LowP Mobile] Warm Search for: "${searchQuery}"`);
 
-    // Safety fallback timeout (10s)
+    // Navigate warm WebViews directly
+    STORES.forEach((store) => {
+      const targetUrl = store.getUrl(searchQuery);
+      const scraperJs = generateScraperScript(searchQuery, store.platformId);
+      const webView = webViewRefs.current[store.platformId];
+      if (webView) {
+        // Fast in-page navigation without destroying the Chromium context
+        webView.injectJavaScript(`
+          if (window.location.href !== ${JSON.stringify(targetUrl)}) {
+            window.location.href = ${JSON.stringify(targetUrl)};
+          } else {
+            ${scraperJs}
+          }
+          true;
+        `);
+      }
+    });
+
+    // Safety fallback timeout (7s)
     const timeout = setTimeout(() => {
       STORES.forEach(({ platformId }) => {
         if (!resolvedStores.current.has(platformId)) {
@@ -58,7 +76,7 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
           onStoreResult(platformId, null);
         }
       });
-    }, 10000);
+    }, 7000);
 
     return () => clearTimeout(timeout);
   }, [searchId, searchQuery]);
@@ -81,24 +99,19 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
     } catch (e) {}
   };
 
-  if (!searchQuery || !searchQuery.trim()) {
-    return null;
-  }
-
   return (
     <View style={styles.hiddenContainer} pointerEvents="none">
       {STORES.map((store) => {
-        const targetUrl = store.getUrl(searchQuery);
-        const scraperJs = generateScraperScript(searchQuery, store.platformId);
-        const key = `${store.platformId}_${searchId}`;
+        const initialUrl = searchQuery ? store.getUrl(searchQuery) : store.getUrl('paneer');
+        const scraperJs = generateScraperScript(searchQuery || 'paneer', store.platformId);
 
         return (
           <WebView
-            key={key}
+            key={store.platformId}
             ref={(ref) => {
               webViewRefs.current[store.platformId] = ref;
             }}
-            source={{ uri: targetUrl }}
+            source={{ uri: initialUrl }}
             userAgent={DESKTOP_USER_AGENT}
             style={styles.hiddenWebView}
             javaScriptEnabled={true}
@@ -113,7 +126,10 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
             injectedJavaScriptBeforeContentLoaded={scraperJs}
             injectedJavaScript={scraperJs}
             onLoadEnd={() => {
-              webViewRefs.current[store.platformId]?.injectJavaScript(scraperJs);
+              if (searchQuery && searchQuery.trim()) {
+                const currentScraper = generateScraperScript(searchQuery, store.platformId);
+                webViewRefs.current[store.platformId]?.injectJavaScript(currentScraper);
+              }
             }}
             onMessage={(e) => handleMessage(store.platformId, e)}
             onError={(err) => {
