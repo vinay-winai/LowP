@@ -22,6 +22,15 @@
       /^(item|product|unit|pack|pc|pcs|piece|pieces|kg|gm|g|l|ml)$/i
     ];
 
+    const words = s.split(/\s+/);
+    const wordCounts = {};
+    for (const w of words) {
+      if (w.length >= 3) {
+        wordCounts[w] = (wordCounts[w] || 0) + 1;
+        if (wordCounts[w] >= 4) return true;
+      }
+    }
+
     return bannedPatterns.some(p => p.test(s));
   }
 
@@ -76,9 +85,7 @@
         const candQtyMatch = fullText.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
         if (candQtyMatch) {
           const cNum = parseFloat(candQtyMatch[1]);
-          if (cNum !== qNum) {
-            score -= 50;
-          }
+          if (cNum !== qNum) score -= 50;
         }
       }
     }
@@ -104,6 +111,10 @@
 
   function extractFromCard(cardNode, platformId) {
     if (!cardNode) return null;
+    if (cardNode.closest && cardNode.closest('[class*="filter"], [class*="suggestion"], [class*="chip"], [class*="pill"], [class*="breadcrumb"], [class*="header"], [class*="footer"], [class*="nav"], header, footer, nav')) {
+      return null;
+    }
+
     const spacedCardText = getSpacedText(cardNode).replace(/\s+/g, " ").trim();
     const cardText = cardNode.textContent || "";
     
@@ -151,7 +162,7 @@
     let title = "";
 
     // 2. Title extraction (Priority: specific slot/testid -> img alt -> h1-h5 -> generic)
-    const titleEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="ProductName"], [data-testid*="name"], [data-testid*="title"], [data-testid*="item_name"], [data-testid*="item-title"], [data-slot-id*="title"], [class*="ProductName"], [class*="ItemName"], [class*="product_name"], [class*="styled__ItemName"], [class*="ItemTitle"], [class*="_2T1-K"], [class*="nov9b"], [class*="_1W_4e"], [class*="_1b1-N"], h1, h2, h3, h4, h5') : null;
+    const titleEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="ProductName"], [data-testid*="name"], [data-testid*="title"], [data-testid*="item_name"], [data-testid*="item-title"], [data-slot-id*="title"], [class*="ProductName"], [class*="ItemName"], [class*="product_name"], [class*="styled__ItemName"], [class*="ItemTitle"], [class*="Product__UpdatedTitle"], [class*="tw-text-base-black"], [class*="tw-line-clamp-2"], [class*="tAxDx"], [class*="sh-np__product-title"], [class*="_2T1-K"], [class*="nov9b"], [class*="_1W_4e"], [class*="_1b1-N"], h1, h2, h3, h4, h5') : null;
     if (titleEl) {
       const txt = cleanTitle(titleEl.textContent);
       if (txt && txt.length >= 3 && !isBadTitle(txt)) {

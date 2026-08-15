@@ -355,6 +355,15 @@ function inPageExtract(searchQuery) {
       /^(item|product|unit|pack|pc|pcs|piece|pieces|kg|gm|g|l|ml)$/i
     ];
 
+    const words = s.split(/\s+/);
+    const wordCounts = {};
+    for (const w of words) {
+      if (w.length >= 3) {
+        wordCounts[w] = (wordCounts[w] || 0) + 1;
+        if (wordCounts[w] >= 4) return true;
+      }
+    }
+
     return bannedPatterns.some(p => p.test(s));
   }
 
@@ -367,56 +376,6 @@ function inPageExtract(searchQuery) {
       .replace(/\b(?:mrp|add|buy|added|in stock|out of stock|off|\d+%\s*off|save)\b/gi, "")
       .replace(/\s+/g, " ")
       .trim();
-  }
-
-  function scoreRelevance(itemTitle, query, packSize = '') {
-    if (!itemTitle || !query || !query.trim()) return 0;
-
-    const normalize = (str) => (str || "").toLowerCase()
-      .replace(/['’`"]/g, "")
-      .replace(/[^a-z0-9\s]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    const fullText = normalize(`${itemTitle} ${packSize}`);
-    const q = normalize(query);
-    const queryTokens = q.split(/\s+/).filter(t => t.length > 0);
-
-    let score = 0;
-
-    queryTokens.forEach(token => {
-      if (fullText.includes(token)) {
-        score += 30;
-      } else if (token.endsWith('s') && token.length > 3 && fullText.includes(token.slice(0, -1))) {
-        score += 25;
-      } else if (!token.endsWith('s') && fullText.includes(token + 's')) {
-        score += 25;
-      }
-    });
-
-    const qtyMatch = query.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
-    if (qtyMatch) {
-      const qNum = parseFloat(qtyMatch[1]);
-      const qUnit = qtyMatch[2].toLowerCase().replace(/litre|litres/, 'l').replace(/kgs?/, 'kg').replace(/gms?/, 'g');
-      const targetQtyStr = `${qNum} ${qUnit}`;
-      const targetQtyCompact = `${qNum}${qUnit}`;
-
-      if (fullText.includes(targetQtyStr) || fullText.includes(targetQtyCompact)) {
-        score += 50;
-      } else {
-        const candQtyMatch = fullText.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
-        if (candQtyMatch) {
-          const cNum = parseFloat(candQtyMatch[1]);
-          if (cNum !== qNum) score -= 50;
-        }
-      }
-    }
-
-    if (queryTokens.length > 0 && fullText.includes(queryTokens[0])) {
-      score += 35;
-    }
-
-    return score;
   }
 
   function getSpacedText(node) {
@@ -432,6 +391,10 @@ function inPageExtract(searchQuery) {
 
   function extractFromCard(cardNode, platformId) {
     if (!cardNode) return null;
+    if (cardNode.closest && cardNode.closest('[class*="filter"], [class*="suggestion"], [class*="chip"], [class*="pill"], [class*="breadcrumb"], [class*="header"], [class*="footer"], [class*="nav"], header, footer, nav')) {
+      return null;
+    }
+
     const spacedCardText = getSpacedText(cardNode).replace(/\s+/g, " ").trim();
     const cardText = cardNode.textContent || "";
     
@@ -479,7 +442,7 @@ function inPageExtract(searchQuery) {
     let title = "";
 
     // 2. Title extraction (Priority: specific slot/testid -> img alt -> h1-h5 -> generic)
-    const titleEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="ProductName"], [data-testid*="name"], [data-testid*="title"], [data-testid*="item_name"], [data-testid*="item-title"], [data-slot-id*="title"], [class*="ProductName"], [class*="ItemName"], [class*="product_name"], [class*="styled__ItemName"], [class*="ItemTitle"], [class*="_2T1-K"], [class*="nov9b"], [class*="_1W_4e"], [class*="_1b1-N"], h1, h2, h3, h4, h5') : null;
+    const titleEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="ProductName"], [data-testid*="name"], [data-testid*="title"], [data-testid*="item_name"], [data-testid*="item-title"], [data-slot-id*="title"], [class*="ProductName"], [class*="ItemName"], [class*="product_name"], [class*="styled__ItemName"], [class*="ItemTitle"], [class*="Product__UpdatedTitle"], [class*="tw-text-base-black"], [class*="tw-line-clamp-2"], [class*="tAxDx"], [class*="sh-np__product-title"], [class*="_2T1-K"], [class*="nov9b"], [class*="_1W_4e"], [class*="_1b1-N"], h1, h2, h3, h4, h5') : null;
     if (titleEl) {
       const txt = cleanTitle(titleEl.textContent);
       if (txt && txt.length >= 3 && !isBadTitle(txt)) {
