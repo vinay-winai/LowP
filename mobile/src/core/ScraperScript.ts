@@ -60,19 +60,27 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       else if (!token.endsWith('s') && fullText.includes(token + 's')) score += 25;
     });
 
-    const qtyMatch = query.match(/(\\d+(?:\\.\\d+)?)\\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
-    if (qtyMatch) {
-      const qNum = parseFloat(qtyMatch[1]);
-      const qUnit = qtyMatch[2].toLowerCase().replace(/litre|litres/, 'l').replace(/kgs?/, 'kg').replace(/gms?/, 'g');
-      const targetQtyStr = qNum + " " + qUnit;
-      const targetQtyCompact = qNum + qUnit;
-      if (fullText.includes(targetQtyStr) || fullText.includes(targetQtyCompact)) {
-        score += 50;
-      } else {
-        const candQtyMatch = fullText.match(/(\\d+(?:\\.\\d+)?)\\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
-        if (candQtyMatch) {
-          const cNum = parseFloat(candQtyMatch[1]);
-          if (cNum !== qNum) score -= 50;
+    function toStd(val, unit) {
+      const u = (unit || '').toLowerCase();
+      if (/kg|kgs|kilo|kilogram/.test(u)) return val * 1000;
+      if (/g|gm|gms|gram/.test(u)) return val;
+      if (/l|lt|ltr|litre|liter/.test(u)) return val * 1000;
+      if (/ml|milli/.test(u)) return val;
+      return val;
+    }
+
+    const qtyRegex = /(\d+(?:\.\d+)?)\s*(l|lt|ltr|litre|litres|liter|kg|kgs|kilo|kilogram|g|gm|gms|gram|grams|ml)\b/i;
+    const queryQty = query.match(qtyRegex);
+
+    if (queryQty) {
+      const qStd = toStd(parseFloat(queryQty[1]), queryQty[2]);
+      const candQty = (itemTitle + " " + (packSize || "")).match(qtyRegex);
+      if (candQty) {
+        const cStd = toStd(parseFloat(candQty[1]), candQty[2]);
+        if (Math.abs(qStd - cStd) < 0.1) {
+          score += 150;
+        } else {
+          score -= 100;
         }
       }
     }
@@ -259,7 +267,12 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       'a[href*="/p/"]',
       'div[data-component-type="s-search-result"]',
       'div[class*="s-result-item"]',
-      'div[data-asin]'
+      'div[data-asin]',
+      'div[class*="styles_cardContainer"]',
+      'div[class*="CardContainer"]',
+      'div[class*="product-card-container"]',
+      'div[class*="styles__Container"]',
+      'div[class*="Product_container"]'
     ];
 
     const cards = document.querySelectorAll(cardSelectors.join(', '));

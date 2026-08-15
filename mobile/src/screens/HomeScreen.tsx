@@ -6,10 +6,11 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { StoreCard } from '../components/StoreCard';
 import { BackgroundScrapers } from '../components/BackgroundScrapers';
 import { LocationModal } from '../components/LocationModal';

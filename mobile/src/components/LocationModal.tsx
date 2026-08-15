@@ -6,9 +6,9 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  FlatList,
-  SafeAreaView
+  FlatList
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LocationProfile } from '../types';
 import { LocationService } from '../core/LocationService';
 import { X, MapPin, Check, Plus, Trash2 } from 'lucide-react-native';
