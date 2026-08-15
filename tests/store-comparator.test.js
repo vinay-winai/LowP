@@ -148,7 +148,6 @@ test('Providers - formatResult returns structured schema across Amazon Tez, Amaz
   const resBlinkit = blinkit.formatResult(mockItem, DEFAULT_LOCATION);
   assert.strictEqual(resBlinkit.platformId, 'blinkit');
   assert.strictEqual(resBlinkit.isAvailable, true);
-  assert.strictEqual(resBlinkit.deliveryTime, '10 mins');
 });
 
 test('handleSearchQuery - executes parallel search and returns 5 store results', async () => {

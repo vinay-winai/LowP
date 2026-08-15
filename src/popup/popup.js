@@ -168,7 +168,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <div class="card-body">
           <div class="item-info">
             <span class="item-title">${store.item?.title || store.platformName}</span>
-            <span class="item-brand">${store.item?.brand || store.deliveryType} • ${store.item?.quantity || '1 unit'}</span>
+            <span class="item-brand">${store.item?.brand || store.platformName} • ${store.item?.quantity || '1 unit'}</span>
           </div>
           ${priceHtml}
         </div>

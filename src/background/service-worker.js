@@ -325,7 +325,6 @@ class BaseProvider {
         price: item.price,
         image: item.image || "assets/icon48.png"
       },
-      deliveryTime: item.deliveryTime || (this.platformId === "zepto" ? "5-9 mins" : (this.platformId === "blinkit" ? "10 mins" : ((this.platformId === "instamart" || this.platformId === "amazon_tez") ? "10-15 mins" : "Same Day"))),
       priceBreakdown,
       productUrl: item.productUrl || this.getSearchUrl(item.title || fallbackQuery),
       isLowestPrice: false
@@ -532,7 +531,6 @@ function inPageExtract(searchQuery) {
       mrp = Math.round(price * 1.15);
     }
 
-    const deliveryTime = (platformId === "instamart" || platformId === "amazon_tez") ? "10-15 mins" : (platformId === "zepto" ? "5-9 mins" : (platformId === "blinkit" ? "10 mins" : "Same Day"));
     const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : (platformId === "blinkit" ? "Blinkit" : "Amazon India")));
 
     return {
@@ -543,8 +541,7 @@ function inPageExtract(searchQuery) {
       quantity,
       image,
       productUrl: window.location.href,
-      platformId,
-      deliveryTime
+      platformId
     };
   }
 
