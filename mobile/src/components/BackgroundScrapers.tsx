@@ -50,7 +50,7 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
 
     console.log(`[LowP Mobile] Executing search #${searchId} for: "${searchQuery}"`);
 
-    // Safety fallback timeout (8s)
+    // Safety fallback timeout (13s)
     const timeout = setTimeout(() => {
       STORES.forEach(({ platformId }) => {
         if (!resolvedStores.current.has(platformId)) {
@@ -59,7 +59,7 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
           onStoreResult(platformId, null);
         }
       });
-    }, 8000);
+    }, 13000);
 
     return () => clearTimeout(timeout);
   }, [searchId, searchQuery]);
@@ -71,10 +71,10 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
         if (!resolvedStores.current.has(platformId)) {
           resolvedStores.current.add(platformId);
           if (payload.success && payload.data) {
-            console.log(`[LowP Mobile] ${platformId} SUCCESS: "${payload.data.title}" at ₹${payload.data.price}`);
+            console.log(`[LowP Mobile] ${platformId} SUCCESS: "${payload.data.title}" at ₹${payload.data.price} (${payload.elapsedMs}ms)`);
             onStoreResult(platformId, payload.data);
           } else {
-            console.log(`[LowP Mobile] ${platformId} returned 0 candidates`);
+            console.log(`[LowP Mobile] ${platformId} returned 0 candidates (${payload.elapsedMs}ms)`, payload.debug || {});
             onStoreResult(platformId, null);
           }
         }
@@ -108,6 +108,12 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
             javaScriptCanOpenWindowsAutomatically={false}
             injectedJavaScriptBeforeContentLoaded={scraperJs}
             injectedJavaScript={scraperJs}
+            onLoadEnd={(syntheticEvent) => {
+              const { nativeEvent } = syntheticEvent;
+              if (nativeEvent.loading === false) {
+                // Trigger instant check when page finishes network loading
+              }
+            }}
             onMessage={(e) => handleMessage(store.platformId, e)}
             onError={(err) => {
               console.log(`[LowP Mobile] ${store.platformId} WebView error:`, err.nativeEvent);

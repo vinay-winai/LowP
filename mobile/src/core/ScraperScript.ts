@@ -319,15 +319,16 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     return (best && (best._score >= 10 || candidates.length > 0)) ? best : null;
   }
 
-  // Fast Zero-Delay Polling + MutationObserver for instant sub-2s extraction
-  let attempts = 0;
+  // Continuous Fast Extraction: Exits immediately on success, only times out after 12s
+  const startTime = Date.now();
+  const MAX_WAIT_MS = 12000;
   let isDone = false;
 
   function tryExtract() {
     if (isDone) return;
-    attempts++;
+
     const bestItem = runExtraction();
-    if (bestItem || attempts >= 40) {
+    if (bestItem) {
       isDone = true;
       clearInterval(pollInterval);
       if (observer) observer.disconnect();
@@ -335,12 +336,29 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
         window.ReactNativeWebView.postMessage(JSON.stringify({
           type: 'SCRAPE_RESULT',
           platformId: targetPlatformId,
-          success: !!bestItem,
+          success: true,
           data: bestItem,
+          elapsedMs: Date.now() - startTime
+        }));
+      }
+      return;
+    }
+
+    // Only exit with failure if full 12s timeout has passed
+    if (Date.now() - startTime >= MAX_WAIT_MS) {
+      isDone = true;
+      clearInterval(pollInterval);
+      if (observer) observer.disconnect();
+      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'SCRAPE_RESULT',
+          platformId: targetPlatformId,
+          success: false,
+          data: null,
+          elapsedMs: Date.now() - startTime,
           debug: {
             url: window.location.href,
             title: document.title,
-            attempts: attempts,
             htmlLen: document.documentElement ? document.documentElement.outerHTML.length : 0
           }
         }));
@@ -348,13 +366,15 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     }
   }
 
+  window.__lowp_check = tryExtract;
+
   // 1. Immediate check at 0ms
   tryExtract();
 
-  // 2. High-frequency 150ms interval
+  // 2. High-frequency 150ms polling interval
   const pollInterval = setInterval(tryExtract, 150);
 
-  // 3. MutationObserver triggers instant check the millisecond React/Next mounts cards
+  // 3. MutationObserver triggers check instantly when cards mount without advancing timeout
   let observer = null;
   try {
     const targetNode = document.body || document.documentElement;
