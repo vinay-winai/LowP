@@ -18,6 +18,7 @@
         </div>
       </div>
       <div class="header-actions">
+        <button id="openMatrixBtn" class="clear-cache-btn" title="View Strategy Matrix (Basket Optimizer)">📊 Matrix (<span id="matrixCount">0</span>)</button>
         <button id="openSidePanelBtn" class="clear-cache-btn" title="Open persistent Side Panel (won't close on clicks)">📑 Pin to Side</button>
         <button id="clearCacheBtn" class="clear-cache-btn" title="Clear search cache (keeps saved addresses)">🗑️ Clear Cache</button>
         <div class="location-pill" id="locationPill" title="Change location">
@@ -43,7 +44,40 @@
           </svg>
         </button>
       </div>
+
+      <!-- Strategy Matrix Action Bar -->
+      <div class="cart-action-bar" id="cartActionBar">
+        <button id="addToMatrixBtn" class="add-to-matrix-btn" disabled>
+          <span class="cart-btn-icon">🛒</span>
+          <span id="addToMatrixText">+ Add to Strategy Matrix</span>
+        </button>
+        <button id="viewMatrixBtn" class="view-matrix-btn">
+          <span>📊 View Matrix</span>
+        </button>
+      </div>
     </section>
+
+    <!-- Strategy Matrix Modal -->
+    <div class="modal-backdrop" id="matrixModalBackdrop" style="display: none;">
+      <div class="modal-content matrix-modal">
+        <div class="modal-header">
+          <div class="matrix-modal-title-box">
+            <span class="matrix-modal-icon">🛒</span>
+            <div>
+              <h3 class="matrix-modal-title">Strategy Matrix</h3>
+              <span class="matrix-modal-sub" id="matrixItemCountText">0 Items in Basket • Multi-Store Arbitrage</span>
+            </div>
+          </div>
+          <div class="matrix-modal-actions">
+            <button id="clearMatrixBtn" class="clear-matrix-btn">Clear All</button>
+            <button id="closeMatrixBtn" class="close-modal-btn">✕</button>
+          </div>
+        </div>
+        <div class="modal-body matrix-modal-body" id="matrixModalBody">
+          <!-- Injected dynamically -->
+        </div>
+      </div>
+    </div>
 
     <!-- Results Section -->
     <main class="results-section" id="resultsSection">

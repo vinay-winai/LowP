@@ -17,6 +17,41 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let activeLocation = null;
   let currentResults = [];
+  let strategyMatrixRows = [];
+
+  const addToMatrixBtn = document.getElementById("addToMatrixBtn");
+  const addToMatrixText = document.getElementById("addToMatrixText");
+  const viewMatrixBtn = document.getElementById("viewMatrixBtn");
+  const openMatrixBtn = document.getElementById("openMatrixBtn");
+  const matrixCount = document.getElementById("matrixCount");
+  const matrixModalBackdrop = document.getElementById("matrixModalBackdrop");
+  const matrixModalBody = document.getElementById("matrixModalBody");
+  const matrixItemCountText = document.getElementById("matrixItemCountText");
+  const clearMatrixBtn = document.getElementById("clearMatrixBtn");
+  const closeMatrixBtn = document.getElementById("closeMatrixBtn");
+
+  // Load saved Strategy Matrix from storage
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+    chrome.storage.local.get(["lowp_strategy_matrix"], (res) => {
+      if (res && res.lowp_strategy_matrix && Array.isArray(res.lowp_strategy_matrix)) {
+        strategyMatrixRows = res.lowp_strategy_matrix;
+        updateMatrixBadges();
+      }
+    });
+  }
+
+  function saveMatrixToStorage() {
+    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.set({ lowp_strategy_matrix: strategyMatrixRows });
+    }
+    updateMatrixBadges();
+  }
+
+  function updateMatrixBadges() {
+    const count = strategyMatrixRows.length;
+    if (matrixCount) matrixCount.textContent = count;
+    if (matrixItemCountText) matrixItemCountText.textContent = `${count} ${count === 1 ? 'Item' : 'Items'} in Basket • Multi-Store Arbitrage`;
+  }
 
   // 1. Initialize Location
   chrome.runtime.sendMessage({ action: "GET_ACTIVE_LOCATION" }, (res) => {
@@ -65,7 +100,6 @@ document.addEventListener("DOMContentLoaded", () => {
       if (activeUrl.includes("amazon.in") || activeUrl.includes("swiggy.com") || activeUrl.includes("zepto.com")) {
         chrome.tabs.sendMessage(tabs[0].id, { action: "GET_PAGE_PRODUCT_DATA" }, (resp) => {
           if (chrome.runtime.lastError) {
-            // Tab was loaded before extension was reloaded or not accessible
             return;
           }
           if (resp && resp.data && resp.data.title) {
@@ -94,6 +128,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function performSearch(query) {
     loadingState.style.display = "flex";
     cardsGrid.innerHTML = "";
+    if (addToMatrixBtn) addToMatrixBtn.disabled = true;
 
     chrome.runtime.sendMessage({
       action: "SEARCH_QUERY",
@@ -104,6 +139,12 @@ document.addEventListener("DOMContentLoaded", () => {
         currentResults = response.data;
         renderCards(response.data);
         updateDebugLogs();
+
+        // Enable Add to Matrix if any price is available
+        const hasPrice = currentResults.some(s => s.isAvailable && s.priceBreakdown && s.priceBreakdown.finalPayable > 0);
+        if (addToMatrixBtn) {
+          addToMatrixBtn.disabled = !hasPrice;
+        }
       } else {
         cardsGrid.innerHTML = `<div class="error-msg" style="text-align:center; padding:20px; color:#EF4444;">Search failed: ${response?.error || 'Unknown error'}</div>`;
         updateDebugLogs();
@@ -183,7 +224,267 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // 6. Debug Inspector Telemetry
+  // 6. Strategy Matrix Logic
+  if (addToMatrixBtn) {
+    addToMatrixBtn.addEventListener("click", () => {
+      const q = searchInput.value.trim();
+      if (!q || currentResults.length === 0) return;
+
+      const availableStores = currentResults.filter(s => s.isAvailable && s.priceBreakdown && s.priceBreakdown.finalPayable > 0);
+      if (availableStores.length === 0) return;
+
+      let minPrice = Infinity;
+      let cheapestStoreId = null;
+
+      availableStores.forEach(s => {
+        const p = s.priceBreakdown.finalPayable;
+        if (p < minPrice) {
+          minPrice = p;
+          cheapestStoreId = s.platformId;
+        }
+      });
+
+      const storeCells = {};
+      const STORES_LIST = [
+        { id: 'amazon_tez', name: 'Amazon Tez', color: '#FF9900' },
+        { id: 'instamart', name: 'Instamart', color: '#FC8019' },
+        { id: 'zepto', name: 'Zepto', color: '#7C3AED' },
+        { id: 'blinkit', name: 'Blinkit', color: '#F8CB46' }
+      ];
+
+      STORES_LIST.forEach(s => {
+        const storeMatch = currentResults.find(r => r.platformId === s.id);
+        const hasPrice = storeMatch && storeMatch.isAvailable && storeMatch.priceBreakdown && storeMatch.priceBreakdown.finalPayable > 0;
+        storeCells[s.id] = {
+          platformId: s.id,
+          platformName: s.name,
+          isAvailable: !!hasPrice,
+          title: hasPrice ? (storeMatch.item?.title || s.name) : '',
+          price: hasPrice ? storeMatch.priceBreakdown.finalPayable : 0,
+          mrp: hasPrice ? (storeMatch.item?.mrp || storeMatch.priceBreakdown.finalPayable) : 0,
+          productUrl: hasPrice ? storeMatch.productUrl : '#',
+          isCheapestInRow: s.id === cheapestStoreId
+        };
+      });
+
+      const newRow = {
+        id: `matrix_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        query: q,
+        addedAt: Date.now(),
+        stores: storeCells,
+        cheapestPrice: minPrice < Infinity ? minPrice : 0,
+        cheapestStoreId
+      };
+
+      strategyMatrixRows.push(newRow);
+      saveMatrixToStorage();
+
+      // Feedback animation on Add Button
+      const origText = addToMatrixText.textContent;
+      addToMatrixText.textContent = "✅ Added to Matrix!";
+      addToMatrixBtn.style.background = "#10B981";
+      setTimeout(() => {
+        addToMatrixText.textContent = origText;
+        addToMatrixBtn.style.background = "";
+      }, 1800);
+    });
+  }
+
+  function openMatrixModal() {
+    renderMatrixModal();
+    if (matrixModalBackdrop) matrixModalBackdrop.style.display = "flex";
+  }
+
+  function closeMatrixModal() {
+    if (matrixModalBackdrop) matrixModalBackdrop.style.display = "none";
+  }
+
+  if (viewMatrixBtn) viewMatrixBtn.addEventListener("click", openMatrixModal);
+  if (openMatrixBtn) openMatrixBtn.addEventListener("click", openMatrixModal);
+  if (closeMatrixBtn) closeMatrixBtn.addEventListener("click", closeMatrixModal);
+
+  if (clearMatrixBtn) {
+    clearMatrixBtn.addEventListener("click", () => {
+      strategyMatrixRows = [];
+      saveMatrixToStorage();
+      renderMatrixModal();
+    });
+  }
+
+  function renderMatrixModal() {
+    if (!matrixModalBody) return;
+    updateMatrixBadges();
+
+    if (strategyMatrixRows.length === 0) {
+      matrixModalBody.innerHTML = `
+        <div class="matrix-empty">
+          <span style="font-size: 40px;">🛒</span>
+          <h4>Your Basket is Empty</h4>
+          <p>Search groceries and click <strong>"+ Add to Strategy Matrix"</strong> to compare multi-store totals & calculate split savings!</p>
+        </div>
+      `;
+      return;
+    }
+
+    const STORES_LIST = [
+      { id: 'amazon_tez', name: 'Amazon Tez', color: '#FF9900' },
+      { id: 'instamart', name: 'Instamart', color: '#FC8019' },
+      { id: 'zepto', name: 'Zepto', color: '#7C3AED' },
+      { id: 'blinkit', name: 'Blinkit', color: '#F8CB46' }
+    ];
+
+    // Totals calculation
+    const storeTotals = {
+      amazon_tez: { total: 0, count: 0 },
+      instamart: { total: 0, count: 0 },
+      zepto: { total: 0, count: 0 },
+      blinkit: { total: 0, count: 0 }
+    };
+
+    let optimalSplitTotal = 0;
+
+    strategyMatrixRows.forEach(row => {
+      optimalSplitTotal += row.cheapestPrice > 0 ? row.cheapestPrice : 0;
+      STORES_LIST.forEach(s => {
+        const c = row.stores[s.id];
+        if (c && c.isAvailable && c.price > 0) {
+          storeTotals[s.id].total += c.price;
+          storeTotals[s.id].count += 1;
+        }
+      });
+    });
+
+    let bestSingleStoreId = null;
+    let minSingleTotal = Infinity;
+
+    STORES_LIST.forEach(s => {
+      const st = storeTotals[s.id];
+      if (st.count === strategyMatrixRows.length) {
+        if (st.total < minSingleTotal) {
+          minSingleTotal = st.total;
+          bestSingleStoreId = s.id;
+        }
+      }
+    });
+
+    if (!bestSingleStoreId) {
+      let maxCount = -1;
+      STORES_LIST.forEach(s => {
+        const st = storeTotals[s.id];
+        if (st.count > maxCount || (st.count === maxCount && st.total < minSingleTotal)) {
+          maxCount = st.count;
+          minSingleTotal = st.total;
+          bestSingleStoreId = s.id;
+        }
+      });
+    }
+
+    const bestStoreObj = STORES_LIST.find(s => s.id === bestSingleStoreId);
+    const arbitrageSavings = minSingleTotal < Infinity && optimalSplitTotal > 0 && minSingleTotal > optimalSplitTotal
+      ? minSingleTotal - optimalSplitTotal
+      : 0;
+
+    let html = `
+      <div class="matrix-summary-row">
+        <div class="matrix-stat-card optimal-stat-card">
+          <div class="stat-header">⚡ OPTIMAL SPLIT TOTAL</div>
+          <div class="stat-price">₹${optimalSplitTotal}</div>
+          ${arbitrageSavings > 0 ? `<div class="stat-sub-green">Save ₹${arbitrageSavings} (${Math.round((arbitrageSavings/minSingleTotal)*100)}%) vs single store!</div>` : `<div class="stat-sub">Cheapest combination across stores</div>`}
+        </div>
+
+        ${bestStoreObj ? `
+          <div class="matrix-stat-card">
+            <div class="stat-header">🏬 BEST SINGLE STORE</div>
+            <div class="stat-price">₹${minSingleTotal}</div>
+            <div class="stat-sub" style="color: ${bestStoreObj.color}; font-weight: 700;">${bestStoreObj.name}</div>
+          </div>
+        ` : ''}
+      </div>
+
+      <div class="matrix-table-container">
+        <table class="matrix-table">
+          <thead>
+            <tr>
+              <th class="th-item">Search Item</th>
+              ${STORES_LIST.map(s => `
+                <th class="th-store" style="border-top: 2px solid ${s.color};">
+                  <span class="store-dot" style="background: ${s.color};"></span>
+                  <span style="color: ${s.color}; font-weight: 700;">${s.name}</span>
+                </th>
+              `).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${strategyMatrixRows.map((row, idx) => `
+              <tr>
+                <td class="td-item">
+                  <div class="td-item-wrap">
+                    <span class="td-query">${row.query}</span>
+                    <button class="delete-matrix-row-btn" data-row-id="${row.id}" title="Remove item">🗑️</button>
+                  </div>
+                </td>
+                ${STORES_LIST.map(s => {
+                  const c = row.stores[s.id];
+                  const isCheapest = c && c.isCheapestInRow && c.price > 0;
+                  if (c && c.isAvailable && c.price > 0) {
+                    return `
+                      <td class="td-store ${isCheapest ? 'td-cheapest' : ''}">
+                        ${isCheapest ? `<span class="matrix-lowest-badge">🏆 Lowest</span>` : ''}
+                        <div class="td-price">₹${c.price}</div>
+                        ${c.title ? `<div class="td-title" title="${c.title}">${c.title}</div>` : ''}
+                        <a href="${c.productUrl}" target="_blank" class="td-link">Buy →</a>
+                      </td>
+                    `;
+                  } else {
+                    return `
+                      <td class="td-store td-unavailable">
+                        <span class="td-dash">—</span>
+                        <span class="td-unavail-text">Unavailable</span>
+                      </td>
+                    `;
+                  }
+                }).join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+          <tfoot>
+            <tr class="matrix-tfoot-row">
+              <td class="td-item">
+                <strong>Basket Total</strong>
+                <div style="font-size: 10px; color: #64748B;">Single store</div>
+              </td>
+              ${STORES_LIST.map(s => {
+                const st = storeTotals[s.id];
+                const isBest = s.id === bestSingleStoreId;
+                return `
+                  <td class="td-store ${isBest ? 'td-best-single' : ''}">
+                    ${isBest ? `<span class="matrix-lowest-badge">Best Single</span>` : ''}
+                    <div class="td-price" style="${isBest ? 'color: #10B981;' : ''}">₹${st.total}</div>
+                    <div style="font-size: 10px; color: #94A3B8;">${st.count}/${strategyMatrixRows.length} items</div>
+                  </td>
+                `;
+              }).join('')}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    `;
+
+    matrixModalBody.innerHTML = html;
+
+    // Attach row delete listeners
+    const deleteBtns = matrixModalBody.querySelectorAll(".delete-matrix-row-btn");
+    deleteBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        const rowId = btn.getAttribute("data-row-id");
+        strategyMatrixRows = strategyMatrixRows.filter(r => r.id !== rowId);
+        saveMatrixToStorage();
+        renderMatrixModal();
+      });
+    });
+  }
+
+  // 7. Debug Inspector Telemetry
   function updateDebugLogs() {
     chrome.runtime.sendMessage({ action: "GET_DEBUG_LOGS" }, (res) => {
       if (res && res.logs) {
