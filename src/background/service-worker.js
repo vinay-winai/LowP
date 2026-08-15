@@ -849,23 +849,9 @@ class AmazonTezProvider extends BaseProvider {
     const cleanQ = MatchingEngine.cleanSearchTerm(query);
     const tezUrl = this.getSearchUrl(cleanQ);
 
-    logDebug("AmazonTez", `Searching Amazon Tez for "${cleanQ}"`);
+    logDebug("AmazonTez", `Searching Amazon Tez for "${cleanQ}" (Live Direct Search)`);
 
-    // 1. Check synced storage from content script
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-      const syncItem = await new Promise((resolve) => {
-        chrome.storage.local.get(["synced_amazon_tez"], (res) => resolve(res.synced_amazon_tez));
-      });
-      if (syncItem && syncItem.data && Date.now() - syncItem.timestamp < 300000) {
-        const relevance = MatchingEngine.scoreRelevance(syncItem.data.title, cleanQ);
-        if (relevance >= 30) {
-          logDebug("AmazonTez", `Found relevant live synced item: "${syncItem.data.title}" (Score: ${relevance})`, syncItem.data);
-          return this.formatResult(syncItem.data, location, cleanQ);
-        }
-      }
-    }
-
-    // 2. Query open Amazon Tez tabs across all windows
+    // 1. Query open Amazon Tez tabs across all windows
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
       try {
         const allTabs = await chrome.tabs.query({});
@@ -1040,23 +1026,9 @@ class InstamartProvider extends BaseProvider {
     const cleanQ = MatchingEngine.cleanSearchTerm(query);
     const targetUrl = this.getSearchUrl(cleanQ);
 
-    logDebug("Instamart", `Searching Instamart for "${cleanQ}"`);
+    logDebug("Instamart", `Searching Instamart for "${cleanQ}" (Live Direct Search)`);
 
-    // 1. Check synced storage from content script
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-      const syncItem = await new Promise((resolve) => {
-        chrome.storage.local.get(["synced_instamart"], (res) => resolve(res.synced_instamart));
-      });
-      if (syncItem && syncItem.data && Date.now() - syncItem.timestamp < 300000) {
-        const relevance = MatchingEngine.scoreRelevance(syncItem.data.title, cleanQ);
-        if (relevance >= 30) {
-          logDebug("Instamart", `Found relevant live synced item: "${syncItem.data.title}" (Score: ${relevance})`, syncItem.data);
-          return this.formatResult(syncItem.data, location, cleanQ);
-        }
-      }
-    }
-
-    // 2. Query open Swiggy tabs across all windows
+    // 1. Query open Swiggy tabs across all windows
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
       try {
         const allTabs = await chrome.tabs.query({});
@@ -1181,23 +1153,9 @@ class ZeptoProvider extends BaseProvider {
     const cleanQ = MatchingEngine.cleanSearchTerm(query);
     const targetUrl = this.getSearchUrl(cleanQ);
 
-    logDebug("Zepto", `Searching Zepto for "${cleanQ}"`);
+    logDebug("Zepto", `Searching Zepto for "${cleanQ}" (Live Direct Search)`);
 
-    // 1. Check synced storage from content script
-    if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-      const syncItem = await new Promise((resolve) => {
-        chrome.storage.local.get(["synced_zepto"], (res) => resolve(res.synced_zepto));
-      });
-      if (syncItem && syncItem.data && Date.now() - syncItem.timestamp < 300000) {
-        const relevance = MatchingEngine.scoreRelevance(syncItem.data.title, cleanQ);
-        if (relevance >= 30) {
-          logDebug("Zepto", `Found relevant live synced item: "${syncItem.data.title}" (Score: ${relevance})`, syncItem.data);
-          return this.formatResult(syncItem.data, location, cleanQ);
-        }
-      }
-    }
-
-    // 2. Query open Zepto tabs across all windows
+    // 1. Query open Zepto tabs across all windows
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
       try {
         const allTabs = await chrome.tabs.query({});
@@ -1327,16 +1285,9 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage)
     }
 
     if (action === "STORE_PRICE_SYNC") {
-      const { url, data } = payload || {};
+      const { data } = payload || {};
       if (data && data.platformId && data.price > 0) {
-        logDebug("Sync", `Received live store sync from ${data.platformId}: ₹${data.price}`, data);
-        chrome.storage.local.set({
-          [`synced_${data.platformId}`]: {
-            timestamp: Date.now(),
-            url,
-            data
-          }
-        });
+        logDebug("Sync", `Received live store event from ${data.platformId}: "${data.title}" at ₹${data.price}`);
         sendResponse({ success: true });
       } else {
         sendResponse({ success: false });
