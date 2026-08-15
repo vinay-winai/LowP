@@ -20,11 +20,13 @@
 
 body {
   width: 420px;
+  max-width: 100vw;
   min-height: 520px;
   background-color: var(--bg-primary);
   color: var(--text-main);
   font-family: var(--font-family);
   font-size: 14px;
+  overflow-x: hidden;
 }
 
 .container {
@@ -33,6 +35,16 @@ body {
   min-height: 520px;
   padding: 14px;
   gap: 12px;
+  width: 100%;
+}
+
+@media (max-width: 450px) {
+  body {
+    width: 100vw;
+  }
+  .container {
+    padding: 10px;
+  }
 }
 
 /* Header */
