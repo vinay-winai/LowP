@@ -40,23 +40,31 @@
     if (!itemTitle) return 0;
     if (!query || !query.trim()) return 50;
 
-    const fullText = `${itemTitle} ${packSize}`.toLowerCase();
-    let q = query.toLowerCase();
-    try { q = decodeURIComponent(q); } catch (e) {}
-    q = q.replace(/[,\-_|+/\\%]+/g, " ").replace(/\s+/g, " ").trim();
+    const normalize = (str) => (str || "").toLowerCase()
+      .replace(/['’`"]/g, "")
+      .replace(/[^a-z0-9\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const fullText = normalize(`${itemTitle} ${packSize}`);
+    const q = normalize(query);
     const queryTokens = q.split(/\s+/).filter(t => t.length > 0);
 
     let score = 0;
 
-    // 1. Keyword Overlap (+30 for each matching word)
+    // 1. Keyword Overlap (+30 for each matching word, +25 for plural/singular)
     queryTokens.forEach(token => {
       if (fullText.includes(token)) {
         score += 30;
+      } else if (token.endsWith('s') && token.length > 3 && fullText.includes(token.slice(0, -1))) {
+        score += 25;
+      } else if (!token.endsWith('s') && fullText.includes(token + 's')) {
+        score += 25;
       }
     });
 
     // 2. Quantity & Unit matching (1l, 1kg, 200g, 500g, 5l)
-    const qtyMatch = q.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
+    const qtyMatch = query.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
     if (qtyMatch) {
       const qNum = parseFloat(qtyMatch[1]);
       const qUnit = qtyMatch[2].toLowerCase().replace(/litre|litres/, 'l').replace(/kgs?/, 'kg').replace(/gms?/, 'g');
@@ -66,7 +74,6 @@
       if (fullText.includes(targetQtyStr) || fullText.includes(targetQtyCompact)) {
         score += 50;
       } else {
-        // Penalty for wrong quantity (e.g. asked 1L but card is 5L)
         const candQtyMatch = fullText.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
         if (candQtyMatch) {
           const cNum = parseFloat(candQtyMatch[1]);
@@ -77,7 +84,7 @@
       }
     }
 
-    // 3. Brand Matching (First word is usually brand, e.g. "freedom", "fortune", "milky")
+    // 3. Brand Matching (First word is usually brand, e.g. "freedom", "fortune", "lays")
     if (queryTokens.length > 0 && fullText.includes(queryTokens[0])) {
       score += 35;
     }

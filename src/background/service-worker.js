@@ -215,19 +215,29 @@ class MatchingEngine {
     if (!itemTitle) return 0;
     if (!query || !query.trim()) return 50;
 
-    const fullText = `${itemTitle} ${packSize}`.toLowerCase();
-    let q = query.toLowerCase();
-    try { q = decodeURIComponent(q); } catch (e) {}
-    q = q.replace(/[,\-_|+/\\%]+/g, " ").replace(/\s+/g, " ").trim();
+    const normalize = (str) => (str || "").toLowerCase()
+      .replace(/['’`"]/g, "")
+      .replace(/[^a-z0-9\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const fullText = normalize(`${itemTitle} ${packSize}`);
+    const q = normalize(query);
     const queryTokens = q.split(/\s+/).filter(t => t.length > 0);
 
     let score = 0;
 
     queryTokens.forEach(token => {
-      if (fullText.includes(token)) score += 30;
+      if (fullText.includes(token)) {
+        score += 30;
+      } else if (token.endsWith('s') && token.length > 3 && fullText.includes(token.slice(0, -1))) {
+        score += 25;
+      } else if (!token.endsWith('s') && fullText.includes(token + 's')) {
+        score += 25;
+      }
     });
 
-    const qtyMatch = q.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
+    const qtyMatch = query.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
     if (qtyMatch) {
       const qNum = parseFloat(qtyMatch[1]);
       const qUnit = qtyMatch[2].toLowerCase().replace(/litre|litres/, 'l').replace(/kgs?/, 'kg').replace(/gms?/, 'g');
@@ -362,19 +372,29 @@ function inPageExtract(searchQuery) {
     if (!itemTitle) return 0;
     if (!query || !query.trim()) return 50;
 
-    const fullText = `${itemTitle} ${packSize}`.toLowerCase();
-    let q = query.toLowerCase();
-    try { q = decodeURIComponent(q); } catch (e) {}
-    q = q.replace(/[,\-_|+/\\%]+/g, " ").replace(/\s+/g, " ").trim();
+    const normalize = (str) => (str || "").toLowerCase()
+      .replace(/['’`"]/g, "")
+      .replace(/[^a-z0-9\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const fullText = normalize(`${itemTitle} ${packSize}`);
+    const q = normalize(query);
     const queryTokens = q.split(/\s+/).filter(t => t.length > 0);
 
     let score = 0;
 
     queryTokens.forEach(token => {
-      if (fullText.includes(token)) score += 30;
+      if (fullText.includes(token)) {
+        score += 30;
+      } else if (token.endsWith('s') && token.length > 3 && fullText.includes(token.slice(0, -1))) {
+        score += 25;
+      } else if (!token.endsWith('s') && fullText.includes(token + 's')) {
+        score += 25;
+      }
     });
 
-    const qtyMatch = q.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
+    const qtyMatch = query.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
     if (qtyMatch) {
       const qNum = parseFloat(qtyMatch[1]);
       const qUnit = qtyMatch[2].toLowerCase().replace(/litre|litres/, 'l').replace(/kgs?/, 'kg').replace(/gms?/, 'g');
