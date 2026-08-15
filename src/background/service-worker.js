@@ -767,7 +767,24 @@ async function fetchViaEphemeralTab(url, cleanQ, totalWaitMs = 10000) {
       }, 4000);
     });
 
-    // 2. Fixed hydration delay for client SPA execution (remaining time to reach full 10s)
+    // 2. Synthetic Visibility Awaken: Wake up React/Next.js client in inactive background tab
+    if (typeof chrome !== "undefined" && chrome.scripting && chrome.scripting.executeScript) {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          func: () => {
+            try {
+              Object.defineProperty(document, 'visibilityState', { value: 'visible', writable: true, configurable: true });
+              Object.defineProperty(document, 'hidden', { value: false, writable: true, configurable: true });
+              window.dispatchEvent(new Event('focus'));
+              document.dispatchEvent(new Event('visibilitychange'));
+            } catch (e) {}
+          }
+        });
+      } catch (e) {}
+    }
+
+    // 3. Hydration wait for client SPA execution (remaining time to reach full 10s)
     await new Promise((r) => setTimeout(r, 6000));
 
     const data = await extractDataFromTab(tabId, cleanQ);
