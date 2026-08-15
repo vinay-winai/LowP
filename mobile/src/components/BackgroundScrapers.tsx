@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Dimensions } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { PlatformId, ProductItem } from '../types';
 import { generateScraperScript } from '../core/ScraperScript';
@@ -9,6 +9,8 @@ interface BackgroundScrapersProps {
   searchId: number;
   onStoreResult: (platformId: PlatformId, item: ProductItem | null) => void;
 }
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const STORES: { platformId: PlatformId; getUrl: (q: string) => string }[] = [
   {
@@ -48,7 +50,7 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
 
     console.log(`[LowP Mobile] Executing search #${searchId} for: "${searchQuery}"`);
 
-    // Safety fallback timeout (9s)
+    // Safety fallback timeout (8s)
     const timeout = setTimeout(() => {
       STORES.forEach(({ platformId }) => {
         if (!resolvedStores.current.has(platformId)) {
@@ -57,7 +59,7 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
           onStoreResult(platformId, null);
         }
       });
-    }, 9000);
+    }, 8000);
 
     return () => clearTimeout(timeout);
   }, [searchId, searchQuery]);
@@ -102,6 +104,8 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
             sharedCookiesEnabled={true}
             thirdPartyCookiesEnabled={true}
             cacheEnabled={true}
+            setSupportMultipleWindows={false}
+            javaScriptCanOpenWindowsAutomatically={false}
             injectedJavaScriptBeforeContentLoaded={scraperJs}
             injectedJavaScript={scraperJs}
             onMessage={(e) => handleMessage(store.platformId, e)}
@@ -122,15 +126,15 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
 const styles = StyleSheet.create({
   hiddenContainer: {
     position: 'absolute',
-    top: -9999,
-    left: -9999,
-    width: 1,
-    height: 1,
-    opacity: 0,
-    overflow: 'hidden'
+    top: 0,
+    left: -SCREEN_WIDTH * 2,
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT,
+    opacity: 0.01,
+    zIndex: -9999
   },
   hiddenWebView: {
-    width: 1,
-    height: 1
+    width: SCREEN_WIDTH,
+    height: SCREEN_HEIGHT
   }
 });

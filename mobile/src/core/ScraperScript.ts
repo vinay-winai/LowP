@@ -303,7 +303,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
 
     candidates.sort((a, b) => b._score - a._score);
     const best = candidates[0];
-    return (best && best._score >= 20) ? best : null;
+    return (best && (best._score >= 10 || candidates.length > 0)) ? best : null;
   }
 
   // Fast Zero-Delay Polling + MutationObserver for instant sub-2s extraction
