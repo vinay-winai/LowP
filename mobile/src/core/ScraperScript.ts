@@ -306,13 +306,18 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     return (best && best._score >= 20) ? best : null;
   }
 
-  // Execute and poll up to 16 attempts (8 seconds)
+  // Fast Zero-Delay Polling + MutationObserver for instant sub-2s extraction
   let attempts = 0;
-  const pollInterval = setInterval(() => {
+  let isDone = false;
+
+  function tryExtract() {
+    if (isDone) return;
     attempts++;
     const bestItem = runExtraction();
-    if (bestItem || attempts >= 16) {
+    if (bestItem || attempts >= 40) {
+      isDone = true;
       clearInterval(pollInterval);
+      if (observer) observer.disconnect();
       if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
         window.ReactNativeWebView.postMessage(JSON.stringify({
           type: 'SCRAPE_RESULT',
@@ -328,7 +333,25 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
         }));
       }
     }
-  }, 500);
+  }
+
+  // 1. Immediate check at 0ms
+  tryExtract();
+
+  // 2. High-frequency 150ms interval
+  const pollInterval = setInterval(tryExtract, 150);
+
+  // 3. MutationObserver triggers instant check the millisecond React/Next mounts cards
+  let observer = null;
+  try {
+    const targetNode = document.body || document.documentElement;
+    if (targetNode && window.MutationObserver) {
+      observer = new MutationObserver(() => {
+        if (!isDone) tryExtract();
+      });
+      observer.observe(targetNode, { childList: true, subtree: true });
+    }
+  } catch (e) {}
 })();
 true;
 `;

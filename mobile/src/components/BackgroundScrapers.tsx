@@ -105,9 +105,14 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
             domStorageEnabled={true}
             sharedCookiesEnabled={true}
             thirdPartyCookiesEnabled={true}
+            cacheEnabled={true}
+            cacheMode="LOAD_DEFAULT"
+            mediaPlaybackRequiresUserAction={true}
+            allowsInlineMediaPlayback={false}
+            geolocationEnabled={false}
+            injectedJavaScriptBeforeContentLoaded={scraperJs}
             injectedJavaScript={scraperJs}
             onLoadEnd={() => {
-              // Re-inject on load end to ensure SPAs execute script after hydration
               webViewRefs.current[store.platformId]?.injectJavaScript(scraperJs);
             }}
             onMessage={(e) => handleMessage(store.platformId, e)}
