@@ -205,7 +205,7 @@
       mrp = Math.round(price * 1.15);
     }
 
-    const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : (platformId === "blinkit" ? "Blinkit" : "Amazon India")));
+    const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : (platformId === "blinkit" ? "Blinkit" : "Quick Store")));
 
     return {
       title,
@@ -229,11 +229,7 @@
 
     let platformId = "unknown";
     if (host.includes("amazon") || href.includes("amazon")) {
-      if (href.includes("/tez/") || href.includes("searchkeyword")) {
-        platformId = "amazon_tez";
-      } else {
-        platformId = "amazon";
-      }
+      platformId = "amazon_tez";
     } else if (host.includes("swiggy") || href.includes("swiggy")) {
       platformId = "instamart";
     } else if (host.includes("zepto") || href.includes("zepto")) {

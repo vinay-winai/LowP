@@ -121,7 +121,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const storeColors = {
         amazon_tez: "#FF9900",
-        amazon: "#232F3E",
         instamart: "#FC8019",
         zepto: "#7C3AED",
         blinkit: "#F8CB46"

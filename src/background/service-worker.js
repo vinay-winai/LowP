@@ -533,7 +533,7 @@ function inPageExtract(searchQuery) {
       mrp = Math.round(price * 1.15);
     }
 
-    const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : (platformId === "blinkit" ? "Blinkit" : "Amazon India")));
+    const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : (platformId === "blinkit" ? "Blinkit" : "Quick Store")));
 
     return {
       title,
@@ -554,11 +554,7 @@ function inPageExtract(searchQuery) {
 
   let platformId = "unknown";
   if (host.includes("amazon") || href.includes("amazon")) {
-    if (href.includes("/tez/") || href.includes("searchkeyword")) {
-      platformId = "amazon_tez";
-    } else {
-      platformId = "amazon";
-    }
+    platformId = "amazon_tez";
   } else if (host.includes("swiggy") || href.includes("swiggy")) {
     platformId = "instamart";
   } else if (host.includes("zepto") || href.includes("zepto")) {
@@ -925,115 +921,7 @@ class AmazonTezProvider extends BaseProvider {
   }
 }
 
-// --- AMAZON INDIA (STANDARD) PROVIDER ---
-class AmazonStandardProvider extends BaseProvider {
-  constructor() {
-    super("amazon", "Amazon India", "#232F3E");
-  }
 
-  getSearchUrl(query) {
-    return `https://www.amazon.in/s?k=${encodeURIComponent(query || "")}`;
-  }
-
-  async search(query, location) {
-    if (!query || !query.trim()) return this.formatResult(null, location, query);
-    const cleanQ = MatchingEngine.cleanSearchTerm(query);
-    const standardUrl = this.getSearchUrl(cleanQ);
-
-    // 1. Check open standard Amazon tabs (excluding /tez/)
-    if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
-      try {
-        const allTabs = await chrome.tabs.query({});
-        const standardTabs = allTabs.filter(t => t.url && t.url.includes("amazon.in") && !t.url.includes("/tez/") && isOpenTabMatchingQuery(t.url, cleanQ));
-        for (const t of standardTabs) {
-          try {
-            const data = await extractDataFromTab(t.id, cleanQ);
-            if (data && data.price > 0 && MatchingEngine.scoreRelevance(data.title, cleanQ) >= 30) {
-              logDebug("AmazonStandard", `Retrieved relevant product from open Amazon tab: "${data.title}" at ₹${data.price}`, data);
-              return this.formatResult(data, location, cleanQ);
-            }
-          } catch (e) {}
-        }
-      } catch (e) {}
-    }
-
-    // 2. Fetch standard Amazon India search
-    try {
-      const searchRes = await fetch(standardUrl, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-        }
-      });
-
-      if (searchRes.ok) {
-        const html = await searchRes.text();
-        const cardBlocks = html.split(/data-component-type="s-search-result"|class="[^"]*s-result-item[^"]*"/);
-        const candidates = [];
-
-        for (let i = 1; i < cardBlocks.length; i++) {
-          const block = cardBlocks[i];
-          const titleMatch = block.match(/class="a-size-(?:medium|base-plus|base) a-color-base a-text-normal">([^<]+)</i) ||
-                             block.match(/<h2[^>]*><a[^>]*><span[^>]*>([^<]+)<\/span><\/a><\/h2>/i) ||
-                             block.match(/alt="([^"]+)"/i);
-          const priceMatch = block.match(/class="a-price-whole">([0-9,]+)/i) ||
-                             block.match(/class="a-offscreen">₹?([0-9,]+(?:\.[0-9]+)?)/i) ||
-                             block.match(/₹\s*([0-9,]+(?:\.[0-9]+)?)/);
-          const mrpMatch = block.match(/class="a-price a-text-price"[^>]*><span class="a-offscreen">₹?([0-9,]+(?:\.[0-9]+)?)/i);
-          const asinMatch = block.match(/data-asin="([A-Z0-9]{10})"/i);
-          const imgMatch = block.match(/class="s-image"[^>]*src="([^"]+)"/i);
-
-          if (titleMatch && priceMatch) {
-            const rawTitle = titleMatch[1].trim();
-            const title = rawTitle.replace(/^Sponsored Ad\s*[-–:]\s*/i, "").replace(/^Sponsored\s*[-–:]\s*/i, "").trim();
-            const price = parseFloat(priceMatch[1].replace(/,/g, ""));
-            const mrp = mrpMatch ? parseFloat(mrpMatch[1].replace(/,/g, "")) : Math.round(price * 1.15);
-            const asin = asinMatch ? asinMatch[1] : null;
-
-            candidates.push({
-              id: asin || `amz_std_${Date.now()}`,
-              title,
-              brand: "Amazon India",
-              quantity: "1 unit",
-              mrp,
-              price,
-              image: imgMatch ? imgMatch[1] : "assets/icon48.png",
-              productUrl: asin ? `https://www.amazon.in/dp/${asin}` : standardUrl,
-              _score: MatchingEngine.scoreRelevance(title, cleanQ)
-            });
-
-            if (candidates.length >= 6) break;
-          }
-        }
-
-        if (candidates.length > 0) {
-          candidates.sort((a, b) => b._score - a._score);
-          const best = candidates[0];
-          logDebug("AmazonStandard", `Best Amazon India match from top 6: "${best.title}" at ₹${best.price} (Score: ${best._score})`, { asin: best.id });
-          return this.formatResult(best, location, cleanQ);
-        }
-      }
-    } catch (err) {
-      logDebug("AmazonStandard", `Amazon Standard search error: ${err.message}`);
-    }
-
-    // 3. Automated ephemeral background window extraction for Amazon Standard
-    if (typeof chrome !== "undefined" && (chrome.tabs || chrome.windows)) {
-      try {
-        logDebug("AmazonStandard", `Attempting automated ephemeral background window extraction for "${cleanQ}"`);
-        const ephemeralData = await fetchViaEphemeralTab(standardUrl, cleanQ);
-        if (ephemeralData && ephemeralData.price > 0) {
-          logDebug("AmazonStandard", `Retrieved live price via ephemeral background tab: ${ephemeralData.title} at ₹${ephemeralData.price}`, ephemeralData);
-          return this.formatResult(ephemeralData, location, cleanQ);
-        }
-      } catch (e) {
-        logDebug("AmazonStandard", `Ephemeral extraction error: ${e.message}`);
-      }
-    }
-
-    return this.formatResult(null, location, cleanQ);
-  }
-}
 
 // --- SWIGGY INSTAMART PROVIDER ---
 class InstamartProvider extends BaseProvider {
@@ -1297,7 +1185,6 @@ class BlinkitProvider extends BaseProvider {
 // ==========================================
 const PROVIDERS = [
   new AmazonTezProvider(),
-  new AmazonStandardProvider(),
   new InstamartProvider(),
   new ZeptoProvider(),
   new BlinkitProvider()
@@ -1420,7 +1307,6 @@ if (typeof module !== "undefined" && module.exports) {
     MatchingEngine,
     BaseProvider,
     AmazonTezProvider,
-    AmazonStandardProvider,
     InstamartProvider,
     ZeptoProvider,
     BlinkitProvider,
