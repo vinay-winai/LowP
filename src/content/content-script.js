@@ -71,6 +71,31 @@
       }
     });
 
+    // Core product category affinity & conflict penalty (e.g. paneer vs cheese vs butter)
+    const CORE_CATEGORIES = [
+      'paneer', 'cheese', 'butter', 'milk', 'ghee', 'curd', 'dahi', 'yogurt',
+      'rice', 'atta', 'flour', 'maida', 'besan', 'sooji', 'rava',
+      'oil', 'sugar', 'salt', 'tea', 'coffee', 'bread', 'eggs', 'biscuit', 'cookies',
+      'noodle', 'noodles', 'pasta', 'sauce', 'ketchup', 'chocolate', 'chips'
+    ];
+
+    const queryCategories = CORE_CATEGORIES.filter(cat => queryTokens.includes(cat));
+    if (queryCategories.length > 0) {
+      queryCategories.forEach(cat => {
+        if (fullText.includes(cat)) {
+          score += 50;
+        } else {
+          score -= 60;
+        }
+      });
+
+      // Penalize conflicting categories that appear in title but not in query
+      const conflictingCategories = CORE_CATEGORIES.filter(cat => !queryCategories.includes(cat) && fullText.includes(cat));
+      if (conflictingCategories.length > 0) {
+        score -= 50;
+      }
+    }
+
     // 2. Quantity & Unit matching (1l, 1kg, 200g, 500g, 5l)
     const qtyMatch = query.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
     if (qtyMatch) {
@@ -80,19 +105,19 @@
       const targetQtyCompact = `${qNum}${qUnit}`;
 
       if (fullText.includes(targetQtyStr) || fullText.includes(targetQtyCompact)) {
-        score += 50;
+        score += 40;
       } else {
         const candQtyMatch = fullText.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
         if (candQtyMatch) {
           const cNum = parseFloat(candQtyMatch[1]);
-          if (cNum !== qNum) score -= 50;
+          if (cNum !== qNum) score -= 40;
         }
       }
     }
 
     // 3. Brand Matching (First word is usually brand, e.g. "freedom", "fortune", "lays")
     if (queryTokens.length > 0 && fullText.includes(queryTokens[0])) {
-      score += 35;
+      score += 25;
     }
 
     return score;
@@ -161,8 +186,8 @@
 
     let title = "";
 
-    // 2. Title extraction (Priority: specific slot/testid -> img alt -> h1-h5 -> generic)
-    const titleEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="ProductName"], [data-testid*="name"], [data-testid*="title"], [data-testid*="item_name"], [data-testid*="item-title"], [data-slot-id*="title"], [class*="ProductName"], [class*="ItemName"], [class*="product_name"], [class*="styled__ItemName"], [class*="ItemTitle"], [class*="Product__UpdatedTitle"], [class*="tw-text-base-black"], [class*="tw-line-clamp-2"], [class*="tAxDx"], [class*="sh-np__product-title"], [class*="_2T1-K"], [class*="nov9b"], [class*="_1W_4e"], [class*="_1b1-N"], h1, h2, h3, h4, h5') : null;
+    // 2. Title extraction (Priority: specific slot/testid -> img alt -> specific classes -> h2-h5)
+    const titleEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="ProductName"], [data-testid*="name"], [data-testid*="title"], [data-testid*="item_name"], [data-testid*="item-title"], [data-slot-id*="title"], [class*="ProductName"], [class*="ItemName"], [class*="product_name"], [class*="styled__ItemName"], [class*="ItemTitle"], [class*="Product__UpdatedTitle"], [class*="tw-text-base-black"], [class*="tw-line-clamp-2"], [class*="tAxDx"], [class*="sh-np__product-title"], [class*="_2T1-K"], [class*="nov9b"], [class*="_1W_4e"], [class*="_1b1-N"], h2, h3, h4, h5') : null;
     if (titleEl) {
       const txt = cleanTitle(titleEl.textContent);
       if (txt && txt.length >= 3 && !isBadTitle(txt)) {
@@ -197,6 +222,11 @@
     }
 
     if (!title || isBadTitle(title)) return null;
+
+    // Filter out search title banners that lack a real product image
+    if (title.toLowerCase() === cleanTitle(searchQuery).toLowerCase() && (!image || image.includes('icon48.png') || !image.startsWith('http'))) {
+      return null;
+    }
 
     // 4. Pack size
     const qtyEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="PackSize"], [data-testid*="quantity"], [data-testid*="weight"], [data-testid*="item_quantity"], [class*="PackSize"], [class*="weight"], [class*="quantity"], span[class*="pack"], span[class*="unit"]') : null;
@@ -338,19 +368,11 @@
       'a[href*="/prid/"]',
       'div[data-test-id*="plp-product"]',
       'div[class*="Product__Updated"]',
-      'div[class*="ProductCard"]',
-      'div[class*="product"]',
       'a[href*="/p/"]',
-      'div[class*="sh-dgr__grid-result"]',
-      'div[class*="sh-dgr__content"]',
-      'div[class*="KZmu8e"]',
-      'div[class*="sh-np__click-target"]',
-      'div[class*="pla-unit"]',
-      'div[class*="sh-dlr__list-result"]',
-      'div[class*="iU5tvd"]',
       'div[data-docid]',
       'div[data-component-type="s-search-result"]',
-      'div[class*="s-result-item"]'
+      'div[class*="s-result-item"]',
+      'div[data-asin]'
     ];
 
     const cards = document.querySelectorAll(cardSelectors.join(', '));

@@ -60,6 +60,29 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       else if (!token.endsWith('s') && fullText.includes(token + 's')) score += 25;
     });
 
+    const CORE_CATEGORIES = [
+      'paneer', 'cheese', 'butter', 'milk', 'ghee', 'curd', 'dahi', 'yogurt',
+      'rice', 'atta', 'flour', 'maida', 'besan', 'sooji', 'rava',
+      'oil', 'sugar', 'salt', 'tea', 'coffee', 'bread', 'eggs', 'biscuit', 'cookies',
+      'noodle', 'noodles', 'pasta', 'sauce', 'ketchup', 'chocolate', 'chips'
+    ];
+
+    const queryCategories = CORE_CATEGORIES.filter(cat => queryTokens.includes(cat));
+    if (queryCategories.length > 0) {
+      queryCategories.forEach(cat => {
+        if (fullText.includes(cat)) {
+          score += 50;
+        } else {
+          score -= 60;
+        }
+      });
+
+      const conflictingCategories = CORE_CATEGORIES.filter(cat => !queryCategories.includes(cat) && fullText.includes(cat));
+      if (conflictingCategories.length > 0) {
+        score -= 50;
+      }
+    }
+
     const qtyMatch = query.match(/(\\d+(?:\\.\\d+)?)\\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
     if (qtyMatch) {
       const qNum = parseFloat(qtyMatch[1]);
@@ -100,7 +123,6 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
 
     const spacedCardText = getSpacedText(cardNode).replace(/\\s+/g, " ").trim();
     
-    // 1. Price extraction
     let price = null;
     const priceEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="EdlpPrice"], [data-testid*="price"], [data-testid*="item_price"], [data-testid*="offer-price"], [class*="_2jn41"], [class*="_1yW90"], [class*="_3-M84"]') : null;
     if (priceEl) {
@@ -141,7 +163,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     const image = imgEl ? (imgEl.src || "assets/icon48.png") : "assets/icon48.png";
 
     let title = "";
-    const titleEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="ProductName"], [data-testid*="name"], [data-testid*="title"], [data-testid*="item_name"], [data-testid*="item-title"], [data-slot-id*="title"], [class*="ProductName"], [class*="ItemName"], [class*="product_name"], [class*="styled__ItemName"], [class*="ItemTitle"], [class*="Product__UpdatedTitle"], [class*="tw-text-base-black"], [class*="tw-line-clamp-2"], [class*="_2T1-K"], [class*="nov9b"], [class*="_1W_4e"], [class*="_1b1-N"], h1, h2, h3, h4, h5') : null;
+    const titleEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="ProductName"], [data-testid*="name"], [data-testid*="title"], [data-testid*="item_name"], [data-testid*="item-title"], [data-slot-id*="title"], [class*="ProductName"], [class*="ItemName"], [class*="product_name"], [class*="styled__ItemName"], [class*="ItemTitle"], [class*="Product__UpdatedTitle"], [class*="tw-text-base-black"], [class*="tw-line-clamp-2"], [class*="_2T1-K"], [class*="nov9b"], [class*="_1W_4e"], [class*="_1b1-N"], h2, h3, h4, h5') : null;
     if (titleEl) {
       const txt = cleanTitle(titleEl.textContent);
       if (txt && txt.length >= 3 && !isBadTitle(txt)) {
@@ -167,36 +189,40 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       }
     }
 
+    if (title.toLowerCase() === cleanTitle(searchQuery).toLowerCase() && (!image || image.includes('icon48.png') || !image.startsWith('http'))) {
+      return null;
+    }
+
     if (!title || isBadTitle(title)) return null;
 
     const qtyEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="PackSize"], [data-testid*="quantity"], [data-testid*="weight"], [data-testid*="item_quantity"], [class*="PackSize"], [class*="weight"], [class*="quantity"], span[class*="pack"], span[class*="unit"]') : null;
     const quantity = qtyEl ? qtyEl.textContent.trim() : "1 unit";
 
-    let mrp = price;
-    const mrpMatch = spacedCardText.match(/(?:MRP|M\\.R\\.P|Strike)\\s*(?:₹|Rs\\.?|INR)?\\s*([0-9,]+(?:\\.[0-9]+)?)/i);
-    if (mrpMatch) {
-      const val = parseFloat(mrpMatch[1].replace(/,/g, ""));
-      if (val >= price) mrp = val;
+    const mrpEl = cardNode.querySelector ? cardNode.querySelector('s, del, strike, [class*="strike"], [class*="slashed"], [class*="_3eAjW"], [class*="cx3iWL"], [style*="line-through"], [data-slot-id*="mrp"], [class*="mrp"]') : null;
+    let mrp = null;
+    if (mrpEl) {
+      const mMatch = mrpEl.textContent.match(/([0-9,]+(?:\.[0-9]+)?)/);
+      if (mMatch) {
+        const val = parseFloat(mMatch[1].replace(/,/g, ""));
+        if (val >= price && val <= 500000) mrp = val;
+      }
     }
-
-    const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : (platformId === "blinkit" ? "Blinkit" : "Quick Store")));
 
     return {
       title,
       price,
-      mrp: Math.max(mrp, price),
-      brand,
+      mrp: mrp || price,
+      brand: targetPlatformId === "instamart" ? "Swiggy Instamart" : (targetPlatformId === "zepto" ? "Zepto" : (targetPlatformId === "blinkit" ? "Blinkit" : "Amazon Now (Tez)")),
       quantity,
       image,
       productUrl: window.location.href,
-      platformId
+      platformId: targetPlatformId
     };
   }
 
   function runExtraction() {
     const candidates = [];
 
-    // 1. Next.js Data Check
     try {
       const nextEl = document.getElementById('__NEXT_DATA__');
       if (nextEl && nextEl.textContent) {
@@ -233,12 +259,8 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       }
     } catch (e) {}
 
-    // 2. Listing Cards
     const cardSelectors = [
       '[data-testid="item-collection-card-full"]',
-      'div[class*="_3Rr1X"]',
-      'div[class*="sWdPz"]',
-      'div[class*="_1WDPG"]',
       '[data-testid="product-card"]',
       '[data-testid*="product"]',
       'div[class*="ProductCard"]',
@@ -248,9 +270,8 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       'div[class*="styles__ProductCard"]',
       'div[class*="style__Card"]',
       'div[class*="item-card"]',
-      'div[class*="card"]',
-      'div[class*="Product__"]',
-      'div[class*="tw-relative"]',
+      'div[class*="Product__Updated"]',
+      'div[class*="Product__Card"]',
       'a[href*="/pn/"]',
       'a[href*="/product/"]',
       'a[href*="/item/"]',
@@ -271,7 +292,6 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       }
     }
 
-    // 3. Proximity Fallback
     if (candidates.length === 0) {
       const allEls = document.querySelectorAll('*');
       for (const el of allEls) {
@@ -294,7 +314,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     }
 
     if (candidates.length === 0) {
-      return null;
+      return { best: null, count: 0 };
     }
 
     candidates.forEach(cand => {
@@ -303,27 +323,37 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
 
     candidates.sort((a, b) => b._score - a._score);
     const best = candidates[0];
-    return (best && best._score >= 20) ? best : null;
+    return {
+      best: (best && best._score >= 20) ? best : null,
+      count: candidates.length
+    };
   }
 
-  // Execute and poll up to 16 attempts (8 seconds)
   let attempts = 0;
+  let lastBest = null;
   const pollInterval = setInterval(() => {
     attempts++;
-    const bestItem = runExtraction();
-    if (bestItem || attempts >= 16) {
+    const { best, count } = runExtraction();
+    if (best) lastBest = best;
+
+    const isHighConfidence = best && best._score >= 170;
+    const hasEnoughCards = count >= 4 && best;
+    const isTimeout = attempts >= 16;
+    const hasStabilized = attempts >= 4 && lastBest;
+
+    if (isHighConfidence || (hasEnoughCards && attempts >= 3) || hasStabilized || isTimeout) {
       clearInterval(pollInterval);
       if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
         window.ReactNativeWebView.postMessage(JSON.stringify({
           type: 'SCRAPE_RESULT',
           platformId: targetPlatformId,
-          success: !!bestItem,
-          data: bestItem,
+          success: !!lastBest,
+          data: lastBest,
           debug: {
             url: window.location.href,
             title: document.title,
             attempts: attempts,
-            htmlLen: document.documentElement ? document.documentElement.outerHTML.length : 0
+            candidatesFound: count
           }
         }));
       }
