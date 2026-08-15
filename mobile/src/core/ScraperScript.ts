@@ -60,27 +60,19 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       else if (!token.endsWith('s') && fullText.includes(token + 's')) score += 25;
     });
 
-    function toStd(val, unit) {
-      const u = (unit || '').toLowerCase();
-      if (/kg|kgs|kilo|kilogram/.test(u)) return val * 1000;
-      if (/g|gm|gms|gram/.test(u)) return val;
-      if (/l|lt|ltr|litre|liter/.test(u)) return val * 1000;
-      if (/ml|milli/.test(u)) return val;
-      return val;
-    }
-
-    const qtyRegex = /(\d+(?:\.\d+)?)\s*(l|lt|ltr|litre|litres|liter|kg|kgs|kilo|kilogram|g|gm|gms|gram|grams|ml)\b/i;
-    const queryQty = query.match(qtyRegex);
-
-    if (queryQty) {
-      const qStd = toStd(parseFloat(queryQty[1]), queryQty[2]);
-      const candQty = (itemTitle + " " + (packSize || "")).match(qtyRegex);
-      if (candQty) {
-        const cStd = toStd(parseFloat(candQty[1]), candQty[2]);
-        if (Math.abs(qStd - cStd) < 0.1) {
-          score += 150;
-        } else {
-          score -= 100;
+    const qtyMatch = query.match(/(\\d+(?:\\.\\d+)?)\\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
+    if (qtyMatch) {
+      const qNum = parseFloat(qtyMatch[1]);
+      const qUnit = qtyMatch[2].toLowerCase().replace(/litre|litres/, 'l').replace(/kgs?/, 'kg').replace(/gms?/, 'g');
+      const targetQtyStr = qNum + " " + qUnit;
+      const targetQtyCompact = qNum + qUnit;
+      if (fullText.includes(targetQtyStr) || fullText.includes(targetQtyCompact)) {
+        score += 50;
+      } else {
+        const candQtyMatch = fullText.match(/(\\d+(?:\\.\\d+)?)\\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
+        if (candQtyMatch) {
+          const cNum = parseFloat(candQtyMatch[1]);
+          if (cNum !== qNum) score -= 50;
         }
       }
     }
@@ -102,18 +94,18 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
 
   function extractFromCard(cardNode, platformId) {
     if (!cardNode) return null;
-    if (cardNode.matches && cardNode.matches('header, footer, nav, button, [role="button"], [class*="suggestion-pill"], [class*="filter-chip"]')) {
+    if (cardNode.closest && cardNode.closest('[class*="filter"], [class*="suggestion"], [class*="chip"], [class*="pill"], [class*="breadcrumb"], [class*="header"], [class*="footer"], [class*="nav"], header, footer, nav')) {
       return null;
     }
 
-    const spacedCardText = getSpacedText(cardNode).replace(/\s+/g, " ").trim();
+    const spacedCardText = getSpacedText(cardNode).replace(/\\s+/g, " ").trim();
     
     // 1. Price extraction
     let price = null;
-    const priceEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="EdlpPrice"], [data-testid*="price"], [data-testid*="item_price"], [data-testid*="offer-price"], span[class*="a-price-whole"], span[class*="a-price"], [class*="_2jn41"], [class*="_1yW90"], [class*="_3-M84"], [class*="_28_y3"]') : null;
+    const priceEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="EdlpPrice"], [data-testid*="price"], [data-testid*="item_price"], [data-testid*="offer-price"], [class*="_2jn41"], [class*="_1yW90"], [class*="_3-M84"]') : null;
     if (priceEl) {
       const pTxt = getSpacedText(priceEl).trim();
-      const m = pTxt.match(/([0-9,]+(?:\.[0-9]+)?)/);
+      const m = pTxt.match(/([0-9,]+(?:\\.[0-9]+)?)/);
       if (m) {
         const val = parseFloat(m[1].replace(/,/g, ""));
         if (val >= 5 && val <= 500000) price = val;
@@ -121,7 +113,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     }
 
     if (!price || isNaN(price)) {
-      const literalMatch = spacedCardText.match(/(?:₹|Rs\.?|INR)\s*([0-9,]+(?:\.[0-9]+)?)/i);
+      const literalMatch = spacedCardText.match(/(?:₹|Rs\\.?|INR)\\s*([0-9,]+(?:\\.[0-9]+)?)/i);
       if (literalMatch) {
         const val = parseFloat(literalMatch[1].replace(/,/g, ""));
         if (val >= 5 && val <= 500000) price = val;
@@ -133,7 +125,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       for (const el of children) {
         if (el.children && el.children.length > 0) continue;
         const txt = el.textContent ? el.textContent.trim() : "";
-        if (txt && /^\s*[0-9]{2,5}(?:\.[0-9]+)?\s*$/.test(txt)) {
+        if (txt && /^\\s*[0-9]{2,5}(?:\\.[0-9]+)?\\s*$/.test(txt)) {
           const val = parseFloat(txt);
           if (val >= 5 && val <= 500000) {
             price = val;
@@ -149,7 +141,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     const image = imgEl ? (imgEl.src || "assets/icon48.png") : "assets/icon48.png";
 
     let title = "";
-    const titleEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="ProductName"], [data-testid*="name"], [data-testid*="title"], [data-testid*="item_name"], [data-testid*="item-title"], [data-slot-id*="title"], [class*="ProductName"], [class*="ItemName"], [class*="product_name"], [class*="styled__ItemName"], [class*="ItemTitle"], [class*="Product__UpdatedTitle"], [class*="tw-text-base-black"], [class*="tw-line-clamp-2"], [class*="s-title-instructions"], h2 a span, span[class*="a-text-normal"], [class*="_2T1-K"], [class*="nov9b"], [class*="_1W_4e"], [class*="_1b1-N"], h1, h2, h3, h4, h5') : null;
+    const titleEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="ProductName"], [data-testid*="name"], [data-testid*="title"], [data-testid*="item_name"], [data-testid*="item-title"], [data-slot-id*="title"], [class*="ProductName"], [class*="ItemName"], [class*="product_name"], [class*="styled__ItemName"], [class*="ItemTitle"], [class*="Product__UpdatedTitle"], [class*="tw-text-base-black"], [class*="tw-line-clamp-2"], [class*="_2T1-K"], [class*="nov9b"], [class*="_1W_4e"], [class*="_1b1-N"], h1, h2, h3, h4, h5') : null;
     if (titleEl) {
       const txt = cleanTitle(titleEl.textContent);
       if (txt && txt.length >= 3 && !isBadTitle(txt)) {
@@ -267,12 +259,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       'a[href*="/p/"]',
       'div[data-component-type="s-search-result"]',
       'div[class*="s-result-item"]',
-      'div[data-asin]',
-      'div[class*="styles_cardContainer"]',
-      'div[class*="CardContainer"]',
-      'div[class*="product-card-container"]',
-      'div[class*="styles__Container"]',
-      'div[class*="Product_container"]'
+      'div[data-asin]'
     ];
 
     const cards = document.querySelectorAll(cardSelectors.join(', '));
@@ -316,75 +303,32 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
 
     candidates.sort((a, b) => b._score - a._score);
     const best = candidates[0];
-    return (best && (best._score >= 10 || candidates.length > 0)) ? best : null;
+    return (best && best._score >= 20) ? best : null;
   }
 
-  // Continuous Fast Extraction: Exits immediately on success, only times out after 12s
-  const startTime = Date.now();
-  const MAX_WAIT_MS = 12000;
-  let isDone = false;
-
-  function tryExtract() {
-    if (isDone) return;
-
+  // Execute and poll up to 16 attempts (8 seconds)
+  let attempts = 0;
+  const pollInterval = setInterval(() => {
+    attempts++;
     const bestItem = runExtraction();
-    if (bestItem) {
-      isDone = true;
+    if (bestItem || attempts >= 16) {
       clearInterval(pollInterval);
-      if (observer) observer.disconnect();
       if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
         window.ReactNativeWebView.postMessage(JSON.stringify({
           type: 'SCRAPE_RESULT',
           platformId: targetPlatformId,
-          success: true,
+          success: !!bestItem,
           data: bestItem,
-          elapsedMs: Date.now() - startTime
-        }));
-      }
-      return;
-    }
-
-    // Only exit with failure if full 12s timeout has passed
-    if (Date.now() - startTime >= MAX_WAIT_MS) {
-      isDone = true;
-      clearInterval(pollInterval);
-      if (observer) observer.disconnect();
-      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'SCRAPE_RESULT',
-          platformId: targetPlatformId,
-          success: false,
-          data: null,
-          elapsedMs: Date.now() - startTime,
           debug: {
             url: window.location.href,
             title: document.title,
+            attempts: attempts,
             htmlLen: document.documentElement ? document.documentElement.outerHTML.length : 0
           }
         }));
       }
     }
-  }
-
-  window.__lowp_check = tryExtract;
-
-  // 1. Immediate check at 0ms
-  tryExtract();
-
-  // 2. High-frequency 150ms polling interval
-  const pollInterval = setInterval(tryExtract, 150);
-
-  // 3. MutationObserver triggers check instantly when cards mount without advancing timeout
-  let observer = null;
-  try {
-    const targetNode = document.body || document.documentElement;
-    if (targetNode && window.MutationObserver) {
-      observer = new MutationObserver(() => {
-        if (!isDone) tryExtract();
-      });
-      observer.observe(targetNode, { childList: true, subtree: true });
-    }
-  } catch (e) {}
+  }, 500);
 })();
 true;
 `;

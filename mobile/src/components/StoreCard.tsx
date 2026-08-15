@@ -44,11 +44,16 @@ export const StoreCard: React.FC<StoreCardProps> = ({ store, isLoading }) => {
               <View style={styles.inStockRow}>
                 <CheckCircle2 size={13} color="#10B981" />
                 <Text style={styles.inStockText}>Available</Text>
+                {store.responseTimeMs !== undefined && (
+                  <Text style={styles.responseTimeText}>• {(store.responseTimeMs / 1000).toFixed(2)}s</Text>
+                )}
               </View>
             ) : (
               <View style={styles.outOfStockRow}>
                 <XCircle size={13} color="#94A3B8" />
-                <Text style={styles.outOfStockText}>Unavailable</Text>
+                <Text style={styles.outOfStockText}>
+                  Unavailable{store.responseTimeMs !== undefined ? ` • ${(store.responseTimeMs / 1000).toFixed(2)}s` : ''}
+                </Text>
               </View>
             )}
           </View>
@@ -187,6 +192,11 @@ const styles = StyleSheet.create({
   outOfStockText: {
     color: '#94A3B8',
     fontSize: 12
+  },
+  responseTimeText: {
+    color: '#64748B',
+    fontSize: 11,
+    fontWeight: '500'
   },
   cardBody: {
     paddingTop: 10

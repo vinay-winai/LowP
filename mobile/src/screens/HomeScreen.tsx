@@ -10,7 +10,6 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
 import { StoreCard } from '../components/StoreCard';
 import { BackgroundScrapers } from '../components/BackgroundScrapers';
 import { LocationModal } from '../components/LocationModal';
@@ -24,7 +23,7 @@ import {
   StoreResult,
   StoreAccountStatus
 } from '../types';
-import { Search, MapPin, X, Sparkles, Store, RefreshCw } from 'lucide-react-native';
+import { Search, MapPin, X, Sparkles, Store, RefreshCw, Clock } from 'lucide-react-native';
 
 const INITIAL_STORES: StoreResult[] = [
   {
@@ -88,11 +87,13 @@ export const HomeScreen: React.FC = () => {
   const [searchId, setSearchId] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [stores, setStores] = useState<StoreResult[]>(INITIAL_STORES);
+  const [searchDuration, setSearchDuration] = useState<number | null>(null);
   const [locationModalVisible, setLocationModalVisible] = useState(false);
   const [loginModalVisible, setLoginModalVisible] = useState(false);
   const [selectedLoginStore, setSelectedLoginStore] = useState<PlatformId | null>(null);
 
   const pendingStores = useRef<Set<PlatformId>>(new Set());
+  const searchStartTime = useRef<number>(0);
 
   useEffect(() => {
     LocationService.getActiveLocation().then(setActiveLocation);
@@ -105,6 +106,8 @@ export const HomeScreen: React.FC = () => {
     setActiveSearch(clean);
     setSearchId((prev) => prev + 1);
     setIsLoading(true);
+    setSearchDuration(null);
+    searchStartTime.current = Date.now();
 
     pendingStores.current = new Set(['amazon_tez', 'instamart', 'zepto', 'blinkit']);
 
@@ -114,12 +117,13 @@ export const HomeScreen: React.FC = () => {
         statusMessage: 'Searching...',
         isAvailable: false,
         item: null,
-        priceBreakdown: null
+        priceBreakdown: null,
+        responseTimeMs: undefined
       }))
     );
   };
 
-  const handleStoreResult = (platformId: PlatformId, item: ProductItem | null) => {
+  const handleStoreResult = (platformId: PlatformId, item: ProductItem | null, durationMs?: number) => {
     pendingStores.current.delete(platformId);
 
     setStores((prev) => {
@@ -132,7 +136,8 @@ export const HomeScreen: React.FC = () => {
             isAvailable: false,
             statusMessage: 'Not available for this location',
             item: null,
-            priceBreakdown: null
+            priceBreakdown: null,
+            responseTimeMs: durationMs
           };
         }
 
@@ -143,7 +148,8 @@ export const HomeScreen: React.FC = () => {
           statusMessage: 'Available',
           item,
           priceBreakdown,
-          productUrl: item.productUrl || store.productUrl
+          productUrl: item.productUrl || store.productUrl,
+          responseTimeMs: durationMs
         };
       });
 
@@ -152,6 +158,9 @@ export const HomeScreen: React.FC = () => {
 
     if (pendingStores.current.size === 0) {
       setIsLoading(false);
+      const totalTime = Date.now() - searchStartTime.current;
+      setSearchDuration(totalTime);
+      console.log(`[LowP Mobile] All results appeared in ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`);
     }
   };
 
@@ -263,6 +272,27 @@ export const HomeScreen: React.FC = () => {
         contentContainerStyle={styles.resultsContainer}
         showsVerticalScrollIndicator={false}
       >
+        {activeSearch !== '' && (
+          <View style={styles.searchMetaRow}>
+            <Text style={styles.searchMetaText}>
+              Results for "<Text style={styles.searchMetaQuery}>{activeSearch}</Text>"
+            </Text>
+            {isLoading ? (
+              <View style={styles.timeBadgeLoading}>
+                <ActivityIndicator size="small" color="#38BDF8" style={{ marginRight: 6 }} />
+                <Text style={styles.timeBadgeLoadingText}>Searching stores...</Text>
+              </View>
+            ) : searchDuration !== null ? (
+              <View style={styles.timeBadgeSuccess}>
+                <Clock size={12} color="#10B981" />
+                <Text style={styles.timeBadgeSuccessText}>
+                  All results in {(searchDuration / 1000).toFixed(2)}s ({searchDuration}ms)
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        )}
+
         {lowestStore && (
           <View style={styles.savingsBanner}>
             <Sparkles size={16} color="#92400E" />
@@ -484,5 +514,52 @@ const styles = StyleSheet.create({
   priceHighlight: {
     fontWeight: '900',
     color: '#78350F'
+  },
+  searchMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    marginTop: 4
+  },
+  searchMetaText: {
+    color: '#94A3B8',
+    fontSize: 13,
+    flex: 1
+  },
+  searchMetaQuery: {
+    color: '#F8FAFC',
+    fontWeight: '700'
+  },
+  timeBadgeLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.3)'
+  },
+  timeBadgeLoadingText: {
+    color: '#38BDF8',
+    fontSize: 12,
+    fontWeight: '600'
+  },
+  timeBadgeSuccess: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)'
+  },
+  timeBadgeSuccessText: {
+    color: '#10B981',
+    fontSize: 12,
+    fontWeight: '700'
   }
 });

@@ -38,6 +38,7 @@ export interface StoreResult {
   priceBreakdown: PriceBreakdown | null;
   productUrl: string;
   isLowestPrice: boolean;
+  responseTimeMs?: number;
   _score?: number;
 }
 

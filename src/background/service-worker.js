@@ -1173,6 +1173,7 @@ async function handleSearchQuery(query, locationId = null) {
     if (custom) userSettings = custom;
   }
 
+  const startTime = Date.now();
   const cleanQuery = MatchingEngine.cleanSearchTerm(query);
   logDebug("Search", `Executing search for "${cleanQuery}" in ${userSettings.name} (Pincode: ${userSettings.pincode})`);
 
@@ -1185,8 +1186,9 @@ async function handleSearchQuery(query, locationId = null) {
 
   const rawResults = await Promise.all(providerPromises);
   const annotatedResults = MatchingEngine.annotateBestOffers(rawResults);
+  const durationMs = Date.now() - startTime;
 
-  logDebug("Search", `Completed search. Available stores: ${annotatedResults.filter(r => r.isAvailable && r.priceBreakdown?.finalPayable > 0).length}`);
+  logDebug("Search", `Completed search in ${durationMs}ms (${(durationMs / 1000).toFixed(2)}s). Available stores: ${annotatedResults.filter(r => r.isAvailable && r.priceBreakdown?.finalPayable > 0).length}`);
   return annotatedResults;
 }
 

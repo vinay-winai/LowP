@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { PlatformId, ProductItem } from '../types';
 import { generateScraperScript } from '../core/ScraperScript';
@@ -7,10 +7,8 @@ import { generateScraperScript } from '../core/ScraperScript';
 interface BackgroundScrapersProps {
   searchQuery: string;
   searchId: number;
-  onStoreResult: (platformId: PlatformId, item: ProductItem | null) => void;
+  onStoreResult: (platformId: PlatformId, item: ProductItem | null, durationMs?: number) => void;
 }
-
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const STORES: { platformId: PlatformId; getUrl: (q: string) => string }[] = [
   {
@@ -41,25 +39,29 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
 }) => {
   const resolvedStores = useRef<Set<PlatformId>>(new Set());
   const activeSearchId = useRef<number>(searchId);
+  const webViewRefs = useRef<{ [key: string]: WebView | null }>({});
+  const startTimeRef = useRef<number>(0);
 
   useEffect(() => {
     resolvedStores.current.clear();
     activeSearchId.current = searchId;
+    startTimeRef.current = Date.now();
 
     if (!searchQuery || !searchQuery.trim()) return;
 
-    console.log(`[LowP Mobile] Executing search #${searchId} for: "${searchQuery}"`);
+    console.log(`[LowP Mobile] Initiating parallel search for: "${searchQuery}"`);
 
-    // Safety fallback timeout (13s)
+    // Safety fallback timeout (10s)
     const timeout = setTimeout(() => {
       STORES.forEach(({ platformId }) => {
         if (!resolvedStores.current.has(platformId)) {
           resolvedStores.current.add(platformId);
-          console.log(`[LowP Mobile] Store timeout: ${platformId}`);
-          onStoreResult(platformId, null);
+          const elapsed = Date.now() - startTimeRef.current;
+          console.log(`[LowP Mobile] Store timeout: ${platformId} (${elapsed}ms)`);
+          onStoreResult(platformId, null, elapsed);
         }
       });
-    }, 13000);
+    }, 10000);
 
     return () => clearTimeout(timeout);
   }, [searchId, searchQuery]);
@@ -70,12 +72,13 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
       if (payload && payload.type === 'SCRAPE_RESULT') {
         if (!resolvedStores.current.has(platformId)) {
           resolvedStores.current.add(platformId);
+          const elapsed = Date.now() - startTimeRef.current;
           if (payload.success && payload.data) {
-            console.log(`[LowP Mobile] ${platformId} SUCCESS: "${payload.data.title}" at ₹${payload.data.price} (${payload.elapsedMs}ms)`);
-            onStoreResult(platformId, payload.data);
+            console.log(`[LowP Mobile] ${platformId} SUCCESS: "${payload.data.title}" at ₹${payload.data.price} (${elapsed}ms)`);
+            onStoreResult(platformId, payload.data, elapsed);
           } else {
-            console.log(`[LowP Mobile] ${platformId} returned 0 candidates (${payload.elapsedMs}ms)`, payload.debug || {});
-            onStoreResult(platformId, null);
+            console.log(`[LowP Mobile] ${platformId} returned 0 candidates (${elapsed}ms)`, payload.debug || {});
+            onStoreResult(platformId, null, elapsed);
           }
         }
       }
@@ -96,6 +99,9 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
         return (
           <WebView
             key={key}
+            ref={(ref) => {
+              webViewRefs.current[store.platformId] = ref;
+            }}
             source={{ uri: targetUrl }}
             userAgent={DESKTOP_USER_AGENT}
             style={styles.hiddenWebView}
@@ -103,23 +109,18 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
             domStorageEnabled={true}
             sharedCookiesEnabled={true}
             thirdPartyCookiesEnabled={true}
-            cacheEnabled={true}
-            setSupportMultipleWindows={false}
-            javaScriptCanOpenWindowsAutomatically={false}
-            injectedJavaScriptBeforeContentLoaded={scraperJs}
             injectedJavaScript={scraperJs}
-            onLoadEnd={(syntheticEvent) => {
-              const { nativeEvent } = syntheticEvent;
-              if (nativeEvent.loading === false) {
-                // Trigger instant check when page finishes network loading
-              }
+            onLoadEnd={() => {
+              // Re-inject on load end to ensure SPAs execute script after hydration
+              webViewRefs.current[store.platformId]?.injectJavaScript(scraperJs);
             }}
             onMessage={(e) => handleMessage(store.platformId, e)}
             onError={(err) => {
               console.log(`[LowP Mobile] ${store.platformId} WebView error:`, err.nativeEvent);
               if (!resolvedStores.current.has(store.platformId)) {
                 resolvedStores.current.add(store.platformId);
-                onStoreResult(store.platformId, null);
+                const elapsed = Date.now() - startTimeRef.current;
+                onStoreResult(store.platformId, null, elapsed);
               }
             }}
           />
@@ -132,15 +133,15 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
 const styles = StyleSheet.create({
   hiddenContainer: {
     position: 'absolute',
-    top: 0,
-    left: -SCREEN_WIDTH * 2,
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
-    opacity: 0.01,
-    zIndex: -9999
+    top: -9999,
+    left: -9999,
+    width: 1,
+    height: 1,
+    opacity: 0,
+    overflow: 'hidden'
   },
   hiddenWebView: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT
+    width: 1,
+    height: 1
   }
 });
