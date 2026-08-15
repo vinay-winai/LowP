@@ -25,7 +25,7 @@ const STORE_CONFIG: Record<
 > = {
   amazon_tez: {
     name: 'Amazon Now (Tez)',
-    url: 'https://www.amazon.in/ap/signin',
+    url: 'https://www.amazon.in',
     color: '#FF9900'
   },
   instamart: {
