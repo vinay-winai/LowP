@@ -677,6 +677,50 @@ async function extractDataFromTab(tabId, cleanQ) {
   return null;
 }
 
+async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 3500) {
+  if (typeof chrome === "undefined" || !chrome.tabs || !chrome.tabs.create) {
+    return null;
+  }
+  let tabId = null;
+  try {
+    logDebug("EphemeralTab", `Opening background tab for ${url}`);
+    const tab = await chrome.tabs.create({ url, active: false });
+    tabId = tab.id;
+
+    // Wait for the tab to load and hydrate
+    await new Promise((resolve) => {
+      let isResolved = false;
+      const listener = (tid, changeInfo) => {
+        if (tid === tabId && changeInfo.status === "complete") {
+          chrome.tabs.onUpdated.removeListener(listener);
+          isResolved = true;
+          setTimeout(resolve, 1200); // 1.2s grace for React hydration
+        }
+      };
+      chrome.tabs.onUpdated.addListener(listener);
+      setTimeout(() => {
+        if (!isResolved) {
+          try { chrome.tabs.onUpdated.removeListener(listener); } catch (e) {}
+          resolve();
+        }
+      }, timeoutMs);
+    });
+
+    const data = await extractDataFromTab(tabId, cleanQ);
+    return data;
+  } catch (err) {
+    logDebug("EphemeralTab", `Ephemeral tab error for ${url}: ${err.message}`);
+    return null;
+  } finally {
+    if (tabId) {
+      try {
+        await chrome.tabs.remove(tabId);
+        logDebug("EphemeralTab", `Ephemeral tab ${tabId} closed successfully`);
+      } catch (e) {}
+    }
+  }
+}
+
 // --- AMAZON NOW / TEZ PROVIDER ---
 class AmazonTezProvider extends BaseProvider {
   constructor() {
@@ -982,7 +1026,19 @@ class InstamartProvider extends BaseProvider {
       logDebug("Instamart", `Swiggy background fetch error: ${err.message}`);
     }
 
-    // 4. Fallback: Provide direct search link
+    // 4. Automated Ephemeral Background Tab Extractor (when background HTML is empty or blocked)
+    try {
+      logDebug("Instamart", `Attempting automated ephemeral background tab extraction for "${cleanQ}"`);
+      const ephemeralData = await fetchViaEphemeralTab(targetUrl, cleanQ);
+      if (ephemeralData && ephemeralData.price > 0) {
+        logDebug("Instamart", `Retrieved live price via ephemeral background tab: ${ephemeralData.title} at ₹${ephemeralData.price}`, ephemeralData);
+        return this.formatResult(ephemeralData, location, cleanQ);
+      }
+    } catch (e) {
+      logDebug("Instamart", `Ephemeral tab extraction failed: ${e.message}`);
+    }
+
+    // 5. Fallback: Provide direct search link
     return this.formatResult({
       id: `im_${Date.now()}`,
       title: cleanQ,
@@ -1046,7 +1102,19 @@ class ZeptoProvider extends BaseProvider {
       } catch (e) {}
     }
 
-    // 3. Fallback: Provide direct search link
+    // 3. Automated Ephemeral Background Tab Extractor (when no Zepto tab is open)
+    try {
+      logDebug("Zepto", `Attempting automated ephemeral background tab extraction for "${cleanQ}"`);
+      const ephemeralData = await fetchViaEphemeralTab(targetUrl, cleanQ);
+      if (ephemeralData && ephemeralData.price > 0) {
+        logDebug("Zepto", `Retrieved live price via ephemeral background tab: ${ephemeralData.title} at ₹${ephemeralData.price}`, ephemeralData);
+        return this.formatResult(ephemeralData, location, cleanQ);
+      }
+    } catch (e) {
+      logDebug("Zepto", `Ephemeral tab extraction failed: ${e.message}`);
+    }
+
+    // 4. Fallback: Provide direct search link
     return this.formatResult({
       id: `zepto_${Date.now()}`,
       title: cleanQ,
