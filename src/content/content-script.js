@@ -182,8 +182,8 @@
     const mrpMatch = (mrpEl ? mrpEl.textContent : cardText).match(/₹\s*([0-9,]+)/);
     const mrp = mrpMatch ? parseFloat(mrpMatch[1].replace(/,/g, "")) : Math.round(price * 1.15);
 
-    const deliveryTime = platformId === "instamart" ? "10-15 mins" : (platformId === "zepto" ? "5-9 mins" : "Same Day");
-    const brand = platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : "Amazon");
+    const deliveryTime = (platformId === "instamart" || platformId === "amazon_tez") ? "10-15 mins" : (platformId === "zepto" ? "5-9 mins" : "Same Day");
+    const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : "Amazon India"));
 
     return {
       title,
@@ -201,14 +201,23 @@
   function extractStorePageData(searchQuery = "") {
     if (!document.querySelectorAll) return null;
 
-    const host = window.location.hostname || "";
-    const pathname = window.location.pathname || "";
+    const host = (window.location.hostname || "").toLowerCase();
+    const pathname = (window.location.pathname || "").toLowerCase();
+    const href = (window.location.href || "").toLowerCase();
     const isPDP = pathname.includes("/pn/") || pathname.includes("/product/") || pathname.includes("/item/") || pathname.includes("/dp/");
 
     let platformId = "unknown";
-    if (host.includes("amazon")) platformId = "amazon";
-    else if (host.includes("swiggy")) platformId = "instamart";
-    else if (host.includes("zepto")) platformId = "zepto";
+    if (host.includes("amazon") || href.includes("amazon")) {
+      if (href.includes("/tez/") || href.includes("searchkeyword")) {
+        platformId = "amazon_tez";
+      } else {
+        platformId = "amazon";
+      }
+    } else if (host.includes("swiggy") || href.includes("swiggy")) {
+      platformId = "instamart";
+    } else if (host.includes("zepto") || href.includes("zepto")) {
+      platformId = "zepto";
+    }
 
     const candidates = [];
 
