@@ -67,18 +67,18 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       const targetQtyStr = qNum + " " + qUnit;
       const targetQtyCompact = qNum + qUnit;
       if (fullText.includes(targetQtyStr) || fullText.includes(targetQtyCompact)) {
-        score += 50;
+        score += 40;
       } else {
         const candQtyMatch = fullText.match(/(\\d+(?:\\.\\d+)?)\\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
         if (candQtyMatch) {
           const cNum = parseFloat(candQtyMatch[1]);
-          if (cNum !== qNum) score -= 50;
+          if (cNum !== qNum) score -= 40;
         }
       }
     }
 
-    if (queryTokens.length > 0 && fullText.includes(queryTokens[0])) score += 35;
-    return Math.max(0, Math.round(score));
+    if (queryTokens.length > 0 && fullText.includes(queryTokens[0])) score += 25;
+    return score;
   }
 
   function getSpacedText(node) {

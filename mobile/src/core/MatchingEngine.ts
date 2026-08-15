@@ -17,11 +17,14 @@ export class MatchingEngine {
 
   static cleanSearchTerm(query: string): string {
     if (!query) return '';
-    let q = query.trim();
+    let q = query;
+    try {
+      q = decodeURIComponent(q);
+    } catch (e) {}
     q = q.replace(/https?:\/\/[^\s]+/g, '');
     q = q.replace(/\b(?:delivery in\s*)?\d+(?:\s*-\s*\d+)?\s*(?:mins?|minutes?|hours?|sec|seconds?)\b/gi, '');
     q = q.replace(/\b(?:fastest delivery|standard delivery|instant delivery|express delivery|free delivery|delivery)\b/gi, '');
-    q = q.replace(/[,|\-_+/\\]+/g, ' ');
+    q = q.replace(/[,\-_|+/\\%]+/g, ' ');
     q = q.replace(/\s+/g, ' ').trim();
     return q;
   }
@@ -39,7 +42,7 @@ export class MatchingEngine {
 
     const fullText = normalize(`${itemTitle} ${packSize}`);
     const q = normalize(query);
-    const queryTokens = q.split(/\s+/).filter(Boolean);
+    const queryTokens = q.split(/\s+/).filter((t) => t.length > 0);
 
     let score = 0;
 
@@ -61,21 +64,21 @@ export class MatchingEngine {
       const targetQtyCompact = `${qNum}${qUnit}`;
 
       if (fullText.includes(targetQtyStr) || fullText.includes(targetQtyCompact)) {
-        score += 50;
+        score += 40;
       } else {
         const candQtyMatch = fullText.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
         if (candQtyMatch) {
           const cNum = parseFloat(candQtyMatch[1]);
-          if (cNum !== qNum) score -= 50;
+          if (cNum !== qNum) score -= 40;
         }
       }
     }
 
     if (queryTokens.length > 0 && fullText.includes(queryTokens[0])) {
-      score += 35;
+      score += 25;
     }
 
-    return Math.max(0, Math.round(score));
+    return score;
   }
 
   static annotateBestOffers(results: StoreResult[]): StoreResult[] {
