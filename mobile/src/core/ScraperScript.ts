@@ -102,18 +102,18 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
 
   function extractFromCard(cardNode, platformId) {
     if (!cardNode) return null;
-    if (cardNode.closest && cardNode.closest('[class*="filter"], [class*="suggestion"], [class*="chip"], [class*="pill"], [class*="breadcrumb"], [class*="header"], [class*="footer"], [class*="nav"], header, footer, nav')) {
+    if (cardNode.matches && cardNode.matches('header, footer, nav, button, [role="button"], [class*="suggestion-pill"], [class*="filter-chip"]')) {
       return null;
     }
 
-    const spacedCardText = getSpacedText(cardNode).replace(/\\s+/g, " ").trim();
+    const spacedCardText = getSpacedText(cardNode).replace(/\s+/g, " ").trim();
     
     // 1. Price extraction
     let price = null;
-    const priceEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="EdlpPrice"], [data-testid*="price"], [data-testid*="item_price"], [data-testid*="offer-price"], [class*="_2jn41"], [class*="_1yW90"], [class*="_3-M84"]') : null;
+    const priceEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="EdlpPrice"], [data-testid*="price"], [data-testid*="item_price"], [data-testid*="offer-price"], span[class*="a-price-whole"], span[class*="a-price"], [class*="_2jn41"], [class*="_1yW90"], [class*="_3-M84"], [class*="_28_y3"]') : null;
     if (priceEl) {
       const pTxt = getSpacedText(priceEl).trim();
-      const m = pTxt.match(/([0-9,]+(?:\\.[0-9]+)?)/);
+      const m = pTxt.match(/([0-9,]+(?:\.[0-9]+)?)/);
       if (m) {
         const val = parseFloat(m[1].replace(/,/g, ""));
         if (val >= 5 && val <= 500000) price = val;
@@ -121,7 +121,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     }
 
     if (!price || isNaN(price)) {
-      const literalMatch = spacedCardText.match(/(?:₹|Rs\\.?|INR)\\s*([0-9,]+(?:\\.[0-9]+)?)/i);
+      const literalMatch = spacedCardText.match(/(?:₹|Rs\.?|INR)\s*([0-9,]+(?:\.[0-9]+)?)/i);
       if (literalMatch) {
         const val = parseFloat(literalMatch[1].replace(/,/g, ""));
         if (val >= 5 && val <= 500000) price = val;
@@ -133,7 +133,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       for (const el of children) {
         if (el.children && el.children.length > 0) continue;
         const txt = el.textContent ? el.textContent.trim() : "";
-        if (txt && /^\\s*[0-9]{2,5}(?:\\.[0-9]+)?\\s*$/.test(txt)) {
+        if (txt && /^\s*[0-9]{2,5}(?:\.[0-9]+)?\s*$/.test(txt)) {
           const val = parseFloat(txt);
           if (val >= 5 && val <= 500000) {
             price = val;
@@ -149,7 +149,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     const image = imgEl ? (imgEl.src || "assets/icon48.png") : "assets/icon48.png";
 
     let title = "";
-    const titleEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="ProductName"], [data-testid*="name"], [data-testid*="title"], [data-testid*="item_name"], [data-testid*="item-title"], [data-slot-id*="title"], [class*="ProductName"], [class*="ItemName"], [class*="product_name"], [class*="styled__ItemName"], [class*="ItemTitle"], [class*="Product__UpdatedTitle"], [class*="tw-text-base-black"], [class*="tw-line-clamp-2"], [class*="_2T1-K"], [class*="nov9b"], [class*="_1W_4e"], [class*="_1b1-N"], h1, h2, h3, h4, h5') : null;
+    const titleEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="ProductName"], [data-testid*="name"], [data-testid*="title"], [data-testid*="item_name"], [data-testid*="item-title"], [data-slot-id*="title"], [class*="ProductName"], [class*="ItemName"], [class*="product_name"], [class*="styled__ItemName"], [class*="ItemTitle"], [class*="Product__UpdatedTitle"], [class*="tw-text-base-black"], [class*="tw-line-clamp-2"], [class*="s-title-instructions"], h2 a span, span[class*="a-text-normal"], [class*="_2T1-K"], [class*="nov9b"], [class*="_1W_4e"], [class*="_1b1-N"], h1, h2, h3, h4, h5') : null;
     if (titleEl) {
       const txt = cleanTitle(titleEl.textContent);
       if (txt && txt.length >= 3 && !isBadTitle(txt)) {
