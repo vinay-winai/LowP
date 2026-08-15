@@ -105,7 +105,8 @@ document.addEventListener("DOMContentLoaded", () => {
       card.className = `store-card ${store.isLowestPrice ? 'highlight-lowest' : ''}`;
 
       const storeColors = {
-        amazon: "#FF9900",
+        amazon_tez: "#FF9900",
+        amazon: "#232F3E",
         instamart: "#FC8019",
         zepto: "#7C3AED"
       };

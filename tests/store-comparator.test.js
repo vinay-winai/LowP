@@ -26,7 +26,8 @@ const {
   DEFAULT_LOCATION,
   LocationService,
   MatchingEngine,
-  AmazonProvider,
+  AmazonTezProvider,
+  AmazonStandardProvider,
   InstamartProvider,
   ZeptoProvider,
   handleSearchQuery
@@ -64,9 +65,14 @@ test('MatchingEngine - scoreRelevance ranks exact brand and pack size highest', 
 test('MatchingEngine - annotateBestOffers assigns lowest price badge', () => {
   const results = [
     {
-      platformId: 'amazon',
+      platformId: 'amazon_tez',
       isAvailable: true,
       priceBreakdown: { finalPayable: 127 }
+    },
+    {
+      platformId: 'amazon',
+      isAvailable: true,
+      priceBreakdown: { finalPayable: 140 }
     },
     {
       platformId: 'instamart',
@@ -82,11 +88,13 @@ test('MatchingEngine - annotateBestOffers assigns lowest price badge', () => {
 
   const annotated = MatchingEngine.annotateBestOffers(results);
 
-  const amz = annotated.find(r => r.platformId === 'amazon');
+  const amzTez = annotated.find(r => r.platformId === 'amazon_tez');
+  const amzStd = annotated.find(r => r.platformId === 'amazon');
   const im = annotated.find(r => r.platformId === 'instamart');
   const zepto = annotated.find(r => r.platformId === 'zepto');
 
-  assert.strictEqual(amz.isLowestPrice, true); // 127 is lowest
+  assert.strictEqual(amzTez.isLowestPrice, true); // 127 is lowest
+  assert.strictEqual(amzStd.isLowestPrice, false);
   assert.strictEqual(im.isLowestPrice, false);
   assert.strictEqual(zepto.isLowestPrice, false);
 });
@@ -98,8 +106,9 @@ test('LocationService - initializes with default Hyderabad 500085 location', asy
   assert.strictEqual(loc.lng, 78.39361254731166);
 });
 
-test('Providers - formatResult returns structured schema across Amazon, Instamart, and Zepto', () => {
-  const amz = new AmazonProvider();
+test('Providers - formatResult returns structured schema across Amazon Tez, Amazon Standard, Instamart, and Zepto', () => {
+  const amzTez = new AmazonTezProvider();
+  const amzStd = new AmazonStandardProvider();
   const im = new InstamartProvider();
   const zepto = new ZeptoProvider();
 
@@ -110,10 +119,14 @@ test('Providers - formatResult returns structured schema across Amazon, Instamar
     quantity: '200 g'
   };
 
-  const resAmz = amz.formatResult(mockItem, DEFAULT_LOCATION);
-  assert.strictEqual(resAmz.platformId, 'amazon');
-  assert.strictEqual(resAmz.isAvailable, true);
-  assert.strictEqual(resAmz.priceBreakdown.finalPayable, 127);
+  const resAmzTez = amzTez.formatResult(mockItem, DEFAULT_LOCATION);
+  assert.strictEqual(resAmzTez.platformId, 'amazon_tez');
+  assert.strictEqual(resAmzTez.isAvailable, true);
+  assert.strictEqual(resAmzTez.priceBreakdown.finalPayable, 127);
+
+  const resAmzStd = amzStd.formatResult(mockItem, DEFAULT_LOCATION);
+  assert.strictEqual(resAmzStd.platformId, 'amazon');
+  assert.strictEqual(resAmzStd.isAvailable, true);
 
   const resIm = im.formatResult(null, DEFAULT_LOCATION);
   assert.strictEqual(resIm.platformId, 'instamart');
@@ -124,9 +137,10 @@ test('Providers - formatResult returns structured schema across Amazon, Instamar
   assert.strictEqual(resZepto.isAvailable, true);
 });
 
-test('handleSearchQuery - executes parallel search and returns 3 store results', async () => {
+test('handleSearchQuery - executes parallel search and returns 4 store results', async () => {
   const results = await handleSearchQuery('paneer');
-  assert.strictEqual(results.length, 3);
+  assert.strictEqual(results.length, 4);
+  assert.ok(results.some(r => r.platformId === 'amazon_tez'));
   assert.ok(results.some(r => r.platformId === 'amazon'));
   assert.ok(results.some(r => r.platformId === 'instamart'));
   assert.ok(results.some(r => r.platformId === 'zepto'));

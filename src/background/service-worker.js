@@ -677,10 +677,10 @@ async function extractDataFromTab(tabId, cleanQ) {
   return null;
 }
 
-// --- AMAZON INDIA PROVIDER ---
-class AmazonProvider extends BaseProvider {
+// --- AMAZON NOW / TEZ PROVIDER ---
+class AmazonTezProvider extends BaseProvider {
   constructor() {
-    super("amazon", "Amazon Now / India", "#FF9900");
+    super("amazon_tez", "Amazon Now (Tez)", "#FF9900");
   }
 
   getSearchUrl(query) {
@@ -690,18 +690,18 @@ class AmazonProvider extends BaseProvider {
   async search(query, location) {
     if (!query || !query.trim()) return this.formatResult(null, location, query);
     const cleanQ = MatchingEngine.cleanSearchTerm(query);
-    const pincode = location.pincode || "500085";
     const tezUrl = this.getSearchUrl(cleanQ);
 
-    // 1. Check open Amazon tabs (Only if the tab's product is relevant to search query)
+    // 1. Check open Amazon Tez tabs
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
       try {
-        const tabs = await chrome.tabs.query({ url: "*://*.amazon.in/*" });
-        for (const t of tabs) {
+        const allTabs = await chrome.tabs.query({});
+        const tezTabs = allTabs.filter(t => t.url && t.url.includes("amazon.in") && (t.url.includes("/tez/") || t.url.includes("searchKeyword")));
+        for (const t of tezTabs) {
           try {
             const data = await extractDataFromTab(t.id, cleanQ);
             if (data && data.price > 0 && MatchingEngine.scoreRelevance(data.title, cleanQ) >= 30) {
-              logDebug("Amazon", `Retrieved relevant product from open Amazon tab: "${data.title}" at ₹${data.price}`, data);
+              logDebug("AmazonTez", `Retrieved relevant product from open Amazon Tez tab: "${data.title}" at ₹${data.price}`, data);
               return this.formatResult(data, location, cleanQ);
             }
           } catch (e) {}
@@ -709,8 +709,8 @@ class AmazonProvider extends BaseProvider {
       } catch (e) {}
     }
 
+    // 2. Fetch search targeting Amazon Fresh / Now grocery category (n:4859495031)
     try {
-      // 2. Fetch search targeting Amazon Fresh / Now grocery category (n:4859495031)
       let searchUrl = `https://www.amazon.in/s?k=${encodeURIComponent(cleanQ)}&rh=n%3A4859495031`;
       let searchRes = await fetch(searchUrl, {
         headers: {
@@ -718,16 +718,6 @@ class AmazonProvider extends BaseProvider {
           "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
         }
       });
-
-      if (!searchRes.ok) {
-        searchUrl = `https://www.amazon.in/s?k=${encodeURIComponent(cleanQ)}`;
-        searchRes = await fetch(searchUrl, {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-          }
-        });
-      }
 
       if (searchRes.ok) {
         const html = await searchRes.text();
@@ -754,14 +744,14 @@ class AmazonProvider extends BaseProvider {
             const asin = asinMatch ? asinMatch[1] : null;
 
             candidates.push({
-              id: asin || `amz_${Date.now()}`,
+              id: asin || `amz_tez_${Date.now()}`,
               title,
-              brand: "Amazon Now / Tez",
+              brand: "Amazon Now (Tez)",
               quantity: "1 unit",
               mrp,
               price,
               image: imgMatch ? imgMatch[1] : "assets/icon48.png",
-              productUrl: asin ? `https://www.amazon.in/dp/${asin}` : tezUrl,
+              productUrl: tezUrl,
               _score: MatchingEngine.scoreRelevance(title, cleanQ)
             });
 
@@ -772,12 +762,108 @@ class AmazonProvider extends BaseProvider {
         if (candidates.length > 0) {
           candidates.sort((a, b) => b._score - a._score);
           const best = candidates[0];
-          logDebug("Amazon", `Best Amazon Tez match from top 6: "${best.title}" at ₹${best.price} (Score: ${best._score})`, { asin: best.id });
+          logDebug("AmazonTez", `Best Amazon Tez match from top 6: "${best.title}" at ₹${best.price} (Score: ${best._score})`, { asin: best.id });
           return this.formatResult(best, location, cleanQ);
         }
       }
     } catch (err) {
-      logDebug("Amazon", `Amazon search error: ${err.message}`);
+      logDebug("AmazonTez", `Amazon Tez search error: ${err.message}`);
+    }
+
+    return this.formatResult(null, location, cleanQ);
+  }
+}
+
+// --- AMAZON INDIA (STANDARD) PROVIDER ---
+class AmazonStandardProvider extends BaseProvider {
+  constructor() {
+    super("amazon", "Amazon India", "#232F3E");
+  }
+
+  getSearchUrl(query) {
+    return `https://www.amazon.in/s?k=${encodeURIComponent(query || "")}`;
+  }
+
+  async search(query, location) {
+    if (!query || !query.trim()) return this.formatResult(null, location, query);
+    const cleanQ = MatchingEngine.cleanSearchTerm(query);
+    const standardUrl = this.getSearchUrl(cleanQ);
+
+    // 1. Check open standard Amazon tabs (excluding /tez/)
+    if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
+      try {
+        const allTabs = await chrome.tabs.query({});
+        const standardTabs = allTabs.filter(t => t.url && t.url.includes("amazon.in") && !t.url.includes("/tez/"));
+        for (const t of standardTabs) {
+          try {
+            const data = await extractDataFromTab(t.id, cleanQ);
+            if (data && data.price > 0 && MatchingEngine.scoreRelevance(data.title, cleanQ) >= 30) {
+              logDebug("AmazonStandard", `Retrieved relevant product from open Amazon tab: "${data.title}" at ₹${data.price}`, data);
+              return this.formatResult(data, location, cleanQ);
+            }
+          } catch (e) {}
+        }
+      } catch (e) {}
+    }
+
+    // 2. Fetch standard Amazon India search
+    try {
+      const searchRes = await fetch(standardUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        }
+      });
+
+      if (searchRes.ok) {
+        const html = await searchRes.text();
+        const cardBlocks = html.split(/data-component-type="s-search-result"|class="[^"]*s-result-item[^"]*"/);
+        const candidates = [];
+
+        for (let i = 1; i < cardBlocks.length; i++) {
+          const block = cardBlocks[i];
+          const titleMatch = block.match(/class="a-size-(?:medium|base-plus|base) a-color-base a-text-normal">([^<]+)</i) ||
+                             block.match(/<h2[^>]*><a[^>]*><span[^>]*>([^<]+)<\/span><\/a><\/h2>/i) ||
+                             block.match(/alt="([^"]+)"/i);
+          const priceMatch = block.match(/class="a-price-whole">([0-9,]+)/i) ||
+                             block.match(/class="a-offscreen">₹?([0-9,]+(?:\.[0-9]+)?)/i) ||
+                             block.match(/₹\s*([0-9,]+(?:\.[0-9]+)?)/);
+          const mrpMatch = block.match(/class="a-price a-text-price"[^>]*><span class="a-offscreen">₹?([0-9,]+(?:\.[0-9]+)?)/i);
+          const asinMatch = block.match(/data-asin="([A-Z0-9]{10})"/i);
+          const imgMatch = block.match(/class="s-image"[^>]*src="([^"]+)"/i);
+
+          if (titleMatch && priceMatch) {
+            const rawTitle = titleMatch[1].trim();
+            const title = rawTitle.replace(/^Sponsored Ad\s*[-–:]\s*/i, "").replace(/^Sponsored\s*[-–:]\s*/i, "").trim();
+            const price = parseFloat(priceMatch[1].replace(/,/g, ""));
+            const mrp = mrpMatch ? parseFloat(mrpMatch[1].replace(/,/g, "")) : Math.round(price * 1.15);
+            const asin = asinMatch ? asinMatch[1] : null;
+
+            candidates.push({
+              id: asin || `amz_std_${Date.now()}`,
+              title,
+              brand: "Amazon India",
+              quantity: "1 unit",
+              mrp,
+              price,
+              image: imgMatch ? imgMatch[1] : "assets/icon48.png",
+              productUrl: asin ? `https://www.amazon.in/dp/${asin}` : standardUrl,
+              _score: MatchingEngine.scoreRelevance(title, cleanQ)
+            });
+
+            if (candidates.length >= 6) break;
+          }
+        }
+
+        if (candidates.length > 0) {
+          candidates.sort((a, b) => b._score - a._score);
+          const best = candidates[0];
+          logDebug("AmazonStandard", `Best Amazon India match from top 6: "${best.title}" at ₹${best.price} (Score: ${best._score})`, { asin: best.id });
+          return this.formatResult(best, location, cleanQ);
+        }
+      }
+    } catch (err) {
+      logDebug("AmazonStandard", `Amazon Standard search error: ${err.message}`);
     }
 
     return this.formatResult(null, location, cleanQ);
@@ -978,7 +1064,8 @@ class ZeptoProvider extends BaseProvider {
 // 5. ORCHESTRATOR & SEARCH HANDLER
 // ==========================================
 const PROVIDERS = [
-  new AmazonProvider(),
+  new AmazonTezProvider(),
+  new AmazonStandardProvider(),
   new InstamartProvider(),
   new ZeptoProvider()
 ];
@@ -1094,7 +1181,8 @@ if (typeof module !== "undefined" && module.exports) {
     LocationService,
     MatchingEngine,
     BaseProvider,
-    AmazonProvider,
+    AmazonTezProvider,
+    AmazonStandardProvider,
     InstamartProvider,
     ZeptoProvider,
     PROVIDERS,
