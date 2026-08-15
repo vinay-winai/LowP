@@ -197,6 +197,8 @@ class MatchingEngine {
       q = decodeURIComponent(q);
     } catch (e) {}
     q = q.replace(/https?:\/\/[^\s]+/g, "");
+    q = q.replace(/\b(?:delivery in\s*)?\d+(?:\s*-\s*\d+)?\s*(?:mins?|minutes?|hours?|sec|seconds?)\b/gi, "");
+    q = q.replace(/\b(?:fastest delivery|standard delivery|instant delivery|express delivery|free delivery|delivery)\b/gi, "");
     q = q.replace(/[,\-_|+/\\%]+/g, " ");
     q = q.replace(/\s+/g, " ").trim();
     return q;
@@ -360,8 +362,8 @@ function inPageExtract(searchQuery) {
     if (!str || typeof str !== "string") return "";
     return str
       .replace(/(?:₹|Rs\.?|INR)\s*[0-9,]+(?:\.[0-9]+)?/gi, "")
-      .replace(/^\s*(?:delivery in\s*)?\d+(?:\s*-\s*\d+)?\s*(?:mins?|minutes?|hours?|sec|seconds?)\s*/i, "")
-      .replace(/\s*(?:delivery in\s*)?\d+(?:\s*-\s*\d+)?\s*(?:mins?|minutes?|hours?|sec|seconds?)\s*$/i, "")
+      .replace(/\b(?:delivery in\s*)?\d+(?:\s*-\s*\d+)?\s*(?:mins?|minutes?|hours?|sec|seconds?)\b/gi, "")
+      .replace(/\b(?:fastest delivery|standard delivery|instant delivery|express delivery|free delivery|delivery)\b/gi, "")
       .replace(/\b(?:mrp|add|buy|added|in stock|out of stock|off|\d+%\s*off|save)\b/gi, "")
       .replace(/\s+/g, " ")
       .trim();
