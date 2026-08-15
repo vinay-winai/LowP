@@ -4,7 +4,11 @@
   "description": "Hyperlocal Real-Time Price Comparator across Amazon, Swiggy Instamart, and Zepto",
   "main": "src/background/service-worker.js",
   "scripts": {
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "start": "npm --prefix mobile start",
+    "android": "npm --prefix mobile run android",
+    "ios": "npm --prefix mobile run ios",
+    "mobile": "npm --prefix mobile start"
   },
   "keywords": [
     "chrome-extension",
