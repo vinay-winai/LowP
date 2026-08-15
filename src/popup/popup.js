@@ -123,10 +123,12 @@ document.addEventListener("DOMContentLoaded", () => {
         amazon_tez: "#FF9900",
         amazon: "#232F3E",
         instamart: "#FC8019",
-        zepto: "#7C3AED"
+        zepto: "#7C3AED",
+        blinkit: "#F8CB46"
       };
 
       const bgColor = storeColors[store.platformId] || "#38BDF8";
+      const textColor = store.platformId === "blinkit" ? "#111827" : "#FFFFFF";
       const hasPrice = store.isAvailable && store.priceBreakdown && store.priceBreakdown.finalPayable > 0;
 
       let badgesHtml = "";
@@ -156,7 +158,7 @@ document.addEventListener("DOMContentLoaded", () => {
       card.innerHTML = `
         <div class="card-header">
           <div class="store-identity">
-            <span class="store-pill" style="background: ${bgColor};">${store.platformName}</span>
+            <span class="store-pill" style="background: ${bgColor}; color: ${textColor}; font-weight: 700;">${store.platformName}</span>
           </div>
           <div class="badges-row">
             ${badgesHtml}

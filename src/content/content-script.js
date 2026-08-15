@@ -205,8 +205,8 @@
       mrp = Math.round(price * 1.15);
     }
 
-    const deliveryTime = (platformId === "instamart" || platformId === "amazon_tez") ? "10-15 mins" : (platformId === "zepto" ? "5-9 mins" : "Same Day");
-    const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : "Amazon India"));
+    const deliveryTime = (platformId === "instamart" || platformId === "amazon_tez") ? "10-15 mins" : (platformId === "zepto" ? "5-9 mins" : (platformId === "blinkit" ? "10 mins" : "Same Day"));
+    const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : (platformId === "blinkit" ? "Blinkit" : "Amazon India")));
 
     return {
       title,
@@ -227,7 +227,7 @@
     const host = (window.location.hostname || "").toLowerCase();
     const pathname = (window.location.pathname || "").toLowerCase();
     const href = (window.location.href || "").toLowerCase();
-    const isPDP = pathname.includes("/pn/") || pathname.includes("/product/") || pathname.includes("/item/") || pathname.includes("/dp/");
+    const isPDP = pathname.includes("/pn/") || pathname.includes("/product/") || pathname.includes("/item/") || pathname.includes("/dp/") || pathname.includes("/prid/");
 
     let platformId = "unknown";
     if (host.includes("amazon") || href.includes("amazon")) {
@@ -240,6 +240,8 @@
       platformId = "instamart";
     } else if (host.includes("zepto") || href.includes("zepto")) {
       platformId = "zepto";
+    } else if (host.includes("blinkit") || href.includes("blinkit")) {
+      platformId = "blinkit";
     }
 
     const candidates = [];
@@ -328,6 +330,12 @@
       'div[class*="nov9b"]',
       'div[class*="_1W_4e"]',
       'div[class*="_1lbNR"]',
+      'a[href*="/prid/"]',
+      'div[data-test-id*="plp-product"]',
+      'div[class*="Product__Updated"]',
+      'div[class*="ProductCard"]',
+      'div[class*="product"]',
+      'a[href*="/p/"]',
       'div[data-component-type="s-search-result"]',
       'div[class*="s-result-item"]'
     ];

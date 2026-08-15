@@ -325,6 +325,7 @@ class BaseProvider {
         price: item.price,
         image: item.image || "assets/icon48.png"
       },
+      deliveryTime: item.deliveryTime || (this.platformId === "zepto" ? "5-9 mins" : (this.platformId === "blinkit" ? "10 mins" : ((this.platformId === "instamart" || this.platformId === "amazon_tez") ? "10-15 mins" : "Same Day"))),
       priceBreakdown,
       productUrl: item.productUrl || this.getSearchUrl(item.title || fallbackQuery),
       isLowestPrice: false
@@ -531,8 +532,8 @@ function inPageExtract(searchQuery) {
       mrp = Math.round(price * 1.15);
     }
 
-    const deliveryTime = (platformId === "instamart" || platformId === "amazon_tez") ? "10-15 mins" : (platformId === "zepto" ? "5-9 mins" : "Same Day");
-    const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : "Amazon India"));
+    const deliveryTime = (platformId === "instamart" || platformId === "amazon_tez") ? "10-15 mins" : (platformId === "zepto" ? "5-9 mins" : (platformId === "blinkit" ? "10 mins" : "Same Day"));
+    const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : (platformId === "blinkit" ? "Blinkit" : "Amazon India")));
 
     return {
       title,
@@ -550,7 +551,7 @@ function inPageExtract(searchQuery) {
   const host = (window.location.hostname || "").toLowerCase();
   const pathname = (window.location.pathname || "").toLowerCase();
   const href = (window.location.href || "").toLowerCase();
-  const isPDP = pathname.includes("/pn/") || pathname.includes("/product/") || pathname.includes("/item/") || pathname.includes("/dp/");
+  const isPDP = pathname.includes("/pn/") || pathname.includes("/product/") || pathname.includes("/item/") || pathname.includes("/dp/") || pathname.includes("/prid/");
 
   let platformId = "unknown";
   if (host.includes("amazon") || href.includes("amazon")) {
@@ -563,6 +564,8 @@ function inPageExtract(searchQuery) {
     platformId = "instamart";
   } else if (host.includes("zepto") || href.includes("zepto")) {
     platformId = "zepto";
+  } else if (host.includes("blinkit") || href.includes("blinkit")) {
+    platformId = "blinkit";
   }
 
   const candidates = [];
@@ -651,6 +654,12 @@ function inPageExtract(searchQuery) {
     'div[class*="nov9b"]',
     'div[class*="_1W_4e"]',
     'div[class*="_1lbNR"]',
+    'a[href*="/prid/"]',
+    'div[data-test-id*="plp-product"]',
+    'div[class*="Product__Updated"]',
+    'div[class*="ProductCard"]',
+    'div[class*="product"]',
+    'a[href*="/p/"]',
     'div[data-component-type="s-search-result"]',
     'div[class*="s-result-item"]'
   ];
@@ -1219,6 +1228,71 @@ class ZeptoProvider extends BaseProvider {
   }
 }
 
+// --- BLINKIT PROVIDER ---
+class BlinkitProvider extends BaseProvider {
+  constructor() {
+    super("blinkit", "Blinkit", "#F8CB46");
+  }
+
+  getSearchUrl(query) {
+    return `https://blinkit.com/s/?q=${encodeURIComponent(query || "")}`;
+  }
+
+  async search(query, location) {
+    if (!query || !query.trim()) return this.formatResult(null, location, query);
+    const cleanQ = MatchingEngine.cleanSearchTerm(query);
+    const targetUrl = this.getSearchUrl(cleanQ);
+
+    logDebug("Blinkit", `Searching Blinkit for "${cleanQ}" (Live Direct Search)`);
+
+    // 1. Query open Blinkit tabs matching search query
+    if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
+      try {
+        const allTabs = await chrome.tabs.query({});
+        const blinkitTabs = allTabs.filter(t => t.url && t.url.includes("blinkit.com") && isOpenTabMatchingQuery(t.url, cleanQ));
+        logDebug("Blinkit", `Found ${blinkitTabs.length} open matching Blinkit tab(s)`);
+
+        for (const t of blinkitTabs) {
+          try {
+            logDebug("Blinkit", `Querying open Blinkit tab (${t.id}): ${t.url}`);
+            const data = await extractDataFromTab(t.id, cleanQ);
+            if (data && data.price > 0 && MatchingEngine.scoreRelevance(data.title, cleanQ) >= 30) {
+              logDebug("Blinkit", `Retrieved relevant price from open Blinkit tab: ${data.title} at ₹${data.price}`, data);
+              return this.formatResult(data, location, cleanQ);
+            }
+          } catch (e) {
+            logDebug("Blinkit", `Blinkit tab (${t.id}) query error: ${e.message}`);
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 2. Automated Ephemeral Background Tab Extractor
+    try {
+      logDebug("Blinkit", `Attempting automated ephemeral background tab extraction for "${cleanQ}"`);
+      const ephemeralData = await fetchViaEphemeralTab(targetUrl, cleanQ);
+      if (ephemeralData && ephemeralData.price > 0) {
+        logDebug("Blinkit", `Retrieved live price via ephemeral background tab: ${ephemeralData.title} at ₹${ephemeralData.price}`, ephemeralData);
+        return this.formatResult(ephemeralData, location, cleanQ);
+      }
+    } catch (e) {
+      logDebug("Blinkit", `Ephemeral tab extraction failed: ${e.message}`);
+    }
+
+    // 3. Fallback: Provide direct search link
+    return this.formatResult({
+      id: `blinkit_${Date.now()}`,
+      title: cleanQ,
+      brand: "Blinkit",
+      quantity: "1 unit",
+      mrp: 0,
+      price: 0,
+      image: "assets/icon48.png",
+      productUrl: targetUrl
+    }, location, cleanQ);
+  }
+}
+
 // ==========================================
 // 5. ORCHESTRATOR & SEARCH HANDLER
 // ==========================================
@@ -1226,7 +1300,8 @@ const PROVIDERS = [
   new AmazonTezProvider(),
   new AmazonStandardProvider(),
   new InstamartProvider(),
-  new ZeptoProvider()
+  new ZeptoProvider(),
+  new BlinkitProvider()
 ];
 
 async function handleSearchQuery(query, locationId = null) {
@@ -1349,6 +1424,7 @@ if (typeof module !== "undefined" && module.exports) {
     AmazonStandardProvider,
     InstamartProvider,
     ZeptoProvider,
+    BlinkitProvider,
     PROVIDERS,
     handleSearchQuery,
     DEBUG_LOGS,
