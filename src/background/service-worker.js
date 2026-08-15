@@ -697,32 +697,23 @@ async function extractDataFromTab(tabId, cleanQ) {
   return null;
 }
 
-async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 10000) {
+async function fetchViaEphemeralTab(url, cleanQ, delayMs = 10000) {
   if (typeof chrome === "undefined" || !chrome.tabs || !chrome.tabs.create) {
     return null;
   }
   let tabId = null;
   try {
-    logDebug("EphemeralTab", `Opening background tab for ${url}`);
+    logDebug("EphemeralTab", `Opening background tab for ${url} (waiting fixed ${delayMs / 1000}s)`);
     const tab = await chrome.tabs.create({ url, active: false });
     tabId = tab.id;
 
-    const startTime = Date.now();
-    let data = null;
+    // Fixed 10s delay to allow full page load and client-side hydration
+    await new Promise((r) => setTimeout(r, delayMs));
 
-    // Initial wait for tab creation & initial network request
-    await new Promise((r) => setTimeout(r, 1500));
-
-    // Poll every 600ms up to 10 seconds (returns as soon as React hydrates the DOM)
-    while (Date.now() - startTime < timeoutMs) {
-      data = await extractDataFromTab(tabId, cleanQ);
-      if (data && data.price > 0) {
-        logDebug("EphemeralTab", `Successfully extracted data from ${url} after ${Date.now() - startTime}ms: "${data.title}" at ₹${data.price}`, data);
-        break;
-      }
-      await new Promise((r) => setTimeout(r, 600));
+    const data = await extractDataFromTab(tabId, cleanQ);
+    if (data && data.price > 0) {
+      logDebug("EphemeralTab", `Successfully extracted data from ${url} after fixed ${delayMs / 1000}s delay: "${data.title}" at ₹${data.price}`, data);
     }
-
     return data;
   } catch (err) {
     logDebug("EphemeralTab", `Ephemeral tab error for ${url}: ${err.message}`);
