@@ -1319,6 +1319,18 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage)
       });
       return true;
     }
+
+    if (action === "OPEN_SIDE_PANEL") {
+      if (chrome.sidePanel && chrome.sidePanel.open) {
+        chrome.windows.getCurrent((win) => {
+          if (win && win.id) {
+            chrome.sidePanel.open({ windowId: win.id });
+          }
+        });
+      }
+      sendResponse({ success: true });
+      return true;
+    }
   });
 }
 

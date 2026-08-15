@@ -10,8 +10,12 @@
     "cookies",
     "tabs",
     "activeTab",
-    "scripting"
+    "scripting",
+    "sidePanel"
   ],
+  "side_panel": {
+    "default_path": "src/popup/popup.html"
+  },
   "host_permissions": [
     "*://*.amazon.in/*",
     "*://*.swiggy.com/*",

@@ -30,6 +30,21 @@ document.addEventListener("DOMContentLoaded", () => {
     chrome.runtime.openOptionsPage();
   });
 
+  const openSidePanelBtn = document.getElementById("openSidePanelBtn");
+  if (openSidePanelBtn) {
+    openSidePanelBtn.addEventListener("click", async () => {
+      if (typeof chrome !== "undefined" && chrome.sidePanel && chrome.sidePanel.open) {
+        try {
+          const win = await chrome.windows.getCurrent();
+          await chrome.sidePanel.open({ windowId: win.id });
+          window.close();
+        } catch (e) {
+          chrome.runtime.sendMessage({ action: "OPEN_SIDE_PANEL" });
+        }
+      }
+    });
+  }
+
   const clearCacheBtn = document.getElementById("clearCacheBtn");
   if (clearCacheBtn) {
     clearCacheBtn.addEventListener("click", () => {
