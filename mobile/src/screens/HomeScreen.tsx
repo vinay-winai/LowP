@@ -14,6 +14,7 @@ import { StoreCard } from '../components/StoreCard';
 import { BackgroundScrapers } from '../components/BackgroundScrapers';
 import { LocationModal } from '../components/LocationModal';
 import { StoreLoginModal } from '../components/StoreLoginModal';
+import { StrategyMatrixModal } from '../components/StrategyMatrixModal';
 import { MatchingEngine } from '../core/MatchingEngine';
 import { LocationService, DEFAULT_LOCATION } from '../core/LocationService';
 import {
@@ -21,9 +22,21 @@ import {
   LocationProfile,
   ProductItem,
   StoreResult,
-  StoreAccountStatus
+  StrategyMatrixRow,
+  MatrixStoreCell
 } from '../types';
-import { Search, MapPin, X, Sparkles, Store, RefreshCw, Clock } from 'lucide-react-native';
+import {
+  Search,
+  MapPin,
+  X,
+  Sparkles,
+  Store,
+  RefreshCw,
+  Clock,
+  ShoppingCart,
+  Table,
+  Check
+} from 'lucide-react-native';
 
 const INITIAL_STORES: StoreResult[] = [
   {
@@ -91,6 +104,9 @@ export const HomeScreen: React.FC = () => {
   const [locationModalVisible, setLocationModalVisible] = useState(false);
   const [loginModalVisible, setLoginModalVisible] = useState(false);
   const [selectedLoginStore, setSelectedLoginStore] = useState<PlatformId | null>(null);
+  const [matrixRows, setMatrixRows] = useState<StrategyMatrixRow[]>([]);
+  const [matrixModalVisible, setMatrixModalVisible] = useState(false);
+  const [addedToast, setAddedToast] = useState(false);
 
   const pendingStores = useRef<Set<PlatformId>>(new Set());
   const searchStartTime = useRef<number>(0);
@@ -201,7 +217,106 @@ export const HomeScreen: React.FC = () => {
     });
   };
 
+  const handleAddToMatrix = () => {
+    if (!activeSearch) return;
+
+    const availableStores = stores.filter(
+      (s) => s.isAvailable && s.priceBreakdown && s.priceBreakdown.finalPayable > 0
+    );
+    if (availableStores.length === 0) return;
+
+    let minPrice = Infinity;
+    let cheapestStoreId: PlatformId | null = null;
+
+    availableStores.forEach((s) => {
+      const p = s.priceBreakdown!.finalPayable;
+      if (p < minPrice) {
+        minPrice = p;
+        cheapestStoreId = s.platformId;
+      }
+    });
+
+    const storeCells: Record<PlatformId, MatrixStoreCell> = {
+      amazon_tez: {
+        platformId: 'amazon_tez',
+        platformName: 'Amazon Now (Tez)',
+        isAvailable: false,
+        item: null,
+        price: 0,
+        mrp: 0,
+        productUrl: '#',
+        isCheapestInRow: false
+      },
+      instamart: {
+        platformId: 'instamart',
+        platformName: 'Swiggy Instamart',
+        isAvailable: false,
+        item: null,
+        price: 0,
+        mrp: 0,
+        productUrl: '#',
+        isCheapestInRow: false
+      },
+      zepto: {
+        platformId: 'zepto',
+        platformName: 'Zepto',
+        isAvailable: false,
+        item: null,
+        price: 0,
+        mrp: 0,
+        productUrl: '#',
+        isCheapestInRow: false
+      },
+      blinkit: {
+        platformId: 'blinkit',
+        platformName: 'Blinkit',
+        isAvailable: false,
+        item: null,
+        price: 0,
+        mrp: 0,
+        productUrl: '#',
+        isCheapestInRow: false
+      }
+    };
+
+    stores.forEach((s) => {
+      const hasPrice = Boolean(s.isAvailable && s.priceBreakdown && s.priceBreakdown.finalPayable > 0);
+      storeCells[s.platformId] = {
+        platformId: s.platformId,
+        platformName: s.platformName,
+        isAvailable: hasPrice,
+        item: s.item,
+        price: hasPrice ? s.priceBreakdown!.finalPayable : 0,
+        mrp: hasPrice ? (s.item?.mrp || s.priceBreakdown!.finalPayable) : 0,
+        productUrl: s.productUrl,
+        isCheapestInRow: s.platformId === cheapestStoreId
+      };
+    });
+
+    const newRow: StrategyMatrixRow = {
+      id: `matrix_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      query: activeSearch,
+      addedAt: Date.now(),
+      stores: storeCells,
+      cheapestPrice: minPrice < Infinity ? minPrice : 0,
+      cheapestStoreId
+    };
+
+    setMatrixRows((prev) => [...prev, newRow]);
+    setAddedToast(true);
+    setTimeout(() => setAddedToast(false), 2500);
+  };
+
+  const handleRemoveMatrixRow = (rowId: string) => {
+    setMatrixRows((prev) => prev.filter((r) => r.id !== rowId));
+  };
+
+  const handleClearMatrix = () => {
+    setMatrixRows([]);
+  };
+
   const lowestStore = stores.find((s) => s.isLowestPrice && s.priceBreakdown);
+  const hasAvailableResults = stores.some((s) => s.isAvailable && s.priceBreakdown && s.priceBreakdown.finalPayable > 0);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -219,15 +334,27 @@ export const HomeScreen: React.FC = () => {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.locationPill}
-          onPress={() => setLocationModalVisible(true)}
-        >
-          <MapPin size={13} color="#10B981" />
-          <Text style={styles.locationPillText} numberOfLines={1}>
-            {activeLocation.name.split(' ')[0]} ({activeLocation.pincode})
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={[styles.matrixHeaderBtn, matrixRows.length > 0 && styles.matrixHeaderBtnActive]}
+            onPress={() => setMatrixModalVisible(true)}
+          >
+            <Table size={13} color={matrixRows.length > 0 ? '#10B981' : '#94A3B8'} />
+            <Text style={[styles.matrixHeaderBtnText, matrixRows.length > 0 && styles.matrixHeaderBtnTextActive]}>
+              Matrix {matrixRows.length > 0 ? `(${matrixRows.length})` : ''}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.locationPill}
+            onPress={() => setLocationModalVisible(true)}
+          >
+            <MapPin size={13} color="#10B981" />
+            <Text style={styles.locationPillText} numberOfLines={1}>
+              {activeLocation.name.split(' ')[0]} ({activeLocation.pincode})
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Connected Stores Bar */}
@@ -250,7 +377,7 @@ export const HomeScreen: React.FC = () => {
         </ScrollView>
       </View>
 
-      {/* Main Search Box */}
+      {/* Main Search Box & Strategy Matrix Action Bar */}
       <View style={styles.searchSection}>
         <View style={styles.searchBox}>
           <Search size={18} color="#64748B" style={styles.searchIcon} />
@@ -280,6 +407,50 @@ export const HomeScreen: React.FC = () => {
             ) : (
               <Text style={styles.searchSubmitBtnText}>Compare</Text>
             )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Strategy Matrix & Cart Action Controls */}
+        <View style={styles.cartActionBar}>
+          <TouchableOpacity
+            style={[
+              styles.addToCartBtn,
+              hasAvailableResults && styles.addToCartBtnActive
+            ]}
+            onPress={handleAddToMatrix}
+            disabled={!hasAvailableResults || isLoading}
+          >
+            {addedToast ? (
+              <Check size={14} color="#0F172A" />
+            ) : (
+              <ShoppingCart size={14} color={hasAvailableResults ? "#0F172A" : "#64748B"} />
+            )}
+            <Text
+              style={[
+                styles.addToCartBtnText,
+                hasAvailableResults && styles.addToCartBtnTextActive
+              ]}
+            >
+              {addedToast ? "Added to Matrix!" : "+ Add to Strategy Matrix"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.viewMatrixBtn,
+              matrixRows.length > 0 && styles.viewMatrixBtnActive
+            ]}
+            onPress={() => setMatrixModalVisible(true)}
+          >
+            <Table size={14} color={matrixRows.length > 0 ? "#10B981" : "#94A3B8"} />
+            <Text
+              style={[
+                styles.viewMatrixBtnText,
+                matrixRows.length > 0 && styles.viewMatrixBtnTextActive
+              ]}
+            >
+              View Matrix ({matrixRows.length})
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -332,11 +503,19 @@ export const HomeScreen: React.FC = () => {
 
         {lowestStore && (
           <View style={styles.savingsBanner}>
-            <Sparkles size={16} color="#92400E" />
-            <Text style={styles.savingsBannerText}>
-              <Text style={styles.boldText}>{lowestStore.platformName}</Text> offers the lowest price at{' '}
-              <Text style={styles.priceHighlight}>₹{lowestStore.priceBreakdown?.finalPayable}</Text>!
-            </Text>
+            <View style={styles.savingsBannerContent}>
+              <Sparkles size={16} color="#92400E" />
+              <Text style={styles.savingsBannerText}>
+                <Text style={styles.boldText}>{lowestStore.platformName}</Text> offers the lowest price at{' '}
+                <Text style={styles.priceHighlight}>₹{lowestStore.priceBreakdown?.finalPayable}</Text>!
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.bannerAddBtn}
+              onPress={handleAddToMatrix}
+            >
+              <Text style={styles.bannerAddBtnText}>+ Matrix</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -376,6 +555,15 @@ export const HomeScreen: React.FC = () => {
         onLoginComplete={() => {
           if (activeSearch) handleTriggerSearch(activeSearch);
         }}
+      />
+
+      {/* Strategy Matrix Modal */}
+      <StrategyMatrixModal
+        visible={matrixModalVisible}
+        rows={matrixRows}
+        onClose={() => setMatrixModalVisible(false)}
+        onRemoveRow={handleRemoveMatrixRow}
+        onClearAll={handleClearMatrix}
       />
     </SafeAreaView>
   );
@@ -420,6 +608,34 @@ const styles = StyleSheet.create({
   logoSub: {
     color: '#94A3B8',
     fontSize: 10
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  matrixHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#334155'
+  },
+  matrixHeaderBtnActive: {
+    borderColor: '#10B981',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)'
+  },
+  matrixHeaderBtnText: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '700'
+  },
+  matrixHeaderBtnTextActive: {
+    color: '#10B981'
   },
   locationPill: {
     flexDirection: 'row',
@@ -512,10 +728,65 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800'
   },
+  cartActionBar: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8
+  },
+  addToCartBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#1E293B',
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#334155'
+  },
+  addToCartBtnActive: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981'
+  },
+  addToCartBtnText: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '700'
+  },
+  addToCartBtnTextActive: {
+    color: '#0F172A',
+    fontWeight: '800'
+  },
+  viewMatrixBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#1E293B',
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#334155'
+  },
+  viewMatrixBtnActive: {
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)'
+  },
+  viewMatrixBtnText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '700'
+  },
+  viewMatrixBtnTextActive: {
+    color: '#10B981'
+  },
   quickTagsRow: {
     flexDirection: 'row',
     gap: 8,
-    paddingTop: 10
+    paddingTop: 8
   },
   tagChip: {
     backgroundColor: '#1E293B',
@@ -537,6 +808,7 @@ const styles = StyleSheet.create({
   savingsBanner: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 8,
     backgroundColor: '#FEF3C7',
     padding: 12,
@@ -545,10 +817,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#FDE68A'
   },
+  savingsBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1
+  },
   savingsBannerText: {
     color: '#92400E',
-    fontSize: 13,
+    fontSize: 12,
     flex: 1
+  },
+  bannerAddBtn: {
+    backgroundColor: '#92400E',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6
+  },
+  bannerAddBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800'
   },
   boldText: {
     fontWeight: '800'

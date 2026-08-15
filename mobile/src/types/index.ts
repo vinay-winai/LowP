@@ -53,3 +53,23 @@ export interface StoreAccountStatus {
   accountName?: string;
   loginUrl: string;
 }
+
+export interface MatrixStoreCell {
+  platformId: PlatformId;
+  platformName: string;
+  isAvailable: boolean;
+  item: ProductItem | null;
+  price: number;
+  mrp: number;
+  productUrl: string;
+  isCheapestInRow: boolean;
+}
+
+export interface StrategyMatrixRow {
+  id: string;
+  query: string;
+  addedAt: number;
+  stores: Record<PlatformId, MatrixStoreCell>;
+  cheapestPrice: number;
+  cheapestStoreId: PlatformId | null;
+}
