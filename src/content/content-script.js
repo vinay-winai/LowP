@@ -236,6 +236,8 @@
       platformId = "zepto";
     } else if (host.includes("blinkit") || href.includes("blinkit")) {
       platformId = "blinkit";
+    } else if (host.includes("google") || href.includes("google")) {
+      platformId = "google_shopping";
     }
 
     const candidates = [];
@@ -330,6 +332,14 @@
       'div[class*="ProductCard"]',
       'div[class*="product"]',
       'a[href*="/p/"]',
+      'div[class*="sh-dgr__grid-result"]',
+      'div[class*="sh-dgr__content"]',
+      'div[class*="KZmu8e"]',
+      'div[class*="sh-np__click-target"]',
+      'div[class*="pla-unit"]',
+      'div[class*="sh-dlr__list-result"]',
+      'div[class*="iU5tvd"]',
+      'div[data-docid]',
       'div[data-component-type="s-search-result"]',
       'div[class*="s-result-item"]'
     ];

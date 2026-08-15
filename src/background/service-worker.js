@@ -533,7 +533,7 @@ function inPageExtract(searchQuery) {
       mrp = Math.round(price * 1.15);
     }
 
-    const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : (platformId === "blinkit" ? "Blinkit" : "Quick Store")));
+    const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : (platformId === "blinkit" ? "Blinkit" : (platformId === "google_shopping" ? "Google Shopping" : "Quick Store"))));
 
     return {
       title,
@@ -550,7 +550,7 @@ function inPageExtract(searchQuery) {
   const host = (window.location.hostname || "").toLowerCase();
   const pathname = (window.location.pathname || "").toLowerCase();
   const href = (window.location.href || "").toLowerCase();
-  const isPDP = pathname.includes("/pn/") || pathname.includes("/product/") || pathname.includes("/item/") || pathname.includes("/dp/") || pathname.includes("/prid/");
+  const isPDP = pathname.includes("/pn/") || pathname.includes("/product/") || pathname.includes("/item/") || pathname.includes("/dp/") || pathname.includes("/prid/") || pathname.includes("/shopping/product/");
 
   let platformId = "unknown";
   if (host.includes("amazon") || href.includes("amazon")) {
@@ -561,6 +561,8 @@ function inPageExtract(searchQuery) {
     platformId = "zepto";
   } else if (host.includes("blinkit") || href.includes("blinkit")) {
     platformId = "blinkit";
+  } else if (host.includes("google") || href.includes("google")) {
+    platformId = "google_shopping";
   }
 
   const candidates = [];
@@ -655,6 +657,14 @@ function inPageExtract(searchQuery) {
     'div[class*="ProductCard"]',
     'div[class*="product"]',
     'a[href*="/p/"]',
+    'div[class*="sh-dgr__grid-result"]',
+    'div[class*="sh-dgr__content"]',
+    'div[class*="KZmu8e"]',
+    'div[class*="sh-np__click-target"]',
+    'div[class*="pla-unit"]',
+    'div[class*="sh-dlr__list-result"]',
+    'div[class*="iU5tvd"]',
+    'div[data-docid]',
     'div[data-component-type="s-search-result"]',
     'div[class*="s-result-item"]'
   ];
@@ -1180,6 +1190,71 @@ class BlinkitProvider extends BaseProvider {
   }
 }
 
+// --- GOOGLE SHOPPING PROVIDER ---
+class GoogleShoppingProvider extends BaseProvider {
+  constructor() {
+    super("google_shopping", "Google Shopping", "#4285F4");
+  }
+
+  getSearchUrl(query) {
+    return `https://www.google.co.in/search?tbm=shop&hl=en&gl=in&q=${encodeURIComponent(query || "")}`;
+  }
+
+  async search(query, location) {
+    if (!query || !query.trim()) return this.formatResult(null, location, query);
+    const cleanQ = MatchingEngine.cleanSearchTerm(query);
+    const targetUrl = this.getSearchUrl(cleanQ);
+
+    logDebug("GoogleShopping", `Searching Google Shopping for "${cleanQ}" (Live Direct Search)`);
+
+    // 1. Query open Google Shopping tabs matching search query
+    if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
+      try {
+        const allTabs = await chrome.tabs.query({});
+        const gTabs = allTabs.filter(t => t.url && t.url.includes("google") && (t.url.includes("tbm=shop") || t.url.includes("udm=28")) && isOpenTabMatchingQuery(t.url, cleanQ));
+        logDebug("GoogleShopping", `Found ${gTabs.length} open matching Google Shopping tab(s)`);
+
+        for (const t of gTabs) {
+          try {
+            logDebug("GoogleShopping", `Querying open Google Shopping tab (${t.id}): ${t.url}`);
+            const data = await extractDataFromTab(t.id, cleanQ);
+            if (data && data.price > 0 && MatchingEngine.scoreRelevance(data.title, cleanQ) >= 30) {
+              logDebug("GoogleShopping", `Retrieved relevant price from open Google Shopping tab: ${data.title} at ₹${data.price}`, data);
+              return this.formatResult(data, location, cleanQ);
+            }
+          } catch (e) {
+            logDebug("GoogleShopping", `Google Shopping tab (${t.id}) query error: ${e.message}`);
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 2. Automated Ephemeral Background Tab Extractor
+    try {
+      logDebug("GoogleShopping", `Attempting automated ephemeral background tab extraction for "${cleanQ}"`);
+      const ephemeralData = await fetchViaEphemeralTab(targetUrl, cleanQ);
+      if (ephemeralData && ephemeralData.price > 0) {
+        logDebug("GoogleShopping", `Retrieved live price via ephemeral background tab: ${ephemeralData.title} at ₹${ephemeralData.price}`, ephemeralData);
+        return this.formatResult(ephemeralData, location, cleanQ);
+      }
+    } catch (e) {
+      logDebug("GoogleShopping", `Ephemeral tab extraction failed: ${e.message}`);
+    }
+
+    // 3. Fallback: Provide direct search link
+    return this.formatResult({
+      id: `gshop_${Date.now()}`,
+      title: cleanQ,
+      brand: "Google Shopping",
+      quantity: "1 unit",
+      mrp: 0,
+      price: 0,
+      image: "assets/icon48.png",
+      productUrl: targetUrl
+    }, location, cleanQ);
+  }
+}
+
 // ==========================================
 // 5. ORCHESTRATOR & SEARCH HANDLER
 // ==========================================
@@ -1187,7 +1262,8 @@ const PROVIDERS = [
   new AmazonTezProvider(),
   new InstamartProvider(),
   new ZeptoProvider(),
-  new BlinkitProvider()
+  new BlinkitProvider(),
+  new GoogleShoppingProvider()
 ];
 
 async function handleSearchQuery(query, locationId = null) {
@@ -1310,6 +1386,7 @@ if (typeof module !== "undefined" && module.exports) {
     InstamartProvider,
     ZeptoProvider,
     BlinkitProvider,
+    GoogleShoppingProvider,
     PROVIDERS,
     handleSearchQuery,
     DEBUG_LOGS,

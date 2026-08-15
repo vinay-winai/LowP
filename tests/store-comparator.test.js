@@ -30,6 +30,7 @@ const {
   InstamartProvider,
   ZeptoProvider,
   BlinkitProvider,
+  GoogleShoppingProvider,
   handleSearchQuery
 } = require('../src/background/service-worker.js');
 
@@ -83,6 +84,11 @@ test('MatchingEngine - annotateBestOffers assigns lowest price badge', () => {
       platformId: 'blinkit',
       isAvailable: true,
       priceBreakdown: { finalPayable: 130 }
+    },
+    {
+      platformId: 'google_shopping',
+      isAvailable: true,
+      priceBreakdown: { finalPayable: 140 }
     }
   ];
 
@@ -92,11 +98,13 @@ test('MatchingEngine - annotateBestOffers assigns lowest price badge', () => {
   const im = annotated.find(r => r.platformId === 'instamart');
   const zepto = annotated.find(r => r.platformId === 'zepto');
   const blinkit = annotated.find(r => r.platformId === 'blinkit');
+  const gshop = annotated.find(r => r.platformId === 'google_shopping');
 
   assert.strictEqual(amzTez.isLowestPrice, true); // 127 is lowest
   assert.strictEqual(im.isLowestPrice, false);
   assert.strictEqual(zepto.isLowestPrice, false);
   assert.strictEqual(blinkit.isLowestPrice, false);
+  assert.strictEqual(gshop.isLowestPrice, false);
 });
 
 test('LocationService - initializes with default Hyderabad 500085 location', async () => {
@@ -106,11 +114,12 @@ test('LocationService - initializes with default Hyderabad 500085 location', asy
   assert.strictEqual(loc.lng, 78.39361254731166);
 });
 
-test('Providers - formatResult returns structured schema across Amazon Tez, Instamart, Zepto, and Blinkit', () => {
+test('Providers - formatResult returns structured schema across Amazon Tez, Instamart, Zepto, Blinkit, and Google Shopping', () => {
   const amzTez = new AmazonTezProvider();
   const im = new InstamartProvider();
   const zepto = new ZeptoProvider();
   const blinkit = new BlinkitProvider();
+  const gshop = new GoogleShoppingProvider();
 
   const mockItem = {
     title: 'Milky Mist High Protein Paneer 200g',
@@ -135,13 +144,18 @@ test('Providers - formatResult returns structured schema across Amazon Tez, Inst
   const resBlinkit = blinkit.formatResult(mockItem, DEFAULT_LOCATION);
   assert.strictEqual(resBlinkit.platformId, 'blinkit');
   assert.strictEqual(resBlinkit.isAvailable, true);
+
+  const resGshop = gshop.formatResult(mockItem, DEFAULT_LOCATION);
+  assert.strictEqual(resGshop.platformId, 'google_shopping');
+  assert.strictEqual(resGshop.isAvailable, true);
 });
 
-test('handleSearchQuery - executes parallel search and returns 4 quick commerce store results', async () => {
+test('handleSearchQuery - executes parallel search and returns 5 store results', async () => {
   const results = await handleSearchQuery('paneer');
-  assert.strictEqual(results.length, 4);
+  assert.strictEqual(results.length, 5);
   assert.ok(results.some(r => r.platformId === 'amazon_tez'));
   assert.ok(results.some(r => r.platformId === 'instamart'));
   assert.ok(results.some(r => r.platformId === 'zepto'));
   assert.ok(results.some(r => r.platformId === 'blinkit'));
+  assert.ok(results.some(r => r.platformId === 'google_shopping'));
 });

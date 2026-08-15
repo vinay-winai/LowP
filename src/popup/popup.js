@@ -123,7 +123,8 @@ document.addEventListener("DOMContentLoaded", () => {
         amazon_tez: "#FF9900",
         instamart: "#FC8019",
         zepto: "#7C3AED",
-        blinkit: "#F8CB46"
+        blinkit: "#F8CB46",
+        google_shopping: "#4285F4"
       };
 
       const bgColor = storeColors[store.platformId] || "#38BDF8";
