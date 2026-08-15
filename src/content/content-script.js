@@ -247,8 +247,6 @@
       platformId = "zepto";
     } else if (host.includes("blinkit") || href.includes("blinkit")) {
       platformId = "blinkit";
-    } else if (host.includes("google") || href.includes("google")) {
-      platformId = "google_shopping";
     }
 
     const candidates = [];

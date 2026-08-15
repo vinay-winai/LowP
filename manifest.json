@@ -22,8 +22,6 @@
     "*://*.zepto.com/*",
     "*://*.zeptonow.com/*",
     "*://*.blinkit.com/*",
-    "*://*.google.com/*",
-    "*://*.google.co.in/*",
     "*://*.nominatim.openstreetmap.org/*"
   ],
   "background": {
@@ -50,9 +48,7 @@
         "*://*.swiggy.com/*",
         "*://*.zepto.com/*",
         "*://*.zeptonow.com/*",
-        "*://*.blinkit.com/*",
-        "*://*.google.com/*",
-        "*://*.google.co.in/*"
+        "*://*.blinkit.com/*"
       ],
       "js": ["src/content/content-script.js"],
       "run_at": "document_end"
