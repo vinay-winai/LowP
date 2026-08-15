@@ -655,7 +655,20 @@ function inPageExtract(searchQuery) {
     }
   }
 
-  if (candidates.length === 0) return null;
+  if (candidates.length === 0) {
+    return {
+      success: false,
+      data: null,
+      debug: {
+        url: window.location.href,
+        title: document.title,
+        htmlLength: document.documentElement ? document.documentElement.outerHTML.length : 0,
+        cardsFound: cards.length,
+        candidatesFound: 0,
+        topCandidate: null
+      }
+    };
+  }
 
   candidates.forEach(cand => {
     cand._score = scoreRelevance(cand.title, searchQuery, cand.quantity);
@@ -663,14 +676,26 @@ function inPageExtract(searchQuery) {
 
   candidates.sort((a, b) => b._score - a._score);
   const best = candidates[0];
-  if (searchQuery && searchQuery.trim() && best._score < 20) {
-    return null;
-  }
-  return best;
+  const isValid = best && best._score >= 20;
+
+  return {
+    success: isValid,
+    data: isValid ? best : null,
+    debug: {
+      url: window.location.href,
+      title: document.title,
+      htmlLength: document.documentElement ? document.documentElement.outerHTML.length : 0,
+      cardsFound: cards.length,
+      candidatesFound: candidates.length,
+      topCandidate: best ? { title: best.title, price: best.price, score: best._score } : null,
+      sampleCandidates: candidates.slice(0, 3).map(c => ({ title: c.title, price: c.price, score: c._score }))
+    }
+  };
 }
 
 async function extractDataFromTab(tabId, cleanQ) {
   let data = null;
+  let debugInfo = null;
 
   // 1. Direct Script Execution
   if (typeof chrome !== "undefined" && chrome.scripting && chrome.scripting.executeScript) {
@@ -680,7 +705,11 @@ async function extractDataFromTab(tabId, cleanQ) {
         func: inPageExtract,
         args: [cleanQ]
       });
-      data = results && results[0] ? results[0].result : null;
+      const res = results && results[0] ? results[0].result : null;
+      if (res) {
+        data = res.data || (res.price ? res : null);
+        debugInfo = res.debug || null;
+      }
     } catch (e) {
       logDebug("TabExtract", `Direct tab execution error on ${tabId}: ${e.message}`);
     }
@@ -694,6 +723,10 @@ async function extractDataFromTab(tabId, cleanQ) {
         data = res.data;
       }
     } catch (e) {}
+  }
+
+  if (debugInfo) {
+    logDebug("TabExtract", `Tab ${tabId} Diagnosed: URL="${debugInfo.url}", Title="${debugInfo.title}", HTML=${debugInfo.htmlLength}b, Cards=${debugInfo.cardsFound}, Candidates=${debugInfo.candidatesFound}, Top=${JSON.stringify(debugInfo.topCandidate)}`, debugInfo);
   }
 
   if (data && data.price > 0) {
