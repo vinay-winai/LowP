@@ -670,6 +670,9 @@ function inPageExtract(searchQuery) {
 }
 
 async function extractDataFromTab(tabId, cleanQ) {
+  let data = null;
+
+  // 1. Direct Script Execution
   if (typeof chrome !== "undefined" && chrome.scripting && chrome.scripting.executeScript) {
     try {
       const results = await chrome.scripting.executeScript({
@@ -677,24 +680,29 @@ async function extractDataFromTab(tabId, cleanQ) {
         func: inPageExtract,
         args: [cleanQ]
       });
-      const data = results && results[0] ? results[0].result : null;
-      if (data && data.price > 0) {
-        logDebug("TabExtract", `Tab ${tabId} successfully extracted: "${data.title}" at ₹${data.price} (Score: ${data._score})`, data);
-        return data;
-      } else {
-        logDebug("TabExtract", `Tab ${tabId} returned no matching product for "${cleanQ}"`);
-      }
+      data = results && results[0] ? results[0].result : null;
     } catch (e) {
       logDebug("TabExtract", `Direct tab execution error on ${tabId}: ${e.message}`);
     }
   }
 
-  // Fallback to sendMessage
-  try {
-    const res = await chrome.tabs.sendMessage(tabId, { action: "GET_PAGE_PRODUCT_DATA", query: cleanQ });
-    if (res && res.data && res.data.price > 0) return res.data;
-  } catch (e) {}
-  return null;
+  // 2. Fallback to Content Script message
+  if (!data || !data.price) {
+    try {
+      const res = await chrome.tabs.sendMessage(tabId, { action: "GET_PAGE_PRODUCT_DATA", query: cleanQ });
+      if (res && res.data && res.data.price > 0) {
+        data = res.data;
+      }
+    } catch (e) {}
+  }
+
+  if (data && data.price > 0) {
+    logDebug("TabExtract", `Tab ${tabId} successfully extracted: "${data.title}" at ₹${data.price} (Score: ${data._score})`, data);
+    return data;
+  } else {
+    logDebug("TabExtract", `Tab ${tabId} returned no matching product for "${cleanQ}"`);
+    return null;
+  }
 }
 
 async function fetchViaEphemeralTab(url, cleanQ, totalWaitMs = 10000) {
