@@ -15,7 +15,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const STORES: { platformId: PlatformId; getUrl: (q: string) => string }[] = [
   {
     platformId: 'amazon_tez',
-    getUrl: (q) => `https://www.amazon.in/s?k=${encodeURIComponent(q)}&i=nowstore`
+    getUrl: (q) => `https://www.amazon.in/tez/browse/search?searchKeyword=${encodeURIComponent(q)}`
   },
   {
     platformId: 'instamart',
