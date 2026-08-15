@@ -19,6 +19,7 @@ export interface ProductItem {
   price: number;
   image: string;
   productUrl?: string;
+  _score?: number;
 }
 
 export interface PriceBreakdown {
@@ -35,6 +36,8 @@ export interface StoreResult {
   isAvailable: boolean;
   statusMessage: string;
   item: ProductItem | null;
+  candidates?: ProductItem[];
+  selectedIndex?: number;
   priceBreakdown: PriceBreakdown | null;
   productUrl: string;
   isLowestPrice: boolean;

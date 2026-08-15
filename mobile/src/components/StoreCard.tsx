@@ -1,17 +1,22 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { StoreResult } from '../types';
-import { ExternalLink, CheckCircle2, XCircle, Sparkles } from 'lucide-react-native';
+import { ExternalLink, CheckCircle2, XCircle, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react-native';
 
 interface StoreCardProps {
   store: StoreResult;
   isLoading: boolean;
+  onCycleCandidate?: (direction: 'next' | 'prev') => void;
 }
 
-export const StoreCard: React.FC<StoreCardProps> = ({ store, isLoading }) => {
+export const StoreCard: React.FC<StoreCardProps> = ({ store, isLoading, onCycleCandidate }) => {
   const hasPrice = store.isAvailable && store.priceBreakdown && store.priceBreakdown.finalPayable > 0;
   const isBlinkit = store.platformId === 'blinkit';
   const pillTextColor = isBlinkit ? '#111827' : '#FFFFFF';
+
+  const candidatesCount = store.candidates ? store.candidates.length : (store.item ? 1 : 0);
+  const currentIdx = store.selectedIndex || 0;
+  const hasMultipleMatches = candidatesCount > 1;
 
   const handleOpenStore = () => {
     if (store.productUrl && store.productUrl !== '#') {
@@ -23,10 +28,20 @@ export const StoreCard: React.FC<StoreCardProps> = ({ store, isLoading }) => {
     <View style={[styles.card, store.isLowestPrice && styles.lowestPriceCard]}>
       {/* Header Bar */}
       <View style={styles.cardHeader}>
-        <View style={[styles.storeBadge, { backgroundColor: store.logoColor }]}>
-          <Text style={[styles.storeBadgeText, { color: pillTextColor }]}>
-            {store.platformName}
-          </Text>
+        <View style={styles.headerLeft}>
+          <View style={[styles.storeBadge, { backgroundColor: store.logoColor }]}>
+            <Text style={[styles.storeBadgeText, { color: pillTextColor }]}>
+              {store.platformName}
+            </Text>
+          </View>
+
+          {hasMultipleMatches && (
+            <View style={styles.matchPill}>
+              <Text style={styles.matchPillText}>
+                Match {currentIdx + 1}/{candidatesCount}
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.headerRight}>
@@ -77,6 +92,33 @@ export const StoreCard: React.FC<StoreCardProps> = ({ store, isLoading }) => {
                 {store.item.brand} • {store.item.quantity}
               </Text>
             </View>
+
+            {/* Side Cycle Arrows */}
+            {hasMultipleMatches && (
+              <View style={styles.sideCycleContainer}>
+                <TouchableOpacity
+                  style={styles.cycleArrowButton}
+                  onPress={() => onCycleCandidate?.('prev')}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 5 }}
+                >
+                  <ChevronLeft size={16} color="#94A3B8" />
+                </TouchableOpacity>
+
+                <View style={styles.cycleIndicatorPill}>
+                  <Text style={styles.cycleIndicatorText}>
+                    {currentIdx + 1}/{candidatesCount}
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.cycleArrowButton}
+                  onPress={() => onCycleCandidate?.('next')}
+                  hitSlop={{ top: 10, bottom: 10, left: 5, right: 10 }}
+                >
+                  <ChevronRight size={16} color="#38BDF8" />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
 
           {/* Pricing Row */}
@@ -136,6 +178,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(51, 65, 85, 0.6)'
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
   storeBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -145,6 +192,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     letterSpacing: 0.2
+  },
+  matchPill: {
+    backgroundColor: '#334155',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 10
+  },
+  matchPillText: {
+    color: '#94A3B8',
+    fontSize: 10,
+    fontWeight: '700'
   },
   headerRight: {
     flexDirection: 'row',
@@ -184,33 +242,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600'
   },
+  responseTimeText: {
+    color: '#64748B',
+    fontSize: 11,
+    fontWeight: '500'
+  },
   outOfStockRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4
   },
   outOfStockText: {
-    color: '#94A3B8',
+    color: '#64748B',
     fontSize: 12
   },
-  responseTimeText: {
-    color: '#64748B',
-    fontSize: 11,
-    fontWeight: '500'
-  },
   cardBody: {
-    paddingTop: 10
+    paddingTop: 12
   },
   productRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
-    alignItems: 'center'
+    marginBottom: 12
   },
   productImage: {
-    width: 48,
-    height: 48,
+    width: 54,
+    height: 54,
     borderRadius: 8,
-    backgroundColor: '#334155'
+    backgroundColor: '#0F172A'
   },
   productDetails: {
     flex: 1
@@ -219,19 +278,43 @@ const styles = StyleSheet.create({
     color: '#F8FAFC',
     fontSize: 14,
     fontWeight: '600',
-    lineHeight: 18
+    lineHeight: 19
   },
   productSubtitle: {
     color: '#94A3B8',
     fontSize: 12,
-    marginTop: 2
+    marginTop: 3
+  },
+  sideCycleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0F172A',
+    borderRadius: 20,
+    paddingHorizontal: 4,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: '#334155',
+    gap: 2
+  },
+  cycleArrowButton: {
+    padding: 3,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  cycleIndicatorPill: {
+    paddingHorizontal: 3
+  },
+  cycleIndicatorText: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '700'
   },
   pricingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 12,
-    paddingTop: 10,
+    paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: 'rgba(51, 65, 85, 0.4)'
   },
@@ -241,19 +324,18 @@ const styles = StyleSheet.create({
     gap: 2
   },
   currencySymbol: {
-    color: '#10B981',
-    fontSize: 16,
+    color: '#F8FAFC',
+    fontSize: 14,
     fontWeight: '700'
   },
   priceValue: {
     color: '#F8FAFC',
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: -0.5
+    fontSize: 20,
+    fontWeight: '800'
   },
   mrpText: {
     color: '#64748B',
-    fontSize: 13,
+    fontSize: 12,
     textDecorationLine: 'line-through',
     marginLeft: 6
   },
@@ -266,7 +348,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(16, 185, 129, 0.3)'
   },
   savingsText: {
-    color: '#10B981',
+    color: '#34D399',
     fontSize: 11,
     fontWeight: '700'
   },
@@ -274,7 +356,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
@@ -284,16 +366,15 @@ const styles = StyleSheet.create({
   openButtonText: {
     color: '#38BDF8',
     fontSize: 12,
-    fontWeight: '700'
+    fontWeight: '600'
   },
   emptyBody: {
     paddingVertical: 14,
-    alignItems: 'center',
-    justifyContent: 'center'
+    alignItems: 'center'
   },
   emptyText: {
     color: '#64748B',
     fontSize: 13,
-    fontStyle: 'italic'
+    textAlign: 'center'
   }
 });

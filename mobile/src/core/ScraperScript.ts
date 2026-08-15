@@ -294,7 +294,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     }
 
     if (candidates.length === 0) {
-      return null;
+      return { best: null, candidates: [] };
     }
 
     candidates.forEach(cand => {
@@ -302,23 +302,27 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     });
 
     candidates.sort((a, b) => b._score - a._score);
-    const best = candidates[0];
-    return (best && best._score >= 20) ? best : null;
+    const validCandidates = candidates.filter(c => c._score >= 15);
+    const topCandidates = (validCandidates.length > 0 ? validCandidates : candidates).slice(0, 3);
+    const best = topCandidates[0] && topCandidates[0]._score >= 15 ? topCandidates[0] : null;
+
+    return { best, candidates: topCandidates };
   }
 
   // Execute and poll up to 16 attempts (8 seconds)
   let attempts = 0;
   const pollInterval = setInterval(() => {
     attempts++;
-    const bestItem = runExtraction();
-    if (bestItem || attempts >= 16) {
+    const res = runExtraction();
+    if (res.best || attempts >= 16) {
       clearInterval(pollInterval);
       if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
         window.ReactNativeWebView.postMessage(JSON.stringify({
           type: 'SCRAPE_RESULT',
           platformId: targetPlatformId,
-          success: !!bestItem,
-          data: bestItem,
+          success: !!res.best,
+          data: res.best,
+          candidates: res.candidates || [],
           debug: {
             url: window.location.href,
             title: document.title,

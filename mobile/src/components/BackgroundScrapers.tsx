@@ -7,7 +7,12 @@ import { generateScraperScript } from '../core/ScraperScript';
 interface BackgroundScrapersProps {
   searchQuery: string;
   searchId: number;
-  onStoreResult: (platformId: PlatformId, item: ProductItem | null, durationMs?: number) => void;
+  onStoreResult: (
+    platformId: PlatformId,
+    item: ProductItem | null,
+    durationMs?: number,
+    candidates?: ProductItem[]
+  ) => void;
 }
 
 const STORES: { platformId: PlatformId; getUrl: (q: string) => string }[] = [
@@ -74,11 +79,11 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
           resolvedStores.current.add(platformId);
           const elapsed = Date.now() - startTimeRef.current;
           if (payload.success && payload.data) {
-            console.log(`[LowP Mobile] ${platformId} SUCCESS: "${payload.data.title}" at ₹${payload.data.price} (${elapsed}ms)`);
-            onStoreResult(platformId, payload.data, elapsed);
+            console.log(`[LowP Mobile] ${platformId} SUCCESS: "${payload.data.title}" at ₹${payload.data.price} (${elapsed}ms) [Candidates: ${payload.candidates?.length || 1}]`);
+            onStoreResult(platformId, payload.data, elapsed, payload.candidates);
           } else {
             console.log(`[LowP Mobile] ${platformId} returned 0 candidates (${elapsed}ms)`, payload.debug || {});
-            onStoreResult(platformId, null, elapsed);
+            onStoreResult(platformId, null, elapsed, []);
           }
         }
       }

@@ -123,32 +123,44 @@ export const HomeScreen: React.FC = () => {
     );
   };
 
-  const handleStoreResult = (platformId: PlatformId, item: ProductItem | null, durationMs?: number) => {
+  const handleStoreResult = (
+    platformId: PlatformId,
+    item: ProductItem | null,
+    durationMs?: number,
+    candidates?: ProductItem[]
+  ) => {
     pendingStores.current.delete(platformId);
 
     setStores((prev) => {
       const updated = prev.map((store) => {
         if (store.platformId !== platformId) return store;
 
-        if (!item) {
+        const storeCandidates = candidates && candidates.length > 0 ? candidates : (item ? [item] : []);
+        const activeItem = item || storeCandidates[0] || null;
+
+        if (!activeItem) {
           return {
             ...store,
             isAvailable: false,
             statusMessage: 'Not available for this location',
             item: null,
+            candidates: [],
+            selectedIndex: 0,
             priceBreakdown: null,
             responseTimeMs: durationMs
           };
         }
 
-        const priceBreakdown = MatchingEngine.calculateTotalCost(item);
+        const priceBreakdown = MatchingEngine.calculateTotalCost(activeItem);
         return {
           ...store,
           isAvailable: true,
           statusMessage: 'Available',
-          item,
+          item: activeItem,
+          candidates: storeCandidates,
+          selectedIndex: 0,
           priceBreakdown,
-          productUrl: item.productUrl || store.productUrl,
+          productUrl: activeItem.productUrl || store.productUrl,
           responseTimeMs: durationMs
         };
       });
@@ -162,6 +174,31 @@ export const HomeScreen: React.FC = () => {
       setSearchDuration(totalTime);
       console.log(`[LowP Mobile] All results appeared in ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`);
     }
+  };
+
+  const handleCycleCandidate = (platformId: PlatformId, direction: 'next' | 'prev') => {
+    setStores((prev) => {
+      const updated = prev.map((store) => {
+        if (store.platformId !== platformId) return store;
+        if (!store.candidates || store.candidates.length <= 1) return store;
+
+        const total = store.candidates.length;
+        const currentIdx = store.selectedIndex || 0;
+        const nextIdx = direction === 'next' ? (currentIdx + 1) % total : (currentIdx - 1 + total) % total;
+        const newItem = store.candidates[nextIdx];
+        const newBreakdown = MatchingEngine.calculateTotalCost(newItem);
+
+        return {
+          ...store,
+          item: newItem,
+          selectedIndex: nextIdx,
+          priceBreakdown: newBreakdown,
+          productUrl: newItem.productUrl || store.productUrl
+        };
+      });
+
+      return MatchingEngine.annotateBestOffers(updated);
+    });
   };
 
   const lowestStore = stores.find((s) => s.isLowestPrice && s.priceBreakdown);
@@ -304,7 +341,12 @@ export const HomeScreen: React.FC = () => {
         )}
 
         {stores.map((store) => (
-          <StoreCard key={store.platformId} store={store} isLoading={isLoading} />
+          <StoreCard
+            key={store.platformId}
+            store={store}
+            isLoading={isLoading}
+            onCycleCandidate={(dir) => handleCycleCandidate(store.platformId, dir)}
+          />
         ))}
       </ScrollView>
 
