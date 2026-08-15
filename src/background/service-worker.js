@@ -738,59 +738,45 @@ async function extractDataFromTab(tabId, cleanQ) {
   }
 }
 
-async function fetchViaEphemeralTab(url, cleanQ, totalWaitMs = 10000) {
+async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 8000) {
   if (typeof chrome === "undefined" || !chrome.tabs || !chrome.tabs.create) {
     return null;
   }
   let tabId = null;
+  let origTabId = null;
   try {
-    logDebug("EphemeralTab", `Opening background tab for ${url} (waiting fixed ${totalWaitMs / 1000}s)`);
-    const tab = await chrome.tabs.create({ url, active: false });
+    // 1. Capture user's current active tab so we can restore focus
+    try {
+      const [currentActive] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (currentActive) origTabId = currentActive.id;
+    } catch (e) {}
+
+    logDebug("EphemeralTab", `Launching foreground quick-switch tab for ${url}`);
+
+    // 2. Open tab in foreground to activate full GPU rendering & SPA layout
+    const tab = await chrome.tabs.create({ url, active: true });
     tabId = tab.id;
 
-    // 1. Wait for tab network load complete (or up to 4s)
-    await new Promise((resolve) => {
-      let isResolved = false;
-      const listener = (tid, changeInfo) => {
-        if (tid === tabId && changeInfo.status === "complete") {
-          chrome.tabs.onUpdated.removeListener(listener);
-          isResolved = true;
-          resolve();
-        }
-      };
-      chrome.tabs.onUpdated.addListener(listener);
-      setTimeout(() => {
-        if (!isResolved) {
-          try { chrome.tabs.onUpdated.removeListener(listener); } catch (e) {}
-          resolve();
-        }
-      }, 4000);
-    });
-
-    // 2. Synthetic Visibility Awaken: Wake up React/Next.js client in inactive background tab
-    if (typeof chrome !== "undefined" && chrome.scripting && chrome.scripting.executeScript) {
+    // 3. Allow brief layout window (1.2s), then restore focus back to user's tab
+    await new Promise((r) => setTimeout(r, 1200));
+    if (origTabId && origTabId !== tabId) {
       try {
-        await chrome.scripting.executeScript({
-          target: { tabId },
-          func: () => {
-            try {
-              Object.defineProperty(document, 'visibilityState', { value: 'visible', writable: true, configurable: true });
-              Object.defineProperty(document, 'hidden', { value: false, writable: true, configurable: true });
-              window.dispatchEvent(new Event('focus'));
-              document.dispatchEvent(new Event('visibilitychange'));
-            } catch (e) {}
-          }
-        });
+        await chrome.tabs.update(origTabId, { active: true });
       } catch (e) {}
     }
 
-    // 3. Hydration wait for client SPA execution (remaining time to reach full 10s)
-    await new Promise((r) => setTimeout(r, 6000));
-
-    const data = await extractDataFromTab(tabId, cleanQ);
-    if (data && data.price > 0) {
-      logDebug("EphemeralTab", `Successfully extracted data from ${url} after full ${totalWaitMs / 1000}s wait: "${data.title}" at ₹${data.price}`, data);
+    // 4. Poll every 500ms up to timeout (returns immediately once data is ready)
+    const startTime = Date.now();
+    let data = null;
+    while (Date.now() - startTime < timeoutMs) {
+      data = await extractDataFromTab(tabId, cleanQ);
+      if (data && data.price > 0) {
+        logDebug("EphemeralTab", `Successfully extracted data from ${url} in ${Date.now() - startTime}ms: "${data.title}" at ₹${data.price}`, data);
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 500));
     }
+
     return data;
   } catch (err) {
     logDebug("EphemeralTab", `Ephemeral tab error for ${url}: ${err.message}`);
