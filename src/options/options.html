@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LowP - Location Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="options-container">
+    <header class="header">
+      <div class="brand">
+        <div class="logo-circle">📍</div>
+        <div>
+          <h1>Delivery Locations</h1>
+          <p>Manage your saved addresses and pincodes for real-time price comparison</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <!-- Add New Location -->
+      <section class="add-section">
+        <h2>Add Custom Location</h2>
+        <div class="input-row">
+          <input type="text" id="locName" placeholder="Label (e.g. Home, Office, Kukatpally)" />
+          <input type="text" id="locAddress" placeholder="Enter Pincode (e.g. 500085) or Full Address" />
+          <button id="addLocBtn" class="btn-primary">Save Location</button>
+        </div>
+      </section>
+
+      <!-- Saved Locations List -->
+      <section class="list-section">
+        <h2>Saved Profiles</h2>
+        <div id="profilesList" class="profiles-list">
+          <!-- Dynamically populated -->
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

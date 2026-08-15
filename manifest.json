@@ -1,0 +1,57 @@
+{
+  "manifest_version": 3,
+  "name": "LowP - Real-Time Price Comparator (Amazon, Instamart, Zepto)",
+  "short_name": "LowP",
+  "version": "2.0.0",
+  "description": "Hyperlocal real-time price comparison across Amazon India, Swiggy Instamart, and Zepto with live in-browser synchronization.",
+  "permissions": [
+    "storage",
+    "geolocation",
+    "cookies",
+    "tabs",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*.amazon.in/*",
+    "*://*.swiggy.com/*",
+    "*://*.zepto.com/*",
+    "*://*.zeptonow.com/*",
+    "*://*.nominatim.openstreetmap.org/*"
+  ],
+  "background": {
+    "service_worker": "src/background/service-worker.js"
+  },
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "48": "assets/icon48.png",
+      "128": "assets/icon128.png"
+    }
+  },
+  "options_page": "src/options/options.html",
+  "icons": {
+    "16": "assets/icon16.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.amazon.in/*",
+        "*://*.swiggy.com/*",
+        "*://*.zepto.com/*",
+        "*://*.zeptonow.com/*"
+      ],
+      "js": ["src/content/content-script.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
