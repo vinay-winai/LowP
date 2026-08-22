@@ -62,6 +62,13 @@ test('MatchingEngine - scoreRelevance ranks exact brand and pack size highest', 
   assert.ok(candExactMatch >= 100);
 });
 
+test('MatchingEngine - penalizes a same-number quantity with a different unit', () => {
+  const exact = MatchingEngine.scoreRelevance('Freedom Refined Sunflower Oil', 'freedom oil 200g', '200 g');
+  const wrongUnit = MatchingEngine.scoreRelevance('Freedom Refined Sunflower Oil', 'freedom oil 200g', '200 ml');
+
+  assert.ok(exact > wrongUnit);
+});
+
 test('MatchingEngine - annotateBestOffers assigns lowest price badge', () => {
   const results = [
     {
@@ -135,6 +142,41 @@ test('Providers - formatResult returns structured schema across Amazon Tez, Inst
   const resBlinkit = blinkit.formatResult(mockItem, DEFAULT_LOCATION);
   assert.strictEqual(resBlinkit.platformId, 'blinkit');
   assert.strictEqual(resBlinkit.isAvailable, true);
+});
+
+test('Providers - zero-price fallback is not reported as an available item', () => {
+  const provider = new InstamartProvider();
+  const result = provider.formatResult({
+    title: 'paneer',
+    price: 0,
+    mrp: 0,
+    productUrl: provider.getSearchUrl('paneer')
+  }, DEFAULT_LOCATION, 'paneer');
+
+  assert.strictEqual(result.isAvailable, false);
+  assert.strictEqual(result.item, null);
+  assert.strictEqual(result.priceBreakdown, null);
+  assert.match(result.productUrl, /query=paneer/);
+});
+
+test('Providers - preserves up to three ranked candidates and selected index', () => {
+  const provider = new ZeptoProvider();
+  const result = provider.formatResult({
+    title: 'exact paneer 200g',
+    price: 120,
+    mrp: 150,
+    candidates: [
+      { title: 'exact paneer 200g', price: 120, mrp: 150 },
+      { title: 'paneer 180g', price: 115, mrp: 140 },
+      { title: 'paneer 500g', price: 240, mrp: 280 },
+      { title: 'extra candidate', price: 99, mrp: 100 }
+    ],
+    selectedIndex: 1
+  }, DEFAULT_LOCATION, 'paneer');
+
+  assert.strictEqual(result.candidates.length, 3);
+  assert.strictEqual(result.selectedIndex, 1);
+  assert.strictEqual(result.candidates[1].price, 115);
 });
 
 test('handleSearchQuery - executes parallel search and returns 4 quick commerce store results', async () => {

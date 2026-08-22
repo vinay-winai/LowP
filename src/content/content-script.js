@@ -39,6 +39,8 @@
     return str
       .replace(/(?:₹|Rs\.?|INR)\s*[0-9,]+(?:\.[0-9]+)?/gi, "")
       .replace(/\b(?:delivery in\s*)?\d+(?:\s*-\s*\d+)?\s*(?:mins?|minutes?|hours?|sec|seconds?)\b/gi, "")
+      .replace(/\b(?:add|options?)\s*\d*\b/gi, "")
+      .replace(/\b\d+(?:\.\d+)?\s*(?:lac|lakh)\b/gi, "")
       .replace(/\b(?:fastest delivery|standard delivery|instant delivery|express delivery|free delivery|delivery)\b/gi, "")
       .replace(/\b(?:mrp|add|buy|added|in stock|out of stock|off|\d+%\s*off|save)\b/gi, "")
       .replace(/\s+/g, " ")
@@ -85,7 +87,8 @@
         const candQtyMatch = fullText.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
         if (candQtyMatch) {
           const cNum = parseFloat(candQtyMatch[1]);
-          if (cNum !== qNum) score -= 40;
+          const cUnit = candQtyMatch[2].toLowerCase().replace(/litre|litres/, 'l').replace(/kgs?/, 'kg').replace(/gms?/, 'g');
+          if (cNum !== qNum || cUnit !== qUnit) score -= 40;
         }
       }
     }
@@ -299,7 +302,7 @@
           const price = parseFloat(pMatch[1].replace(/,/g, ""));
           if (price > 0 && price < 500000) {
             const imgEl = document.querySelector('#landingImage, img[class*="pdp"], [data-testid*="image"] img, img');
-            return {
+            const item = {
               title,
               price,
               mrp: Math.round(price * 1.15),
@@ -309,6 +312,7 @@
               productUrl: window.location.href,
               platformId
             };
+            return { best: item, candidates: [item] };
           }
         }
       }
@@ -330,6 +334,14 @@
       'a[href*="/instamart/item/"]',
       'div[class*="ProductCard"]',
       'div[class*="product-card"]',
+      'div[class*="itemCard"]',
+      'div[class*="product_card"]',
+      'div[class*="styles__ProductCard"]',
+      'div[class*="style__Card"]',
+      'div[class*="item-card"]',
+      'div[class*="card"]',
+      'div[class*="Product__"]',
+      'div[class*="tw-relative"]',
       'div[class*="ItemCard"]',
       'div[class*="styled__Item"]',
       'div[class*="nov9b"]',
@@ -341,6 +353,7 @@
       'div[class*="ProductCard"]',
       'div[class*="product"]',
       'a[href*="/p/"]',
+      'a[href*="/dp/"]',
       'div[class*="sh-dgr__grid-result"]',
       'div[class*="sh-dgr__content"]',
       'div[class*="KZmu8e"]',
@@ -350,7 +363,8 @@
       'div[class*="iU5tvd"]',
       'div[data-docid]',
       'div[data-component-type="s-search-result"]',
-      'div[class*="s-result-item"]'
+      'div[class*="s-result-item"]',
+      'div[data-asin]'
     ];
 
     const cards = document.querySelectorAll(cardSelectors.join(', '));
@@ -364,7 +378,12 @@
 
     // 3. Fallback: Proximity Card Search
     if (candidates.length === 0) {
-      const allEls = document.querySelectorAll('*');
+      // Amazon Tez needs the known-good full fallback because its current
+      // product cards do not expose stable semantic selectors. Keep targeted
+      // scanning for the other stores to avoid a whole-document text walk.
+      const allEls = platformId === "amazon_tez"
+        ? document.querySelectorAll('*')
+        : document.querySelectorAll('[data-testid*="price" i], [class*="price" i], [class*="amount" i], [class*="cost" i], span');
       for (const el of allEls) {
         const text = el.textContent || '';
         if (/(?:₹|Rs\.?|INR)\s*[0-9,]+/i.test(text) && text.length < 30) {
@@ -384,7 +403,7 @@
       }
     }
 
-    if (candidates.length === 0) return null;
+    if (candidates.length === 0) return { best: null, candidates: [] };
 
     // 4. Score Candidates Against Search Query
     candidates.forEach(cand => {
@@ -393,19 +412,21 @@
 
     candidates.sort((a, b) => b._score - a._score);
     const best = candidates[0];
-    if (searchQuery && searchQuery.trim() && best._score < 20) {
-      return null;
-    }
-    return best;
+    const isValid = !searchQuery || !searchQuery.trim() || best._score >= 20;
+    return {
+      best: isValid ? best : null,
+      candidates: candidates.slice(0, 3)
+    };
   }
 
   // Handle messages from Extension Popup & Background Worker
   if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.action === "GET_PAGE_PRODUCT_DATA") {
-        const bestData = extractStorePageData(message.query || "");
+        const extraction = extractStorePageData(message.query || "");
+        const bestData = extraction?.best;
         if (bestData && bestData.price > 0) {
-          sendResponse({ success: true, data: bestData });
+          sendResponse({ success: true, data: bestData, candidates: extraction.candidates || [] });
           return true;
         }
         sendResponse({ success: false, data: null });
@@ -413,27 +434,8 @@
       }
     });
 
-    // Auto-sync extracted store item to background
-    const syncTimer = setInterval(() => {
-      if (!document.querySelectorAll) return;
-      const data = extractStorePageData();
-      if (data && data.price > 0 && !isBadTitle(data.title)) {
-        clearInterval(syncTimer);
-        try {
-          chrome.runtime.sendMessage({
-            action: "STORE_PRICE_SYNC",
-            payload: {
-              url: window.location.href,
-              data
-            }
-          }, () => {
-            if (chrome.runtime.lastError) { /* ignore */ }
-          });
-        } catch (e) {}
-      }
-    }, 1000);
-
-    setTimeout(() => clearInterval(syncTimer), 15000);
+    // Extraction is request-driven through GET_PAGE_PRODUCT_DATA. The old
+    // timer repeatedly scraped arbitrary products and sent debug-only events.
   }
 })();
 

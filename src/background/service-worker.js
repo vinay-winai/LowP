@@ -251,7 +251,8 @@ class MatchingEngine {
         const candQtyMatch = fullText.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
         if (candQtyMatch) {
           const cNum = parseFloat(candQtyMatch[1]);
-          if (cNum !== qNum) score -= 40;
+          const cUnit = candQtyMatch[2].toLowerCase().replace(/litre|litres/, 'l').replace(/kgs?/, 'kg').replace(/gms?/, 'g');
+          if (cNum !== qNum || cUnit !== qUnit) score -= 40;
         }
       }
     }
@@ -307,18 +308,43 @@ class BaseProvider {
         item: null,
         priceBreakdown: null,
         productUrl: this.getSearchUrl(fallbackQuery),
-        isLowestPrice: false
+        isLowestPrice: false,
+        candidates: [],
+        selectedIndex: 0
       };
     }
 
+    // Providers use a zero-priced object when no live item was found so that
+    // the user still gets a direct search link. It must not be reported as a
+    // real in-stock result.
+    const numericPrice = Number(item.price);
+    const isAvailable = Number.isFinite(numericPrice) && numericPrice > 0;
+    const candidateItems = Array.isArray(item.candidates) ? item.candidates : [];
+    const normalizedCandidates = candidateItems
+      .filter((candidate) => candidate && Number(candidate.price) > 0)
+      .slice(0, 3)
+      .map((candidate) => ({
+        id: candidate.id || `${this.platformId}_${Date.now()}`,
+        title: candidate.title || fallbackQuery,
+        brand: candidate.brand || this.platformName,
+        quantity: candidate.quantity || "1 unit",
+        mrp: Number(candidate.mrp) > 0 ? candidate.mrp : candidate.price,
+        price: Number(candidate.price),
+        image: candidate.image || "assets/icon48.png",
+        productUrl: candidate.productUrl || this.getSearchUrl(candidate.title || fallbackQuery),
+        score: Number.isFinite(Number(candidate._score)) ? Number(candidate._score) : undefined
+      }));
+    const selectedIndex = isAvailable
+      ? Math.min(Math.max(Number.isInteger(item.selectedIndex) ? item.selectedIndex : 0, 0), Math.max(0, normalizedCandidates.length - 1))
+      : 0;
     const priceBreakdown = MatchingEngine.calculateTotalCost(item);
     return {
       platformId: this.platformId,
       platformName: this.platformName,
       logoColor: this.logoColor,
-      isAvailable: true,
-      statusMessage: "In Stock",
-      item: {
+      isAvailable,
+      statusMessage: isAvailable ? "In Stock" : "Live price unavailable",
+      item: isAvailable ? {
         id: item.id || `${this.platformId}_${Date.now()}`,
         title: item.title,
         brand: item.brand || this.platformName,
@@ -326,10 +352,12 @@ class BaseProvider {
         mrp: item.mrp || item.price,
         price: item.price,
         image: item.image || "assets/icon48.png"
-      },
-      priceBreakdown,
+      } : null,
+      priceBreakdown: isAvailable ? priceBreakdown : null,
       productUrl: item.productUrl || this.getSearchUrl(item.title || fallbackQuery),
-      isLowestPrice: false
+      isLowestPrice: false,
+      candidates: normalizedCandidates,
+      selectedIndex
     };
   }
 
@@ -339,6 +367,42 @@ class BaseProvider {
 }
 
 function inPageExtract(searchQuery) {
+  // executeScript serializes this function into the target page. Keep the
+  // scorer self-contained; service-worker globals are not available there.
+  function scoreRelevance(itemTitle, query, packSize = '') {
+    if (!itemTitle || !query || !query.trim()) return 0;
+    const normalize = (str) => (str || "").toLowerCase()
+      .replace(/['’`\"]/g, "")
+      .replace(/[^a-z0-9\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const fullText = normalize(`${itemTitle} ${packSize}`);
+    const q = normalize(query);
+    const queryTokens = q.split(/\s+/).filter(t => t.length > 0);
+    let score = 0;
+    queryTokens.forEach(token => {
+      if (fullText.includes(token)) score += 30;
+      else if (token.endsWith('s') && token.length > 3 && fullText.includes(token.slice(0, -1))) score += 25;
+      else if (!token.endsWith('s') && fullText.includes(token + 's')) score += 25;
+    });
+    const qtyMatch = query.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
+    if (qtyMatch) {
+      const qNum = parseFloat(qtyMatch[1]);
+      const qUnit = qtyMatch[2].toLowerCase().replace(/litre|litres/, 'l').replace(/kgs?/, 'kg').replace(/gms?/, 'g');
+      if (fullText.includes(`${qNum} ${qUnit}`) || fullText.includes(`${qNum}${qUnit}`)) score += 40;
+      else {
+        const candQtyMatch = fullText.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
+        if (candQtyMatch) {
+          const cNum = parseFloat(candQtyMatch[1]);
+          const cUnit = candQtyMatch[2].toLowerCase().replace(/litre|litres/, 'l').replace(/kgs?/, 'kg').replace(/gms?/, 'g');
+          if (cNum !== qNum || cUnit !== qUnit) score -= 40;
+        }
+      }
+    }
+    if (queryTokens.length > 0 && fullText.includes(queryTokens[0])) score += 25;
+    return score;
+  }
+
   function isBadTitle(str) {
     if (!str || typeof str !== "string") return true;
     const s = str.trim().toLowerCase();
@@ -607,6 +671,14 @@ function inPageExtract(searchQuery) {
     'a[href*="/instamart/item/"]',
     'div[class*="ProductCard"]',
     'div[class*="product-card"]',
+    'div[class*="itemCard"]',
+    'div[class*="product_card"]',
+    'div[class*="styles__ProductCard"]',
+    'div[class*="style__Card"]',
+    'div[class*="item-card"]',
+    'div[class*="card"]',
+    'div[class*="Product__"]',
+    'div[class*="tw-relative"]',
     'div[class*="ItemCard"]',
     'div[class*="styled__Item"]',
     'div[class*="nov9b"]',
@@ -618,6 +690,7 @@ function inPageExtract(searchQuery) {
     'div[class*="ProductCard"]',
     'div[class*="product"]',
     'a[href*="/p/"]',
+    'a[href*="/dp/"]',
     'div[class*="sh-dgr__grid-result"]',
     'div[class*="sh-dgr__content"]',
     'div[class*="KZmu8e"]',
@@ -627,7 +700,8 @@ function inPageExtract(searchQuery) {
     'div[class*="iU5tvd"]',
     'div[data-docid]',
     'div[data-component-type="s-search-result"]',
-    'div[class*="s-result-item"]'
+    'div[class*="s-result-item"]',
+    'div[data-asin]'
   ];
 
   const cards = document.querySelectorAll(cardSelectors.join(', '));
@@ -641,7 +715,12 @@ function inPageExtract(searchQuery) {
 
   // 3. Proximity Fallback
   if (candidates.length === 0) {
-    const allEls = document.querySelectorAll('*');
+    // Amazon Tez currently uses unstable product-card markup. Keep the
+    // known-good full fallback there; the other stores use targeted nodes to
+    // avoid a whole-document text walk.
+    const allEls = platformId === "amazon_tez"
+      ? document.querySelectorAll('*')
+      : document.querySelectorAll('[data-testid*="price" i], [class*="price" i], [class*="amount" i], [class*="cost" i], span');
     for (const el of allEls) {
       const text = el.textContent || '';
       if (/(?:₹|Rs\.?|INR)\s*[0-9,]+/i.test(text) && text.length < 30) {
@@ -687,6 +766,7 @@ function inPageExtract(searchQuery) {
   return {
     success: isValid,
     data: isValid ? best : null,
+    candidates: candidates.slice(0, 3),
     debug: {
       url: window.location.href,
       title: document.title,
@@ -703,7 +783,8 @@ async function extractDataFromTab(tabId, cleanQ) {
   let data = null;
   let debugInfo = null;
 
-  // 1. Direct Script Execution
+  // Run the direct extractor first, as in the known-good 8b34689 baseline.
+  // The content script remains a fallback for restricted/incomplete pages.
   if (typeof chrome !== "undefined" && chrome.scripting && chrome.scripting.executeScript) {
     try {
       const results = await chrome.scripting.executeScript({
@@ -714,6 +795,12 @@ async function extractDataFromTab(tabId, cleanQ) {
       const res = results && results[0] ? results[0].result : null;
       if (res) {
         data = res.data || (res.price ? res : null);
+        if (data && Array.isArray(res.candidates)) {
+          data.candidates = res.candidates.slice(0, 3).map((candidate) => {
+            const { candidates: _nestedCandidates, ...candidateCopy } = candidate || {};
+            return candidateCopy;
+          });
+        }
         debugInfo = res.debug || null;
       }
     } catch (e) {
@@ -721,12 +808,14 @@ async function extractDataFromTab(tabId, cleanQ) {
     }
   }
 
-  // 2. Fallback to Content Script message
   if (!data || !data.price) {
     try {
       const res = await chrome.tabs.sendMessage(tabId, { action: "GET_PAGE_PRODUCT_DATA", query: cleanQ });
       if (res && res.data && res.data.price > 0) {
         data = res.data;
+        if (Array.isArray(res.candidates)) {
+          data.candidates = res.candidates.slice(0, 3).map((candidate) => ({ ...candidate }));
+        }
       }
     } catch (e) {}
   }
@@ -744,7 +833,25 @@ async function extractDataFromTab(tabId, cleanQ) {
   }
 }
 
-async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 8000) {
+function withTimeout(promise, timeoutMs, label = "operation") {
+  let timerId;
+  const timeout = new Promise((_, reject) => {
+    timerId = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timerId));
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timerId = setTimeout(() => controller?.abort(), timeoutMs);
+  try {
+    return await fetch(url, controller ? { ...options, signal: controller.signal } : options);
+  } finally {
+    clearTimeout(timerId);
+  }
+}
+
+async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 7500) {
   if (typeof chrome === "undefined" || (!chrome.tabs && !chrome.windows)) {
     return null;
   }
@@ -764,6 +871,17 @@ async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 8000) {
         });
         winId = win.id;
         tabId = win.tabs && win.tabs[0] ? win.tabs[0].id : null;
+        // Chrome does not guarantee that windows.create returns populated
+        // tabs. Resolve the newly-created tab by windowId before giving up,
+        // allowing a short propagation delay in the tabs API.
+        if (!tabId && winId && chrome.tabs && chrome.tabs.query) {
+          const tabLookupDeadline = Date.now() + 1000;
+          while (!tabId && Date.now() < tabLookupDeadline) {
+            const tabs = await chrome.tabs.query({ windowId: winId });
+            tabId = tabs && tabs[0] ? tabs[0].id : null;
+            if (!tabId) await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+        }
       } catch (winErr) {
         // Fallback to tab creation if window creation fails
         const tab = await chrome.tabs.create({ url, active: false });
@@ -780,6 +898,11 @@ async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 8000) {
     const startTime = Date.now();
     let data = null;
     while (Date.now() - startTime < timeoutMs) {
+      // Do not time-limit an individual executeScript call here. It may still
+      // be running in the page after Promise.race rejects, and starting a
+      // second extraction in that state causes overlapping full-DOM walks.
+      // The enclosing polling deadline and provider/global timeouts bound the
+      // complete operation without creating that contention.
       data = await extractDataFromTab(tabId, cleanQ);
       if (data && data.price > 0) {
         logDebug("EphemeralTab", `Successfully extracted data from ${url} in ${Date.now() - startTime}ms: "${data.title}" at ₹${data.price}`, data);
@@ -846,6 +969,8 @@ class AmazonTezProvider extends BaseProvider {
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
       try {
         const allTabs = await chrome.tabs.query({});
+        // Preserve the known-good Tez-only tab routing from 8b34689. Broadly
+        // scanning unrelated Amazon tabs can select a non-Now result page.
         const tezTabs = allTabs.filter(t => t.url && t.url.includes("amazon.in") && (t.url.includes("/tez/") || t.url.includes("searchKeyword")) && isOpenTabMatchingQuery(t.url, cleanQ));
         logDebug("AmazonTez", `Found ${tezTabs.length} open matching Amazon Tez tab(s)`);
 
@@ -935,12 +1060,12 @@ class InstamartProvider extends BaseProvider {
 
     // 3. Direct Background HTML Scraping (like Amazon)
     try {
-      const searchRes = await fetch(targetUrl, {
+      const searchRes = await fetchWithTimeout(targetUrl, {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
           "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
         }
-      });
+      }, 5000);
       if (searchRes.ok) {
         const html = await searchRes.text();
         const cardBlocks = html.split(/data-testid="item-collection-card-full"|class="[^"]*_3Rr1X[^"]*"/);
@@ -986,6 +1111,13 @@ class InstamartProvider extends BaseProvider {
           candidates.sort((a, b) => b._score - a._score);
           const best = candidates[0];
           if (best._score >= 20) {
+            // Do not put the ranked array on `best` by reference: that would
+            // make the first candidate self-referential and break telemetry
+            // JSON serialization.
+            best.candidates = candidates.slice(0, 3).map((candidate) => {
+              const { candidates: _nestedCandidates, ...candidateCopy } = candidate;
+              return candidateCopy;
+            });
             logDebug("Instamart", `Retrieved best Swiggy match via background scrape: "${best.title}" at ₹${best.price} (Score: ${best._score})`, best);
             return this.formatResult(best, location, cleanQ);
           }
@@ -1160,6 +1292,8 @@ const PROVIDERS = [
   new ZeptoProvider(),
   new BlinkitProvider()
 ];
+const PROVIDER_TIMEOUT_MS = 11000;
+const SEARCH_TIMEOUT_MS = 12000;
 
 async function handleSearchQuery(query, locationId = null) {
   if (!query || !query.trim()) return [];
@@ -1177,14 +1311,30 @@ async function handleSearchQuery(query, locationId = null) {
   const cleanQuery = MatchingEngine.cleanSearchTerm(query);
   logDebug("Search", `Executing search for "${cleanQuery}" in ${userSettings.name} (Pincode: ${userSettings.pincode})`);
 
+  const unavailableResult = (provider, reason) => {
+    if (reason) logDebug("ProviderTimeout", `${provider.platformId} ${reason}`);
+    return provider.formatResult(null, userSettings, cleanQuery);
+  };
   const providerPromises = PROVIDERS.map((provider) =>
-    provider.search(cleanQuery, userSettings).catch((err) => {
+    withTimeout(
+      Promise.resolve().then(() => provider.search(cleanQuery, userSettings)),
+      PROVIDER_TIMEOUT_MS,
+      `${provider.platformId} provider`
+    ).catch((err) => {
       logDebug("ProviderError", `${provider.platformId} failed: ${err.message}`);
-      return provider.formatResult(null, userSettings);
+      return unavailableResult(provider, err.message.includes("timed out") ? "timed out" : null);
     })
   );
 
-  const rawResults = await Promise.all(providerPromises);
+  let globalTimer;
+  const globalTimeout = new Promise((resolve) => {
+    globalTimer = setTimeout(() => {
+      logDebug("Search", `Global search timeout reached after ${SEARCH_TIMEOUT_MS}ms`);
+      resolve(PROVIDERS.map((provider) => unavailableResult(provider, "cancelled by global timeout")));
+    }, SEARCH_TIMEOUT_MS);
+  });
+  const rawResults = await Promise.race([Promise.all(providerPromises), globalTimeout]);
+  clearTimeout(globalTimer);
   const annotatedResults = MatchingEngine.annotateBestOffers(rawResults);
   const durationMs = Date.now() - startTime;
 

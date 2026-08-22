@@ -154,11 +154,38 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // 5. Render Store Cards
   function renderCards(results) {
+    const available = results.filter((store) => {
+      const candidates = Array.isArray(store.candidates) && store.candidates.length > 0
+        ? store.candidates
+        : (store.item ? [store.item] : []);
+      const index = Math.min(Math.max(Number.isInteger(store.selectedIndex) ? store.selectedIndex : 0, 0), Math.max(0, candidates.length - 1));
+      return store.isAvailable && Number(candidates[index]?.price) > 0;
+    });
+    const lowestPrice = available.length > 0
+      ? Math.min(...available.map((store) => {
+        const candidates = Array.isArray(store.candidates) && store.candidates.length > 0 ? store.candidates : [store.item];
+        return Number(candidates[store.selectedIndex || 0]?.price);
+      }))
+      : null;
+    results.forEach((store) => {
+      const candidates = Array.isArray(store.candidates) && store.candidates.length > 0 ? store.candidates : [store.item];
+      store.isLowestPrice = lowestPrice !== null && Number(candidates[store.selectedIndex || 0]?.price) === lowestPrice;
+    });
     cardsGrid.innerHTML = "";
 
     results.forEach((store) => {
       const card = document.createElement("div");
       card.className = `store-card ${store.isLowestPrice ? 'highlight-lowest' : ''}`;
+
+      const candidates = Array.isArray(store.candidates) && store.candidates.length > 0
+        ? store.candidates
+        : (store.item ? [store.item] : []);
+      const selectedIndex = Math.min(Math.max(Number.isInteger(store.selectedIndex) ? store.selectedIndex : 0, 0), Math.max(0, candidates.length - 1));
+      const selectedItem = candidates[selectedIndex] || store.item;
+      const selectedPrice = Number(selectedItem?.price) || 0;
+      const selectedMrp = Number(selectedItem?.mrp) || selectedPrice;
+      const selectedSavings = Math.max(0, selectedMrp - selectedPrice);
+      const selectedDiscount = selectedMrp > 0 ? Math.round((selectedSavings / selectedMrp) * 100) : 0;
 
       const storeColors = {
         amazon_tez: "#FF9900",
@@ -169,7 +196,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const bgColor = storeColors[store.platformId] || "#38BDF8";
       const textColor = store.platformId === "blinkit" ? "#111827" : "#FFFFFF";
-      const hasPrice = store.isAvailable && store.priceBreakdown && store.priceBreakdown.finalPayable > 0;
+      const hasPrice = store.isAvailable && selectedPrice > 0;
 
       let badgesHtml = "";
       if (store.isLowestPrice && hasPrice) badgesHtml += `<span class="badge badge-lowest">🏆 Lowest Price</span>`;
@@ -178,11 +205,11 @@ document.addEventListener("DOMContentLoaded", () => {
       if (hasPrice) {
         priceHtml = `
           <div class="price-box">
-            <span class="price-main">₹${store.priceBreakdown.finalPayable}</span>
-            ${store.priceBreakdown.savings > 0 ? `
+            <span class="price-main">₹${selectedPrice}</span>
+            ${selectedSavings > 0 ? `
               <div class="mrp-row">
-                <span class="price-mrp">₹${store.item.mrp}</span>
-                <span class="discount-tag">${store.priceBreakdown.discountPercent}% OFF</span>
+                <span class="price-mrp">₹${selectedMrp}</span>
+                <span class="discount-tag">${selectedDiscount}% OFF</span>
               </div>
             ` : ''}
           </div>
@@ -207,14 +234,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
         <div class="card-body">
           <div class="item-info">
-            <span class="item-title">${store.item?.title || store.platformName}</span>
-            <span class="item-brand">${store.item?.brand || store.platformName} • ${store.item?.quantity || '1 unit'}</span>
+            <span class="item-title">${selectedItem?.title || store.platformName}</span>
+            <span class="item-brand">${selectedItem?.brand || store.platformName} • ${selectedItem?.quantity || '1 unit'}</span>
           </div>
           ${priceHtml}
         </div>
 
+        ${candidates.length > 1 ? `
+          <div class="candidate-switcher" style="display:flex;align-items:center;justify-content:center;gap:8px;margin:8px 0;font-size:11px;color:var(--text-sub);">
+            <button type="button" class="candidate-prev" data-platform-id="${store.platformId}" aria-label="Previous match" ${selectedIndex === 0 ? 'disabled' : ''}>‹</button>
+            <span>Match ${selectedIndex + 1} of ${candidates.length}</span>
+            <button type="button" class="candidate-next" data-platform-id="${store.platformId}" aria-label="Next match" ${selectedIndex >= candidates.length - 1 ? 'disabled' : ''}>›</button>
+          </div>
+        ` : ''}
+
         <div class="card-action">
-          <a href="${store.productUrl}" target="_blank" class="store-link">
+          <a href="${selectedItem?.productUrl || store.productUrl}" target="_blank" class="store-link">
             Get on ${store.platformName} →
           </a>
         </div>
@@ -223,6 +258,24 @@ document.addEventListener("DOMContentLoaded", () => {
       cardsGrid.appendChild(card);
     });
   }
+
+  cardsGrid.addEventListener("click", (event) => {
+    const button = event.target.closest(".candidate-prev, .candidate-next");
+    if (!button) return;
+    const store = currentResults.find((result) => result.platformId === button.dataset.platformId);
+    if (!store || !Array.isArray(store.candidates) || store.candidates.length < 2) return;
+    const delta = button.classList.contains("candidate-next") ? 1 : -1;
+    const current = Number.isInteger(store.selectedIndex) ? store.selectedIndex : 0;
+    store.selectedIndex = Math.min(Math.max(current + delta, 0), store.candidates.length - 1);
+    const selected = store.candidates[store.selectedIndex];
+    store.item = selected;
+    store.productUrl = selected.productUrl || store.productUrl;
+    const price = Number(selected.price) || 0;
+    const mrp = Number(selected.mrp) || price;
+    const savings = Math.max(0, mrp - price);
+    store.priceBreakdown = { basePrice: price, finalPayable: price, savings, discountPercent: mrp > 0 ? Math.round((savings / mrp) * 100) : 0 };
+    renderCards(currentResults);
+  });
 
   // 6. Strategy Matrix Logic
   if (addToMatrixBtn) {
@@ -366,18 +419,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
     });
-
-    if (!bestSingleStoreId) {
-      let maxCount = -1;
-      STORES_LIST.forEach(s => {
-        const st = storeTotals[s.id];
-        if (st.count > maxCount || (st.count === maxCount && st.total < minSingleTotal)) {
-          maxCount = st.count;
-          minSingleTotal = st.total;
-          bestSingleStoreId = s.id;
-        }
-      });
-    }
 
     const bestStoreObj = STORES_LIST.find(s => s.id === bestSingleStoreId);
     const arbitrageSavings = minSingleTotal < Infinity && optimalSplitTotal > 0 && minSingleTotal > optimalSplitTotal
