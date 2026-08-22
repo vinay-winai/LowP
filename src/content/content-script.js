@@ -216,7 +216,8 @@
       }
     }
     if (!mrp || mrp < price) {
-      mrp = Math.round(price * 1.15);
+      // Only show a discount when the store actually exposes an MRP.
+      mrp = price;
     }
 
     const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : (platformId === "blinkit" ? "Blinkit" : "Quick Store")));
@@ -305,7 +306,7 @@
             const item = {
               title,
               price,
-              mrp: Math.round(price * 1.15),
+              mrp: price,
               brand: platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : "Amazon"),
               quantity: "1 unit",
               image: imgEl?.src || "assets/icon48.png",

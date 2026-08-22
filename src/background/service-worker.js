@@ -557,7 +557,9 @@ function inPageExtract(searchQuery) {
       }
     }
     if (!mrp || mrp < price) {
-      mrp = Math.round(price * 1.15);
+      // Do not invent an MRP: a synthetic value produces a misleading
+      // crossed-out price and discount badge.
+      mrp = price;
     }
 
     const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : (platformId === "blinkit" ? "Blinkit" : (platformId === "google_shopping" ? "Google Shopping" : "Quick Store"))));
@@ -643,7 +645,7 @@ function inPageExtract(searchQuery) {
           return {
             title,
             price,
-            mrp: Math.round(price * 1.15),
+            mrp: price,
             brand: platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : "Amazon"),
             quantity: "1 unit",
             image: imgEl?.src || "assets/icon48.png",
@@ -1087,7 +1089,7 @@ class InstamartProvider extends BaseProvider {
             const rawTitle = titleMatch[1].trim();
             const title = MatchingEngine.cleanSearchTerm(rawTitle);
             const price = parseFloat(priceMatch[1]);
-            const mrp = mrpMatch ? parseFloat(mrpMatch[1]) : Math.round(price * 1.2);
+            const mrp = mrpMatch ? parseFloat(mrpMatch[1]) : price;
             const quantity = qtyMatch ? qtyMatch[1].trim() : "1 unit";
             const image = imgMatch ? imgMatch[1] : "assets/icon48.png";
 
