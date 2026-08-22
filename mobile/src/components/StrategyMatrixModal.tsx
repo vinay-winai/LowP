@@ -320,9 +320,6 @@ export const StrategyMatrixModal: React.FC<StrategyMatrixModalProps> = ({
                                 ) : null}
 
                                 <View style={styles.cellFooter}>
-                                  {cell.mrp > cell.price && (
-                                    <Text style={styles.cellMrp}>₹{cell.mrp}</Text>
-                                  )}
                                   <ExternalLink size={10} color="#64748B" />
                                 </View>
                               </View>
@@ -645,11 +642,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 2
-  },
-  cellMrp: {
-    fontSize: 10,
-    color: '#64748B',
-    textDecorationLine: 'line-through'
   },
   unavailableCell: {
     alignItems: 'center',

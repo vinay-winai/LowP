@@ -4,6 +4,12 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
 
   return `
 (function() {
+  // A navigation should have exactly one extraction loop. Guard against a
+  // duplicate native injection before it starts another full DOM scan.
+  if (window.__lowpScraperTimer) {
+    clearInterval(window.__lowpScraperTimer);
+    window.__lowpScraperTimer = null;
+  }
   const searchQuery = ${sanitizedQuery};
   const targetPlatformId = ${sanitizedPlatformId};
 
@@ -293,6 +299,13 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       }
     }
 
+    // Blinkit's first rendered listing can be a search-header card whose
+    // title is just the query while its container exposes another item's
+    // price. Discard it before ranking the remaining products.
+    if (targetPlatformId === "blinkit" && candidates.length > 0) {
+      candidates.shift();
+    }
+
     if (candidates.length === 0) {
       return { best: null, candidates: [] };
     }
@@ -316,6 +329,9 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     const res = runExtraction();
     if (res.best || attempts >= 16) {
       clearInterval(pollInterval);
+      if (window.__lowpScraperTimer === pollInterval) {
+        window.__lowpScraperTimer = null;
+      }
       if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
         window.ReactNativeWebView.postMessage(JSON.stringify({
           type: 'SCRAPE_RESULT',
@@ -333,6 +349,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       }
     }
   }, 500);
+  window.__lowpScraperTimer = pollInterval;
 })();
 true;
 `;

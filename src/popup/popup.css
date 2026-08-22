@@ -315,24 +315,6 @@ body {
   color: var(--text-main);
 }
 
-.mrp-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.price-mrp {
-  font-size: 11px;
-  color: var(--text-sub);
-  text-decoration: line-through;
-}
-
-.discount-tag {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--accent-green);
-}
-
 .card-action {
   display: flex;
   justify-content: flex-end;

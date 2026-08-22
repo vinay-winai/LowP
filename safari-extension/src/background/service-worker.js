@@ -661,6 +661,13 @@ function inPageExtract(searchQuery) {
     }
   }
 
+  // Blinkit's first rendered listing can be a search-header card whose title
+  // is just the query while its container exposes another item's price.
+  // Discard it before ranking the remaining products.
+  if (platformId === "blinkit" && !isPDP && candidates.length > 0) {
+    candidates.shift();
+  }
+
   if (candidates.length === 0) {
     return {
       success: false,

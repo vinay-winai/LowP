@@ -65,34 +65,6 @@ document.addEventListener("DOMContentLoaded", () => {
     chrome.runtime.openOptionsPage();
   });
 
-  const openSidePanelBtn = document.getElementById("openSidePanelBtn");
-  if (openSidePanelBtn) {
-    openSidePanelBtn.addEventListener("click", async () => {
-      if (typeof chrome !== "undefined" && chrome.sidePanel && chrome.sidePanel.open) {
-        try {
-          const win = await chrome.windows.getCurrent();
-          await chrome.sidePanel.open({ windowId: win.id });
-          window.close();
-        } catch (e) {
-          chrome.runtime.sendMessage({ action: "OPEN_SIDE_PANEL" });
-        }
-      }
-    });
-  }
-
-  const clearCacheBtn = document.getElementById("clearCacheBtn");
-  if (clearCacheBtn) {
-    clearCacheBtn.addEventListener("click", () => {
-      chrome.runtime.sendMessage({ action: "CLEAR_CACHE" }, () => {
-        const orig = clearCacheBtn.textContent;
-        clearCacheBtn.textContent = "✅ Cleared!";
-        setTimeout(() => clearCacheBtn.textContent = orig, 1200);
-        const q = searchInput.value.trim();
-        if (q) performSearch(q);
-      });
-    });
-  }
-
   // 2. Auto-Detect Product Title from Active Tab
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs && tabs[0] && tabs[0].url) {
@@ -183,9 +155,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const selectedIndex = Math.min(Math.max(Number.isInteger(store.selectedIndex) ? store.selectedIndex : 0, 0), Math.max(0, candidates.length - 1));
       const selectedItem = candidates[selectedIndex] || store.item;
       const selectedPrice = Number(selectedItem?.price) || 0;
-      const selectedMrp = Number(selectedItem?.mrp) || selectedPrice;
-      const selectedSavings = Math.max(0, selectedMrp - selectedPrice);
-      const selectedDiscount = selectedMrp > 0 ? Math.round((selectedSavings / selectedMrp) * 100) : 0;
 
       const storeColors = {
         amazon_tez: "#FF9900",
@@ -206,12 +175,6 @@ document.addEventListener("DOMContentLoaded", () => {
         priceHtml = `
           <div class="price-box">
             <span class="price-main">₹${selectedPrice}</span>
-            ${selectedSavings > 0 ? `
-              <div class="mrp-row">
-                <span class="price-mrp">₹${selectedMrp}</span>
-                <span class="discount-tag">${selectedDiscount}% OFF</span>
-              </div>
-            ` : ''}
           </div>
         `;
       } else {
@@ -556,7 +519,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   clearDebugBtn.addEventListener("click", () => {
-    chrome.runtime.sendMessage({ action: "CLEAR_CACHE" }, () => {
+    chrome.runtime.sendMessage({ action: "CLEAR_DEBUG_LOGS" }, () => {
       debugOutput.textContent = "Logs cleared.";
     });
   });

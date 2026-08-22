@@ -44,7 +44,6 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
 }) => {
   const resolvedStores = useRef<Set<PlatformId>>(new Set());
   const activeSearchId = useRef<number>(searchId);
-  const webViewRefs = useRef<{ [key: string]: WebView | null }>({});
   const startTimeRef = useRef<number>(0);
 
   useEffect(() => {
@@ -104,9 +103,6 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
         return (
           <WebView
             key={key}
-            ref={(ref) => {
-              webViewRefs.current[store.platformId] = ref;
-            }}
             source={{ uri: targetUrl }}
             userAgent={DESKTOP_USER_AGENT}
             style={styles.hiddenWebView}
@@ -115,10 +111,6 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
             sharedCookiesEnabled={true}
             thirdPartyCookiesEnabled={true}
             injectedJavaScript={scraperJs}
-            onLoadEnd={() => {
-              // Re-inject on load end to ensure SPAs execute script after hydration
-              webViewRefs.current[store.platformId]?.injectJavaScript(scraperJs);
-            }}
             onMessage={(e) => handleMessage(store.platformId, e)}
             onError={(err) => {
               console.log(`[LowP Mobile] ${store.platformId} WebView error:`, err.nativeEvent);

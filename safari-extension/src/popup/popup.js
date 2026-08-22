@@ -136,8 +136,6 @@ document.addEventListener("DOMContentLoaded", () => {
         priceHtml = `
           <div class="price-box">
             <span class="price-main">₹${store.priceBreakdown.finalPayable}</span>
-            ${store.priceBreakdown.savings > 0 ? `<span class="price-mrp">₹${store.item.mrp}</span>` : ''}
-            ${store.priceBreakdown.savings > 0 ? `<span class="price-save">${store.priceBreakdown.discountPercent}% OFF</span>` : ''}
           </div>
           <a href="${store.productUrl}" target="_blank" class="btn-buy" rel="noopener noreferrer">View Store</a>
         `;

@@ -126,18 +126,7 @@ export const StoreCard: React.FC<StoreCardProps> = ({ store, isLoading, onCycleC
             <View style={styles.priceContainer}>
               <Text style={styles.currencySymbol}>₹</Text>
               <Text style={styles.priceValue}>{store.priceBreakdown!.finalPayable}</Text>
-              {store.item.mrp > store.item.price && (
-                <Text style={styles.mrpText}>MRP ₹{store.item.mrp}</Text>
-              )}
             </View>
-
-            {store.priceBreakdown!.savings > 0 && (
-              <View style={styles.savingsPill}>
-                <Text style={styles.savingsText}>
-                  Save ₹{store.priceBreakdown!.savings} ({store.priceBreakdown!.discountPercent}% OFF)
-                </Text>
-              </View>
-            )}
 
             <TouchableOpacity style={styles.openButton} onPress={handleOpenStore}>
               <ExternalLink size={14} color="#38BDF8" />
@@ -332,25 +321,6 @@ const styles = StyleSheet.create({
     color: '#F8FAFC',
     fontSize: 20,
     fontWeight: '800'
-  },
-  mrpText: {
-    color: '#64748B',
-    fontSize: 12,
-    textDecorationLine: 'line-through',
-    marginLeft: 6
-  },
-  savingsPill: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)'
-  },
-  savingsText: {
-    color: '#34D399',
-    fontSize: 11,
-    fontWeight: '700'
   },
   openButton: {
     flexDirection: 'row',

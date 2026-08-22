@@ -404,6 +404,13 @@
       }
     }
 
+    // Blinkit's first rendered listing can be a search-header card whose
+    // title is just the query while its container exposes another item's
+    // price. Discard that listing before ranking the remaining products.
+    if (platformId === "blinkit" && !isPDP && candidates.length > 0) {
+      candidates.shift();
+    }
+
     if (candidates.length === 0) return { best: null, candidates: [] };
 
     // 4. Score Candidates Against Search Query

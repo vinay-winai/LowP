@@ -742,6 +742,14 @@ function inPageExtract(searchQuery) {
     }
   }
 
+  // Blinkit's first rendered listing can be a search-header card whose title
+  // is just the query while its container also exposes another item's price.
+  // Drop that leading listing before ranking so the next displayed product is
+  // used consistently for both the title and price.
+  if (platformId === "blinkit" && !isPDP && candidates.length > 0) {
+    candidates.shift();
+  }
+
   if (candidates.length === 0) {
     return {
       success: false,
@@ -1347,6 +1355,17 @@ async function handleSearchQuery(query, locationId = null) {
 // ==========================================
 // 6. MESSAGE LISTENERS
 // ==========================================
+function configureSidePanelAction() {
+  if (typeof chrome === "undefined" || !chrome.sidePanel?.setPanelBehavior) return;
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((err) => logDebug("SidePanel", `Could not enable action click: ${err.message}`));
+}
+
+configureSidePanelAction();
+if (typeof chrome !== "undefined" && chrome.runtime?.onInstalled) {
+  chrome.runtime.onInstalled.addListener(configureSidePanelAction);
+}
+
 if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const { action, payload } = message;
@@ -1402,25 +1421,12 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage)
       return true;
     }
 
-    if (action === "CLEAR_CACHE") {
-      chrome.storage.local.clear(() => {
-        DEBUG_LOGS.length = 0;
-        sendResponse({ success: true });
-      });
-      return true;
-    }
-
-    if (action === "OPEN_SIDE_PANEL") {
-      if (chrome.sidePanel && chrome.sidePanel.open) {
-        chrome.windows.getCurrent((win) => {
-          if (win && win.id) {
-            chrome.sidePanel.open({ windowId: win.id });
-          }
-        });
-      }
+    if (action === "CLEAR_DEBUG_LOGS") {
+      DEBUG_LOGS.length = 0;
       sendResponse({ success: true });
       return true;
     }
+
   });
 }
 
