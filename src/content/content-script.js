@@ -453,6 +453,47 @@
     };
   }
 
+  // Visible text only: framework bundles can contain "no results" strings
+  // inside scripts while the page is still a bare loading shell.
+  function visibleBodyText() {
+    try {
+      const root = document.body;
+      if (!root) return "";
+      const skip = { SCRIPT: 1, STYLE: 1, NOSCRIPT: 1, TEMPLATE: 1 };
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+        acceptNode: function (node) {
+          if (node.nodeType === 1) {
+            return skip[node.nodeName] ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      let out = "";
+      let guard = 0;
+      let cur;
+      while ((cur = walker.nextNode()) && guard < 20000) {
+        if (cur.nodeType === 3 && cur.nodeValue) {
+          out += cur.nodeValue + " ";
+          if (out.length > 100000) break;
+        }
+        guard++;
+      }
+      return out.toLowerCase();
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function hasVisibleEmptyState() {
+    if (document.readyState !== "complete") return false;
+    return /no results|couldn.t find|could not find|didn.t find|nothing here|did not match any|didn.t match|no matching|no items found|0 results|no products|nothing matched|unable to find|not available in/.test(visibleBodyText());
+  }
+
+  const withEmptyStateReason = (extraction) => ({
+    ...(extraction || { best: null, candidates: [] }),
+    reason: "empty_state"
+  });
+
   // Wait for product markup to appear instead of failing after a single
   // synchronous pass. MutationObserver reacts to real DOM changes (timer
   // throttling does not affect it in background tabs); the trailing timeout
@@ -466,6 +507,12 @@
     const isValid = (extraction) => !!(extraction && extraction.best && extraction.best.price > 0);
 
     const first = runOnce();
+    // The page is already complete in the common fallback case. If it
+    // visibly says that the search matched nothing, do not wait out the
+    // extraction budget or keep the popup hanging.
+    if (!isValid(first) && hasVisibleEmptyState()) {
+      return Promise.resolve(withEmptyStateReason(first));
+    }
     if (isValid(first) || typeof MutationObserver === "undefined" || !document.body) {
       return Promise.resolve(first);
     }
@@ -473,6 +520,7 @@
     return new Promise((resolve) => {
       let settled = false;
       let lastAttempt = 0;
+      let attempts = 1;
       let trailingScheduled = false;
       let deadlineTimer = null;
 
@@ -496,6 +544,11 @@
         }
         lastAttempt = now;
         const res = runOnce();
+        attempts++;
+        if (!isValid(res) && attempts >= 4 && hasVisibleEmptyState()) {
+          finishWith(withEmptyStateReason(res));
+          return;
+        }
         if (isValid(res) || Date.now() - startedAt >= budget) finishWith(res);
       };
 
@@ -525,7 +578,7 @@
             sendResponse({ success: true, data: bestData, candidates: extraction.candidates || [] });
             return;
           }
-          sendResponse({ success: false, data: null });
+          sendResponse({ success: false, data: null, reason: extraction.reason || null });
         });
         return true;
       }

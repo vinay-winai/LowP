@@ -597,6 +597,43 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
     };
   }
 
+  // Read only text that is actually visible to the user. App bundles often
+  // contain "no results" strings in <script> tags even while the page is
+  // still hydrating, so those nodes must not trigger an empty-state exit.
+  function visibleBodyText() {
+    try {
+      const root = document.body;
+      if (!root) return "";
+      const skip = { SCRIPT: 1, STYLE: 1, NOSCRIPT: 1, TEMPLATE: 1 };
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+        acceptNode: function (node) {
+          if (node.nodeType === 1) {
+            return skip[node.nodeName] ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      let out = "";
+      let guard = 0;
+      let cur;
+      while ((cur = walker.nextNode()) && guard < 20000) {
+        if (cur.nodeType === 3 && cur.nodeValue) {
+          out += cur.nodeValue + " ";
+          if (out.length > 100000) break;
+        }
+        guard++;
+      }
+      return out.toLowerCase();
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function hasVisibleEmptyState() {
+    if (document.readyState !== "complete") return false;
+    return /no results|couldn.t find|could not find|didn.t find|nothing here|did not match any|didn.t match|no matching|no items found|0 results|no products|nothing matched|unable to find|not available in/.test(visibleBodyText());
+  }
+
   function runExtraction() {
     const host = (window.location.hostname || "").toLowerCase();
     const pathname = (window.location.pathname || "").toLowerCase();
@@ -869,8 +906,24 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
     });
     return { success: false, data: null, candidates: [], debug };
   };
+  const withEmptyStateReason = (res, attempts) => ({
+    ...(res || { success: false, data: null, candidates: [] }),
+    success: false,
+    data: null,
+    candidates: [],
+    debug: Object.assign({}, (res && res.debug) || {}, {
+      reason: "empty_state",
+      attempts
+    })
+  });
 
   let result = runExtraction();
+  // Most Chrome calls use waitMs=0 because the outer search loop handles
+  // hydration polling. A fully loaded page with a visible empty-state
+  // message is definitive, so stop that outer loop on the first pass.
+  if (!result.success && hasVisibleEmptyState()) {
+    return withEmptyStateReason(result, 1);
+  }
   if (typeof MutationObserver === "undefined" || !document.body) {
     return toSafeResult(result);
   }
@@ -903,6 +956,7 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
 
   return await new Promise((resolve) => {
     let settled = false;
+    let attempts = 1;
     let lastAttempt = 0;
     let trailingScheduled = false;
     let deadlineTimer = null;
@@ -927,6 +981,11 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
       }
       lastAttempt = now;
       const res = runExtraction();
+      attempts++;
+      if (!res.success && attempts >= 4 && hasVisibleEmptyState()) {
+        finishWith(withEmptyStateReason(res, attempts));
+        return;
+      }
       if (isValidResult(res)) {
         const signature = signatureOf(res);
         if (signature !== lastSignature) {
@@ -1001,6 +1060,9 @@ async function extractDataFromTabDetailed(tabId, cleanQ, waitMs = 0, expectedUrl
         if (Array.isArray(res.candidates)) {
           data.candidates = res.candidates.slice(0, 3).map((candidate) => ({ ...candidate }));
         }
+      }
+      if (res && res.reason) {
+        debugInfo = Object.assign({}, debugInfo || {}, { reason: res.reason });
       }
     } catch (e) {}
   }
@@ -1348,9 +1410,14 @@ async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 8000) {
     const startTime = Date.now();
     let data = null;
     while (Date.now() - startTime < timeoutMs) {
-      data = await extractDataFromTab(tabId, cleanQ);
+      const extracted = await extractDataFromTabDetailed(tabId, cleanQ);
+      data = extracted.data;
       if (data && data.price > 0) {
         logDebug("EphemeralTab", `Successfully extracted data from ${url} in ${Date.now() - startTime}ms: "${data.title}" at ₹${data.price}`, data);
+        break;
+      }
+      if (extracted.debug && extracted.debug.reason === "empty_state") {
+        logDebug("EphemeralTab", `No visible results for "${cleanQ}" after ${Date.now() - startTime}ms`);
         break;
       }
       await new Promise((r) => setTimeout(r, 250));

@@ -303,10 +303,17 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         priceHtml = `
           <div class="price-box">
-            <span class="price-main" style="font-size: 13px; color: var(--text-sub);">Check Live</span>
+            <span class="price-main" style="font-size: 13px; color: var(--text-sub);">Item unavailable</span>
           </div>
         `;
       }
+
+      const itemInfoHtml = hasPrice
+        ? `
+            <span class="item-title">${selectedItem?.title || store.platformName}</span>
+            <span class="item-brand">${selectedItem?.brand || store.platformName} • ${selectedItem?.quantity || '1 unit'}</span>
+          `
+        : "";
 
       card.innerHTML = `
         <div class="card-header">
@@ -320,8 +327,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         <div class="card-body">
           <div class="item-info">
-            <span class="item-title">${selectedItem?.title || store.platformName}</span>
-            <span class="item-brand">${selectedItem?.brand || store.platformName} • ${selectedItem?.quantity || '1 unit'}</span>
+            ${itemInfoHtml}
           </div>
           ${priceHtml}
         </div>
