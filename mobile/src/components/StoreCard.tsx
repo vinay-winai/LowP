@@ -79,11 +79,21 @@ export const StoreCard: React.FC<StoreCardProps> = ({ store, isLoading, onCycleC
       {hasPrice && store.item ? (
         <View style={styles.cardBody}>
           <View style={styles.productRow}>
-            <Image
-              source={{ uri: store.item.image || 'https://via.placeholder.com/60' }}
-              style={styles.productImage}
-              resizeMode="cover"
-            />
+            {store.item.image &&
+            store.item.image.startsWith('https://') ? (
+              <Image
+                source={{ uri: store.item.image }}
+                style={styles.productImage}
+                resizeMode="cover"
+              />
+            ) : (
+              // No valid remote image: render a neutral placeholder instead
+              // of firing failed/external requests (assets paths are not
+              // valid RN uris and placeholder.com is a network round-trip).
+              <View style={[styles.productImage, styles.productImagePlaceholder]}>
+                <Text style={styles.productImagePlaceholderText}>🛒</Text>
+              </View>
+            )}
             <View style={styles.productDetails}>
               <Text style={styles.productTitle} numberOfLines={2}>
                 {store.item.title}
@@ -259,6 +269,13 @@ const styles = StyleSheet.create({
     height: 54,
     borderRadius: 8,
     backgroundColor: '#0F172A'
+  },
+  productImagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  productImagePlaceholderText: {
+    fontSize: 22
   },
   productDetails: {
     flex: 1

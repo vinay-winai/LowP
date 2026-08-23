@@ -19,7 +19,8 @@
       /^(out of stock|sold out|unavailable|currently unavailable|add|added|buy|view|closed|loading|customise|in stock|add to cart|add item|qty|\+|\-)$/i,
       /^(trending|bestseller|offers?|save|flat|best price|discount|\d+%\s*off|save\s*₹?\d+|\d+\s*off|see all|view all|explore)$/i,
       /^(corporate|falcon|help & support|categories|see more|product image|cart icon|item image|image|photo|thumbnail|logo|banner|offer_icon|offer icon|coupon|promo)$/i,
-      /^(item|product|unit|pack|pc|pcs|piece|pieces|kg|gm|g|l|ml)$/i
+      /^(item|product|unit|pack|pc|pcs|piece|pieces|kg|gm|g|l|ml)$/i,
+      /^(shop for\b|unlock\b|\d+\s*(?:more|items?)\s*(?:to|for|worth)|items? worth)/i
     ];
 
     const words = s.split(/\s+/);
@@ -118,6 +119,19 @@
     if (!cardNode) return null;
     if (cardNode.closest && cardNode.closest('[class*="filter"], [class*="suggestion"], [class*="chip"], [class*="pill"], [class*="breadcrumb"], [class*="header"], [class*="footer"], [class*="nav"], header, footer, nav')) {
       return null;
+    }
+
+    // Reject overlay/app-chrome nodes (sticky "Shop for ₹X to unlock free
+    // delivery" banners, bottom bars): they carry prices but are not products.
+    let overlayProbe = cardNode;
+    let overlayDepth = 0;
+    while (overlayProbe && overlayProbe !== document.body && overlayDepth < 8) {
+      try {
+        const cs = window.getComputedStyle ? window.getComputedStyle(overlayProbe) : null;
+        if (cs && (cs.position === "fixed" || cs.position === "sticky")) return null;
+      } catch (e) {}
+      overlayProbe = overlayProbe.parentElement;
+      overlayDepth++;
     }
 
     const spacedCardText = getSpacedText(cardNode).replace(/\s+/g, " ").trim();
@@ -379,29 +393,37 @@
       }
     }
 
-    // 3. Fallback: Proximity Card Search
+    // 3. Fallback: Proximity Card Search — skipped while the document is a
+    // shell (no cards matched AND still loading); the walk is expensive and
+    // competes with hydration for the main thread.
     if (candidates.length === 0) {
-      // Amazon Tez needs the known-good full fallback because its current
-      // product cards do not expose stable semantic selectors. Keep targeted
-      // scanning for the other stores to avoid a whole-document text walk.
-      const allEls = platformId === "amazon_tez"
-        ? document.querySelectorAll('*')
-        : document.querySelectorAll('[data-testid*="price" i], [class*="price" i], [class*="amount" i], [class*="cost" i], span');
-      for (const el of allEls) {
-        const text = el.textContent || '';
-        if (/(?:₹|Rs\.?|INR)\s*[0-9,]+/i.test(text) && text.length < 30) {
-          let parent = el.parentElement;
-          let depth = 0;
-          while (parent && depth < 6 && parent !== document.body) {
-            const item = extractFromCard(parent, platformId);
-            if (item && item.price > 0 && !candidates.some(c => c.title === item.title && c.price === item.price)) {
-              candidates.push(item);
-              break;
+      const docReady = document.readyState === "complete";
+      const gridHint = cards.length > 0;
+      if (docReady || gridHint || platformId === "amazon_tez") {
+        // Amazon Tez needs the known-good full fallback because its current
+        // product cards do not expose stable semantic selectors. Keep targeted
+        // scanning for the other stores to avoid a whole-document text walk.
+        const allEls = platformId === "amazon_tez"
+          ? document.querySelectorAll('*')
+          : document.querySelectorAll('[data-testid*="price" i], [class*="price" i], [class*="amount" i], [class*="cost" i], span');
+        let scanned = 0;
+        for (const el of allEls) {
+          if (++scanned > 600) break;
+          const text = el.textContent || '';
+          if (/(?:₹|Rs\.?|INR)\s*[0-9,]+/i.test(text) && text.length < 30) {
+            let parent = el.parentElement;
+            let depth = 0;
+            while (parent && depth < 6 && parent !== document.body) {
+              const item = extractFromCard(parent, platformId);
+              if (item && item.price > 0 && !candidates.some(c => c.title === item.title && c.price === item.price)) {
+                candidates.push(item);
+                break;
+              }
+              parent = parent.parentElement;
+              depth++;
             }
-            parent = parent.parentElement;
-            depth++;
+            if (candidates.length >= 20) break;
           }
-          if (candidates.length >= 20) break;
         }
       }
     }

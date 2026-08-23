@@ -26,7 +26,8 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       /^(out of stock|sold out|unavailable|currently unavailable|add|added|buy|view|closed|loading|customise|in stock|add to cart|add item|qty|\\+|\\-)$/i,
       /^(trending|bestseller|offers?|save|flat|best price|discount|\\d+%\\s*off|save\\s*₹?\\d+|\\d+\\s*off|see all|view all|explore)$/i,
       /^(corporate|falcon|help & support|categories|see more|product image|cart icon|item image|image|photo|thumbnail|logo|banner|offer_icon|offer icon|coupon|promo)$/i,
-      /^(item|product|unit|pack|pc|pcs|piece|pieces|kg|gm|g|l|ml)$/i
+      /^(item|product|unit|pack|pc|pcs|piece|pieces|kg|gm|g|l|ml)$/i,
+      /^(shop for\\b|unlock\\b|\\d+\\s*(?:more|items?)\\s*(?:to|for|worth)|items? worth)/i
     ];
 
     const words = s.split(/\\s+/);
@@ -44,6 +45,8 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
   function cleanTitle(str) {
     if (!str || typeof str !== "string") return "";
     return str
+      .replace(/^sponsored\\s*/i, "")
+      .replace(/^\\s*\\d+(?:\\.\\d+)?\\s*%\\s*off\\s*/i, "")
       .replace(/(?:₹|Rs\\.?|INR)\\s*[0-9,]+(?:\\.[0-9]+)?/gi, "")
       .replace(/\\b(?:delivery in\\s*)?\\d+(?:\\s*-\\s*\\d+)?\\s*(?:mins?|minutes?|hours?|sec|seconds?)\\b/gi, "")
       .replace(/\\b(?:fastest delivery|standard delivery|instant delivery|express delivery|free delivery|delivery)\\b/gi, "")
@@ -102,6 +105,19 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     if (!cardNode) return null;
     if (cardNode.closest && cardNode.closest('[class*="filter"], [class*="suggestion"], [class*="chip"], [class*="pill"], [class*="breadcrumb"], [class*="header"], [class*="footer"], [class*="nav"], header, footer, nav')) {
       return null;
+    }
+
+    // Reject overlay/app-chrome nodes (sticky "Shop for ₹X to unlock free
+    // delivery" banners, bottom bars): they carry prices but are not products.
+    let overlayProbe = cardNode;
+    let overlayDepth = 0;
+    while (overlayProbe && overlayProbe !== document.body && overlayDepth < 8) {
+      try {
+        const cs = window.getComputedStyle ? window.getComputedStyle(overlayProbe) : null;
+        if (cs && (cs.position === "fixed" || cs.position === "sticky")) return null;
+      } catch (e) {}
+      overlayProbe = overlayProbe.parentElement;
+      overlayDepth++;
     }
 
     const spacedCardText = getSpacedText(cardNode).replace(/\\s+/g, " ").trim();
@@ -277,24 +293,33 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       }
     }
 
-    // 3. Proximity Fallback
+    // 3. Proximity Fallback — the most expensive walk. Skip it while the
+    // document is still a shell, cap the scan, and use targeted nodes for
+    // stores with stable price containers (Tez keeps the full fallback).
     if (candidates.length === 0) {
-      const allEls = document.querySelectorAll('*');
-      for (const el of allEls) {
-        const text = el.textContent || '';
-        if (/(?:₹|Rs\\.?|INR)\\s*[0-9,]+/i.test(text) && text.length < 30) {
-          let parent = el.parentElement;
-          let depth = 0;
-          while (parent && depth < 6 && parent !== document.body) {
-            const item = extractFromCard(parent, targetPlatformId);
-            if (item && item.price > 0 && !candidates.some(c => c.title === item.title && c.price === item.price)) {
-              candidates.push(item);
-              break;
+      const docReady = document.readyState === "complete";
+      if (docReady || cards.length > 0 || targetPlatformId === "amazon_tez") {
+        const allEls = targetPlatformId === "amazon_tez"
+          ? document.querySelectorAll('*')
+          : document.querySelectorAll('[data-testid*="price" i], [class*="price" i], [class*="amount" i], [class*="cost" i], span');
+        let scanned = 0;
+        for (const el of allEls) {
+          if (++scanned > 600) break;
+          const text = el.textContent || '';
+          if (/(?:₹|Rs\\.?|INR)\\s*[0-9,]+/i.test(text) && text.length < 30) {
+            let parent = el.parentElement;
+            let depth = 0;
+            while (parent && depth < 6 && parent !== document.body) {
+              const item = extractFromCard(parent, targetPlatformId);
+              if (item && item.price > 0 && !candidates.some(c => c.title === item.title && c.price === item.price)) {
+                candidates.push(item);
+                break;
+              }
+              parent = parent.parentElement;
+              depth++;
             }
-            parent = parent.parentElement;
-            depth++;
+            if (candidates.length >= 20) break;
           }
-          if (candidates.length >= 20) break;
         }
       }
     }
@@ -307,19 +332,50 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     }
 
     if (candidates.length === 0) {
-      return { best: null, candidates: [] };
+      return { best: null, candidates: [], found: 0 };
     }
 
-    const topCandidates = candidates.slice(0, 3);
-    return { best: topCandidates[0] || null, candidates: topCandidates };
+    // Rank by query relevance so banners/sponsored fragments near a price
+    // never outrank real matches for the searched term.
+    const ranked = candidates.map((c) => Object.assign({}, c, {
+      _score: scoreRelevance(c.title, searchQuery, c.quantity || "")
+    }));
+    ranked.sort((a, b) => b._score - a._score);
+    const qualified = ranked.filter((c) => c._score >= 20);
+    // No/blank query: preserve document order untouched.
+    const pool = (searchQuery && searchQuery.trim() && qualified.length > 0) ? qualified : ranked;
+    const topCandidates = pool.slice(0, 3);
+    return { best: topCandidates[0] || null, candidates: topCandidates, found: candidates.length };
   }
 
-  // Execute and poll up to 16 attempts (8 seconds)
+  // Execute and poll up to 16 attempts (8 seconds). Mirror the desktop
+  // settle rule: a confident top score over a grid-sized candidate set is
+  // accepted almost immediately, weaker/partial states must hold stable for
+  // a short window so early-hydration fragments never win.
   let attempts = 0;
+  let bestRes = null;
+  let lastSig = null;
+  let lastChangeAt = Date.now();
+  const sigOf = (res) => ((res && res.candidates) || []).map((c) => c.title + "@" + c.price).join("|");
   const pollInterval = setInterval(() => {
     attempts++;
     const res = runExtraction();
-    if (res.best || attempts >= 16) {
+    if (res.best) {
+      const sig = sigOf(res);
+      if (sig !== lastSig) {
+        lastSig = sig;
+        lastChangeAt = Date.now();
+        bestRes = res;
+      }
+    }
+    const settledFor = (() => {
+      if (!bestRes) return 0;
+      const topScore = (bestRes.best && bestRes.best._score) || 0;
+      const found = bestRes.found || 0;
+      return (topScore >= 60 && found >= 5) ? 100 : 500;
+    })();
+    const stable = !!bestRes && (Date.now() - lastChangeAt >= settledFor);
+    if (stable || attempts >= 16) {
       clearInterval(pollInterval);
       if (window.__lowpScraperTimer === pollInterval) {
         window.__lowpScraperTimer = null;
@@ -328,14 +384,14 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
         window.ReactNativeWebView.postMessage(JSON.stringify({
           type: 'SCRAPE_RESULT',
           platformId: targetPlatformId,
-          success: !!res.best,
-          data: res.best,
-          candidates: res.candidates || [],
+          success: !!(bestRes && bestRes.best),
+          data: (bestRes && bestRes.best) || null,
+          candidates: (bestRes && bestRes.candidates) || [],
           debug: {
             url: window.location.href,
             title: document.title,
             attempts: attempts,
-            htmlLen: document.documentElement ? document.documentElement.outerHTML.length : 0
+            domNodes: document.getElementsByTagName ? document.getElementsByTagName("*").length : 0
           }
         }));
       }

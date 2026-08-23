@@ -9,12 +9,32 @@
 const DEBUG_LOGS = [];
 const MAX_DEBUG_LOGS = 100;
 
+// User-controlled via Options → Developer → "Enable debug logging".
+let DEBUG_ENABLED = true;
+try {
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+    chrome.storage.sync.get(["lowp_debug_enabled"], (res) => {
+      if (res && res.lowp_debug_enabled === false) DEBUG_ENABLED = false;
+    });
+    if (chrome.storage.onChanged && chrome.storage.onChanged.addListener) {
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === "sync" && changes.lowp_debug_enabled) {
+          DEBUG_ENABLED = changes.lowp_debug_enabled.newValue !== false;
+        }
+      });
+    }
+  }
+} catch (e) {}
+
 function logDebug(category, message, data = null) {
+  if (!DEBUG_ENABLED) return;
+  // Store the reference instead of deep-cloning: consumers serialize lazily,
+  // and cloning multi-KB payloads on hot paths cost real milliseconds.
   const entry = {
     timestamp: new Date().toISOString(),
     category,
     message,
-    data: data ? JSON.parse(JSON.stringify(data)) : null
+    data
   };
   DEBUG_LOGS.unshift(entry);
   if (DEBUG_LOGS.length > MAX_DEBUG_LOGS) DEBUG_LOGS.pop();
@@ -379,7 +399,8 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
       /^(out of stock|sold out|unavailable|currently unavailable|add|added|buy|view|closed|loading|customise|in stock|add to cart|add item|qty|\+|\-)$/i,
       /^(trending|bestseller|offers?|save|flat|best price|discount|\d+%\s*off|save\s*₹?\d+|\d+\s*off|see all|view all|explore)$/i,
       /^(corporate|falcon|help & support|categories|see more|product image|cart icon|item image|image|photo|thumbnail|logo|banner|offer_icon|offer icon|coupon|promo)$/i,
-      /^(item|product|unit|pack|pc|pcs|piece|pieces|kg|gm|g|l|ml)$/i
+      /^(item|product|unit|pack|pc|pcs|piece|pieces|kg|gm|g|l|ml)$/i,
+      /^(shop for\b|unlock\b|\d+\s*(?:more|items?)\s*(?:to|for|worth)|items? worth)/i
     ];
 
     const words = s.split(/\s+/);
@@ -444,6 +465,19 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
     if (!cardNode) return null;
     if (cardNode.closest && cardNode.closest('[class*="filter"], [class*="suggestion"], [class*="chip"], [class*="pill"], [class*="breadcrumb"], [class*="header"], [class*="footer"], [class*="nav"], header, footer, nav')) {
       return null;
+    }
+
+    // Reject overlay/app-chrome nodes (sticky "Shop for ₹X to unlock free
+    // delivery" banners, bottom bars): they carry prices but are not products.
+    let overlayProbe = cardNode;
+    let overlayDepth = 0;
+    while (overlayProbe && overlayProbe !== document.body && overlayDepth < 8) {
+      try {
+        const cs = window.getComputedStyle ? window.getComputedStyle(overlayProbe) : null;
+        if (cs && (cs.position === "fixed" || cs.position === "sticky")) return null;
+      } catch (e) {}
+      overlayProbe = overlayProbe.parentElement;
+      overlayDepth++;
     }
 
     const spacedCardText = getSpacedText(cardNode).replace(/\s+/g, " ").trim();
@@ -649,7 +683,7 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
               title: document.title,
               vis: document.visibilityState,
               ready: document.readyState,
-              htmlLength: document.documentElement ? document.documentElement.outerHTML.length : 0,
+              domNodes: document.getElementsByTagName ? document.getElementsByTagName("*").length : 0,
               cardsFound: 0,
               candidatesFound: 1,
               topCandidate: { title: pdpItem.title, price: pdpItem.price }
@@ -718,29 +752,38 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
       }
     }
 
-    // 3. Proximity Fallback
+    // 3. Proximity Fallback — the most expensive walk on the page. Skip it
+    // entirely while the document is still a shell (no cards matched AND
+    // still loading): scanning thousands of spans there is pure waste and
+    // steals main-thread time from the hydration we are waiting for.
     if (candidates.length === 0) {
-      // Amazon Tez currently uses unstable product-card markup. Keep the
-      // known-good full fallback there; the other stores use targeted nodes to
-      // avoid a whole-document text walk.
-      const allEls = platformId === "amazon_tez"
-        ? document.querySelectorAll('*')
-        : document.querySelectorAll('[data-testid*="price" i], [class*="price" i], [class*="amount" i], [class*="cost" i], span');
-      for (const el of allEls) {
-        const text = el.textContent || '';
-        if (/(?:₹|Rs\.?|INR)\s*[0-9,]+/i.test(text) && text.length < 30) {
-          let parent = el.parentElement;
-          let depth = 0;
-          while (parent && depth < 6 && parent !== document.body) {
-            const item = extractFromCard(parent, platformId);
-            if (item && item.price > 0 && !candidates.some(c => c.title === item.title && c.price === item.price)) {
-              candidates.push(item);
-              break;
+      const docReady = document.readyState === "complete";
+      const gridHint = cards.length > 0;
+      if (docReady || gridHint || platformId === "amazon_tez") {
+        // Amazon Tez currently uses unstable product-card markup. Keep the
+        // known-good full fallback there; the other stores use targeted nodes
+        // to avoid a whole-document text walk.
+        const allEls = platformId === "amazon_tez"
+          ? document.querySelectorAll('*')
+          : document.querySelectorAll('[data-testid*="price" i], [class*="price" i], [class*="amount" i], [class*="cost" i], span');
+        let scanned = 0;
+        for (const el of allEls) {
+          if (++scanned > 600) break;
+          const text = el.textContent || '';
+          if (/(?:₹|Rs\.?|INR)\s*[0-9,]+/i.test(text) && text.length < 30) {
+            let parent = el.parentElement;
+            let depth = 0;
+            while (parent && depth < 6 && parent !== document.body) {
+              const item = extractFromCard(parent, platformId);
+              if (item && item.price > 0 && !candidates.some(c => c.title === item.title && c.price === item.price)) {
+                candidates.push(item);
+                break;
+              }
+              parent = parent.parentElement;
+              depth++;
             }
-            parent = parent.parentElement;
-            depth++;
+            if (candidates.length >= 20) break;
           }
-          if (candidates.length >= 20) break;
         }
       }
     }
@@ -762,7 +805,7 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
         title: document.title,
         vis: document.visibilityState,
         ready: document.readyState,
-        htmlLength: document.documentElement ? document.documentElement.outerHTML.length : 0,
+        domNodes: document.getElementsByTagName ? document.getElementsByTagName("*").length : 0,
         cardsFound: cards.length,
         candidatesFound: 0,
         topCandidate: null
@@ -790,7 +833,7 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
       title: document.title,
       vis: document.visibilityState,
       ready: document.readyState,
-      htmlLength: document.documentElement ? document.documentElement.outerHTML.length : 0,
+      domNodes: document.getElementsByTagName ? document.getElementsByTagName("*").length : 0,
       cardsFound: cards.length,
       candidatesFound: candidates.length,
       topCandidate: best ? { title: best.title, price: best.price, score: best._score } : null,
@@ -919,9 +962,9 @@ async function extractDataFromTab(tabId, cleanQ, waitMs = 0, expectedUrlToken = 
 async function extractDataFromTabDetailed(tabId, cleanQ, waitMs = 0, expectedUrlToken = null) {
   let data = null;
   let debugInfo = null;
+  let injectionFailed = false;
 
   // Run the direct extractor first, as in the known-good 8b34689 baseline.
-  // The content script remains a fallback for restricted/incomplete pages.
   if (typeof chrome !== "undefined" && chrome.scripting && chrome.scripting.executeScript) {
     try {
       const results = await chrome.scripting.executeScript({
@@ -941,11 +984,16 @@ async function extractDataFromTabDetailed(tabId, cleanQ, waitMs = 0, expectedUrl
         debugInfo = res.debug || null;
       }
     } catch (e) {
+      injectionFailed = true;
       logDebug("TabExtract", `Direct tab execution error on ${tabId}: ${e.message}`);
     }
   }
 
-  if (!data || !data.price) {
+  // The content-script fallback re-runs the full extraction walk. Only pay
+  // that cost when direct injection actually failed — an empty result from a
+  // successful injection already walked the same DOM and will be retried by
+  // the caller's polling loop anyway.
+  if ((!data || !data.price) && injectionFailed) {
     try {
       const res = await chrome.tabs.sendMessage(tabId, { action: "GET_PAGE_PRODUCT_DATA", query: cleanQ, waitMs: Math.min(800, waitMs), expectedUrlToken });
       if (res && res.data && res.data.price > 0) {
@@ -958,7 +1006,7 @@ async function extractDataFromTabDetailed(tabId, cleanQ, waitMs = 0, expectedUrl
   }
 
   if (debugInfo) {
-    logDebug("TabExtract", `Tab ${tabId} Diagnosed: URL="${debugInfo.url}", Title="${debugInfo.title}", HTML=${debugInfo.htmlLength}b, Cards=${debugInfo.cardsFound}, Candidates=${debugInfo.candidatesFound}, Top=${JSON.stringify(debugInfo.topCandidate)}`, debugInfo);
+    logDebug("TabExtract", `Tab ${tabId} Diagnosed: URL="${debugInfo.url}", Title="${debugInfo.title}", Nodes=${debugInfo.domNodes}, Vis=${debugInfo.vis}, Cards=${debugInfo.cardsFound}, Candidates=${debugInfo.candidatesFound}, Top=${JSON.stringify(debugInfo.topCandidate)}`, debugInfo);
   }
 
   if (data && data.price > 0) {

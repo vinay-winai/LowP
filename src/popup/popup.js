@@ -14,6 +14,18 @@ document.addEventListener("DOMContentLoaded", () => {
   const debugDrawer = document.getElementById("debugDrawer");
   const debugOutput = document.getElementById("debugOutput");
   const clearDebugBtn = document.getElementById("clearDebugBtn");
+  const resultMeta = document.getElementById("resultMeta");
+
+  function setResultMeta(text) {
+    if (!resultMeta) return;
+    if (!text) {
+      resultMeta.style.display = "none";
+      resultMeta.textContent = "";
+      return;
+    }
+    resultMeta.textContent = text;
+    resultMeta.style.display = "block";
+  }
 
   let activeLocation = null;
   let currentResults = [];
@@ -29,6 +41,18 @@ document.addEventListener("DOMContentLoaded", () => {
   const matrixItemCountText = document.getElementById("matrixItemCountText");
   const clearMatrixBtn = document.getElementById("clearMatrixBtn");
   const closeMatrixBtn = document.getElementById("closeMatrixBtn");
+
+  // Hide Debug Inspector entirely when the user disabled logging in Options.
+  if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+    chrome.storage.sync.get(["lowp_debug_enabled"], (res) => {
+      if (res && res.lowp_debug_enabled === false) {
+        [toggleDebugBtn, copyDebugBtn, clearDebugBtn].forEach((btn) => {
+          if (btn) btn.style.display = "none";
+        });
+        if (debugDrawer) debugDrawer.style.display = "none";
+      }
+    });
+  }
 
   // Load saved Strategy Matrix from storage
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
@@ -131,6 +155,7 @@ document.addEventListener("DOMContentLoaded", () => {
     currentResults = [];
     if (addToMatrixBtn) addToMatrixBtn.disabled = true;
     disconnectSearchPort();
+    setResultMeta(null);
 
     if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.connect) {
       legacySearch(query);
@@ -164,9 +189,12 @@ document.addEventListener("DOMContentLoaded", () => {
         if (results.length === 0) {
           cardsGrid.innerHTML = `<div class="error-msg" style="text-align:center; padding:20px; color:var(--text-sub);">No live prices found for this item.</div>`;
           loadingState.style.display = "none";
+          setResultMeta(null);
           updateDebugLogs();
           return;
         }
+        const cached = results.some((s) => s.cachedAt) ? " • from cache" : "";
+        setResultMeta(`${results.length} stores • ${((msg.durationMs || 0) / 1000).toFixed(2)}s${cached}`);
         finishSearch(results.slice());
         return;
       }
@@ -193,12 +221,15 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function legacySearch(query) {
+    const startedAt = Date.now();
     chrome.runtime.sendMessage({
       action: "SEARCH_QUERY",
       payload: { query }
     }, (response) => {
       loadingState.style.display = "none";
       if (response && response.success && response.data) {
+        const cached = response.data.some((s) => s.cachedAt) ? " • from cache" : "";
+        setResultMeta(`${response.data.length} stores • ${((Date.now() - startedAt) / 1000).toFixed(2)}s${cached}`);
         currentResults = response.data;
         renderCards(response.data);
         updateDebugLogs();
@@ -582,6 +613,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // 7. Debug Inspector Telemetry
   function updateDebugLogs() {
+    // Skip the fetch/stringify/render cycle entirely while the drawer is
+    // hidden — it runs on every card arrival otherwise.
+    if (!debugDrawer || debugDrawer.style.display === "none") return;
     chrome.runtime.sendMessage({ action: "GET_DEBUG_LOGS" }, (res) => {
       if (res && res.logs) {
         debugOutput.textContent = JSON.stringify(res.logs, null, 2);

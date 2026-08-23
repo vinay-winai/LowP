@@ -85,6 +85,9 @@ const INITIAL_STORES: StoreResult[] = [
   }
 ];
 
+const SEARCH_CACHE_TTL_MS = 90000;
+const SEARCH_CACHE_MAX_ENTRIES = 30;
+
 const QUICK_TAGS = [
   'Paneer 200g',
   'Amul Butter 500g',
@@ -111,6 +114,13 @@ export const HomeScreen: React.FC = () => {
   const pendingStores = useRef<Set<PlatformId>>(new Set());
   const searchStartTime = useRef<number>(0);
 
+  // Exact-term result cache: key is pincode + RAW typed query (case/space
+  // normalized only). "milk" and "milk 1l" are different searches. Entries
+  // live 90s — prices are stable minute-to-minute, repeats return instantly.
+  const searchCacheRef = useRef<Map<string, { ts: number; stores: StoreResult[] }>>(new Map());
+  const activeCacheKeyRef = useRef<string | null>(null);
+  const latestStoresRef = useRef<StoreResult[] | null>(null);
+
   useEffect(() => {
     LocationService.getActiveLocation().then(setActiveLocation);
   }, []);
@@ -119,11 +129,26 @@ export const HomeScreen: React.FC = () => {
     const clean = MatchingEngine.cleanSearchTerm(query);
     if (!clean) return;
 
+    const cacheTerm = query.trim().toLowerCase();
+    const cacheKey = `${activeLocation.pincode}|${cacheTerm}`;
+    activeCacheKeyRef.current = cacheKey;
+    searchStartTime.current = Date.now();
+
+    const hit = searchCacheRef.current.get(cacheKey);
+    if (hit && Date.now() - hit.ts <= SEARCH_CACHE_TTL_MS) {
+      // Cache hit: restore the snapshot without remounting any WebView.
+      setActiveSearch(clean);
+      setIsLoading(false);
+      setSearchDuration(Date.now() - searchStartTime.current);
+      pendingStores.current.clear();
+      setStores(hit.stores.map((s) => ({ ...s })));
+      return;
+    }
+
     setActiveSearch(clean);
     setSearchId((prev) => prev + 1);
     setIsLoading(true);
     setSearchDuration(null);
-    searchStartTime.current = Date.now();
 
     pendingStores.current = new Set(['amazon_tez', 'instamart', 'zepto', 'blinkit']);
 
@@ -181,6 +206,7 @@ export const HomeScreen: React.FC = () => {
         };
       });
 
+      latestStoresRef.current = updated;
       return MatchingEngine.annotateBestOffers(updated);
     });
 
@@ -189,6 +215,21 @@ export const HomeScreen: React.FC = () => {
       const totalTime = Date.now() - searchStartTime.current;
       setSearchDuration(totalTime);
       console.log(`[LowP Mobile] All results appeared in ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`);
+
+      // Persist the finished result set for exact-term repeat searches.
+      const snapshot = latestStoresRef.current;
+      const cacheKey = activeCacheKeyRef.current;
+      if (snapshot && cacheKey) {
+        const map = searchCacheRef.current;
+        map.set(cacheKey, { ts: Date.now(), stores: snapshot });
+        if (map.size > SEARCH_CACHE_MAX_ENTRIES) {
+          const oldest = Array.from(map.entries()).sort((a, b) => a[1].ts - b[1].ts);
+          while (map.size > SEARCH_CACHE_MAX_ENTRIES) {
+            const oldestKey = oldest.shift();
+            if (oldestKey) map.delete(oldestKey[0]);
+          }
+        }
+      }
     }
   };
 
