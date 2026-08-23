@@ -836,13 +836,21 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
   // before the real product grid renders. Require the candidate set to stop
   // changing for a short settle window before accepting, and always prefer
   // the latest differing pass (later = more hydrated).
-  const SETTLE_MS = 600;
+  //
+  // Strong results skip most of that wait: a confident top score combined
+  // with a grid-sized candidate count only occurs once the real listing has
+  // rendered, whereas banner transients yield only a handful of candidates.
   let bestResult = null;
   let lastSignature = null;
   let lastChangeAt = startedAt;
   const signatureOf = (res) => {
     const list = (res && res.candidates) || [];
     return list.slice(0, 3).map((c) => `${c.title}@${c.price}`).join("|") + "#" + ((res && res.debug && res.debug.candidatesFound) || 0);
+  };
+  const settleFor = (res) => {
+    const found = (res && res.debug && res.debug.candidatesFound) || 0;
+    const topScore = (res && res.data && res.data._score) || 0;
+    return (topScore >= 60 && found >= 5) ? 100 : 500;
   };
   if (isValidResult(result)) {
     bestResult = result;
@@ -885,7 +893,7 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
         }
       }
       const expired = Date.now() - startedAt >= budget;
-      const stable = !!bestResult && (Date.now() - lastChangeAt >= SETTLE_MS);
+      const stable = !!bestResult && (Date.now() - lastChangeAt >= settleFor(bestResult));
       if (expired || stable) finishWith(bestResult);
     };
 
@@ -1286,8 +1294,8 @@ async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 8000) {
 
     if (!tabId) return null;
 
-    // Poll every 500ms up to timeout (returns immediately once data is ready).
-    // Each poll is a short single-pass extraction; the in-page MutationObserver
+    // Poll every 250ms up to timeout (returns immediately once data is ready).
+    // Each pass is a short single-pass extraction; the in-page MutationObserver
     // wait is capped low so passes stay cheap and responsive.
     const startTime = Date.now();
     let data = null;
@@ -1297,7 +1305,7 @@ async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 8000) {
         logDebug("EphemeralTab", `Successfully extracted data from ${url} in ${Date.now() - startTime}ms: "${data.title}" at ₹${data.price}`, data);
         break;
       }
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 250));
     }
 
     return data;
