@@ -20,6 +20,7 @@ export interface ProductItem {
   image: string;
   productUrl?: string;
   _score?: number;
+  arrivedSeq?: number;
 }
 
 export interface PriceBreakdown {
@@ -43,6 +44,7 @@ export interface StoreResult {
   isLowestPrice: boolean;
   responseTimeMs?: number;
   _score?: number;
+  arrivedSeq?: number;
 }
 
 export interface StoreAccountStatus {

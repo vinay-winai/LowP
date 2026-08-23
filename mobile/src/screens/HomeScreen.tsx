@@ -120,6 +120,7 @@ export const HomeScreen: React.FC = () => {
   const searchCacheRef = useRef<Map<string, { ts: number; stores: StoreResult[] }>>(new Map());
   const activeCacheKeyRef = useRef<string | null>(null);
   const latestStoresRef = useRef<StoreResult[] | null>(null);
+  const arrivalSeqRef = useRef(0);
 
   useEffect(() => {
     LocationService.getActiveLocation().then(setActiveLocation);
@@ -149,6 +150,7 @@ export const HomeScreen: React.FC = () => {
     setSearchId((prev) => prev + 1);
     setIsLoading(true);
     setSearchDuration(null);
+    arrivalSeqRef.current = 0;
 
     pendingStores.current = new Set(['amazon_tez', 'instamart', 'zepto', 'blinkit']);
 
@@ -188,7 +190,8 @@ export const HomeScreen: React.FC = () => {
             candidates: [],
             selectedIndex: 0,
             priceBreakdown: null,
-            responseTimeMs: durationMs
+            responseTimeMs: durationMs,
+            arrivedSeq: ++arrivalSeqRef.current
           };
         }
 
@@ -202,12 +205,27 @@ export const HomeScreen: React.FC = () => {
           selectedIndex: 0,
           priceBreakdown,
           productUrl: activeItem.productUrl || store.productUrl,
-          responseTimeMs: durationMs
+          responseTimeMs: durationMs,
+          arrivedSeq: ++arrivalSeqRef.current
         };
       });
 
-      latestStoresRef.current = updated;
-      return MatchingEngine.annotateBestOffers(updated);
+      const annotated = MatchingEngine.annotateBestOffers(updated);
+      // FIFO ordering like the Chrome extension: stores that finished
+      // earlier float to the top; unresolved stores keep their original
+      // relative order below them.
+      const ordered = annotated
+        .map((s, idx) => ({ s, idx }))
+        .sort((a, b) => {
+          const sa = a.s.arrivedSeq ?? Number.MAX_SAFE_INTEGER;
+          const sb = b.s.arrivedSeq ?? Number.MAX_SAFE_INTEGER;
+          if (sa !== sb) return sa - sb;
+          return a.idx - b.idx;
+        })
+        .map(({ s }) => s);
+
+      latestStoresRef.current = ordered;
+      return ordered;
     });
 
     if (pendingStores.current.size === 0) {
@@ -215,23 +233,30 @@ export const HomeScreen: React.FC = () => {
       const totalTime = Date.now() - searchStartTime.current;
       setSearchDuration(totalTime);
       console.log(`[LowP Mobile] All results appeared in ${totalTime}ms (${(totalTime / 1000).toFixed(2)}s)`);
-
-      // Persist the finished result set for exact-term repeat searches.
-      const snapshot = latestStoresRef.current;
-      const cacheKey = activeCacheKeyRef.current;
-      if (snapshot && cacheKey) {
-        const map = searchCacheRef.current;
-        map.set(cacheKey, { ts: Date.now(), stores: snapshot });
-        if (map.size > SEARCH_CACHE_MAX_ENTRIES) {
-          const oldest = Array.from(map.entries()).sort((a, b) => a[1].ts - b[1].ts);
-          while (map.size > SEARCH_CACHE_MAX_ENTRIES) {
-            const oldestKey = oldest.shift();
-            if (oldestKey) map.delete(oldestKey[0]);
-          }
-        }
-      }
+      // Cache persistence happens in the isLoading effect below — writing
+      // here would race ahead of the state updater and drop the
+      // last-resolving store (usually Amazon) from the snapshot.
     }
   };
+
+  // Persist the finished result set once React has committed the final store
+  // state (runs after the render that applied the last store result).
+  useEffect(() => {
+    if (isLoading) return;
+    const cacheKey = activeCacheKeyRef.current;
+    const snapshot = latestStoresRef.current;
+    if (!cacheKey || !snapshot) return;
+
+    const map = searchCacheRef.current;
+    map.set(cacheKey, { ts: Date.now(), stores: snapshot });
+    if (map.size > SEARCH_CACHE_MAX_ENTRIES) {
+      const oldest = Array.from(map.entries()).sort((a, b) => a[1].ts - b[1].ts);
+      while (map.size > SEARCH_CACHE_MAX_ENTRIES) {
+        const oldestEntry = oldest.shift();
+        if (oldestEntry) map.delete(oldestEntry[0]);
+      }
+    }
+  }, [isLoading]);
 
   const handleCycleCandidate = (platformId: PlatformId, direction: 'next' | 'prev') => {
     setStores((prev) => {

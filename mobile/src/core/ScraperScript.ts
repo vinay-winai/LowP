@@ -348,6 +348,50 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     return { best: topCandidates[0] || null, candidates: topCandidates, found: candidates.length };
   }
 
+  // Stale-page guard: a reused WebView mid-navigation must never answer with
+  // the previous query's products. Results are only accepted when the live
+  // document URL contains the current search term.
+  const wantedRaw = searchQuery.toLowerCase().trim();
+  const hrefOk = () => {
+    try {
+      return decodeURIComponent(window.location.href || "").toLowerCase().includes(wantedRaw);
+    } catch (e) {
+      return false;
+    }
+  };
+
+  // Visible text only: <script> bundles embedded in <body> (Next.js does
+  // this) contain strings like "no results" from app code, which previously
+  // caused false empty-state detection on bare shells.
+  function visibleBodyText() {
+    try {
+      const root = document.body;
+      if (!root) return "";
+      const skip = { SCRIPT: 1, STYLE: 1, NOSCRIPT: 1, TEMPLATE: 1 };
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+        acceptNode: function (node) {
+          if (node.nodeType === 1) {
+            return skip[node.nodeName] ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      let out = "";
+      let guard = 0;
+      let cur;
+      while ((cur = walker.nextNode()) && guard < 20000) {
+        if (cur.nodeType === 3 && cur.nodeValue) {
+          out += cur.nodeValue + " ";
+          if (out.length > 100000) break;
+        }
+        guard++;
+      }
+      return out.toLowerCase();
+    } catch (e) {
+      return "";
+    }
+  }
+
   // Execute and poll up to 16 attempts (8 seconds). Mirror the desktop
   // settle rule: a confident top score over a grid-sized candidate set is
   // accepted almost immediately, weaker/partial states must hold stable for
@@ -359,7 +403,74 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
   const sigOf = (res) => ((res && res.candidates) || []).map((c) => c.title + "@" + c.price).join("|");
   const pollInterval = setInterval(() => {
     attempts++;
-    const res = runExtraction();
+    let res = runExtraction();
+    if (res.best && !hrefOk()) {
+      res = { best: null, candidates: [], found: 0 };
+    }
+
+    // Empty-state early exit: when the site itself says nothing matched
+    // ("couldn't find", "no results", ...), stop polling immediately instead
+    // of burning the full 8s budget. Guarded hard against false positives:
+    // only visible text (scripts/styles excluded), only after the document
+    // finished loading, and never before attempt 4 — bare SPA shells must
+    // not be mistaken for genuine empty states.
+    if (!res.best && attempts >= 4 && document.readyState === "complete") {
+      try {
+        const bodyText = visibleBodyText();
+        // couldn.t / didn.t cover straight, curly, and missing apostrophes.
+        if (/no results|couldn.t find|could not find|didn.t find|nothing here|did not match any|didn.t match|no matching|no items found|0 results|no products|nothing matched|unable to find|not available in/.test(bodyText)) {
+          clearInterval(pollInterval);
+          if (window.__lowpScraperTimer === pollInterval) {
+            window.__lowpScraperTimer = null;
+          }
+          if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'SCRAPE_RESULT',
+              platformId: targetPlatformId,
+              success: false,
+              data: null,
+              candidates: [],
+              debug: {
+                url: window.location.href,
+                title: document.title,
+                reason: 'empty_state',
+                attempts: attempts,
+                domNodes: document.getElementsByTagName ? document.getElementsByTagName("*").length : 0
+              }
+            }));
+          }
+          return;
+        }
+      } catch (e) {}
+    }
+
+    // Second-tier give-up: page fully loaded, ten attempts, still zero
+    // candidates and none of the known empty-state phrases — treat as no
+    // results instead of stretching to attempt 16 (~9-10s with walk time).
+    if (!res.best && attempts >= 10 && document.readyState === "complete") {
+      clearInterval(pollInterval);
+      if (window.__lowpScraperTimer === pollInterval) {
+        window.__lowpScraperTimer = null;
+      }
+      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'SCRAPE_RESULT',
+          platformId: targetPlatformId,
+          success: false,
+          data: null,
+          candidates: [],
+          debug: {
+            url: window.location.href,
+            title: document.title,
+            reason: 'no_results_timeout',
+            attempts: attempts,
+            domNodes: document.getElementsByTagName ? document.getElementsByTagName("*").length : 0
+          }
+        }));
+      }
+      return;
+    }
+
     if (res.best) {
       const sig = sigOf(res);
       if (sig !== lastSig) {

@@ -37,6 +37,11 @@ const STORES: { platformId: PlatformId; getUrl: (q: string) => string }[] = [
 const DESKTOP_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
 
+// Remount-per-search design (measured faster than persistent reuse on
+// device): four fresh hidden WebViews per search, torn down afterwards so
+// nothing heavy stays resident between searches. A persistent-pool variant
+// was tried and rolled back — keeping 4 live SPAs resident cost more than
+// the saved cold-start.
 export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
   searchQuery,
   searchId,
