@@ -292,6 +292,9 @@ document.addEventListener("DOMContentLoaded", () => {
       let badgesHtml = "";
       if (store.isLowestPrice && hasPrice) badgesHtml += `<span class="badge badge-lowest">🏆 Lowest Price</span>`;
       if (store.cachedAt && hasPrice) badgesHtml += `<span class="badge" style="background:rgba(148,163,184,0.2);color:var(--text-sub);">⚡ Cached</span>`;
+      if (typeof store.durationMs === "number" && store.durationMs >= 0) {
+        badgesHtml += `<span class="badge" style="background:rgba(148,163,184,0.15);color:var(--text-sub);">${(store.durationMs / 1000).toFixed(2)}s</span>`;
+      }
 
       let priceHtml = "";
       if (hasPrice) {

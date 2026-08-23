@@ -1982,6 +1982,9 @@ async function streamSearchResults(query, locationId = null, onResult = () => {}
       return unavailableResult(provider, err.message.includes("timed out") ? "timed out" : null);
     }).then((result) => {
       if (!hasResultFor(result.platformId)) {
+        // Per-store settle time (like mobile's responseTimeMs): how long this
+        // store took from query start until its result was ready.
+        result.durationMs = Date.now() - startTime;
         collected.push(result);
         emit(result);
       }
