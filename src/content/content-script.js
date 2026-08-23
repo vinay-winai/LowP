@@ -413,16 +413,9 @@
 
     if (candidates.length === 0) return { best: null, candidates: [] };
 
-    // 4. Score Candidates Against Search Query
-    candidates.forEach(cand => {
-      cand._score = scoreRelevance(cand.title, searchQuery, cand.quantity);
-    });
-
-    candidates.sort((a, b) => b._score - a._score);
     const best = candidates[0];
-    const isValid = !searchQuery || !searchQuery.trim() || best._score >= 20;
     return {
-      best: isValid ? best : null,
+      best,
       candidates: candidates.slice(0, 3)
     };
   }

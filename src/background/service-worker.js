@@ -332,7 +332,6 @@ class BaseProvider {
         price: Number(candidate.price),
         image: candidate.image || "assets/icon48.png",
         productUrl: candidate.productUrl || this.getSearchUrl(candidate.title || fallbackQuery),
-        score: Number.isFinite(Number(candidate._score)) ? Number(candidate._score) : undefined
       }));
     const selectedIndex = isAvailable
       ? Math.min(Math.max(Number.isInteger(item.selectedIndex) ? item.selectedIndex : 0, 0), Math.max(0, normalizedCandidates.length - 1))
@@ -367,42 +366,6 @@ class BaseProvider {
 }
 
 function inPageExtract(searchQuery) {
-  // executeScript serializes this function into the target page. Keep the
-  // scorer self-contained; service-worker globals are not available there.
-  function scoreRelevance(itemTitle, query, packSize = '') {
-    if (!itemTitle || !query || !query.trim()) return 0;
-    const normalize = (str) => (str || "").toLowerCase()
-      .replace(/['’`\"]/g, "")
-      .replace(/[^a-z0-9\s]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    const fullText = normalize(`${itemTitle} ${packSize}`);
-    const q = normalize(query);
-    const queryTokens = q.split(/\s+/).filter(t => t.length > 0);
-    let score = 0;
-    queryTokens.forEach(token => {
-      if (fullText.includes(token)) score += 30;
-      else if (token.endsWith('s') && token.length > 3 && fullText.includes(token.slice(0, -1))) score += 25;
-      else if (!token.endsWith('s') && fullText.includes(token + 's')) score += 25;
-    });
-    const qtyMatch = query.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
-    if (qtyMatch) {
-      const qNum = parseFloat(qtyMatch[1]);
-      const qUnit = qtyMatch[2].toLowerCase().replace(/litre|litres/, 'l').replace(/kgs?/, 'kg').replace(/gms?/, 'g');
-      if (fullText.includes(`${qNum} ${qUnit}`) || fullText.includes(`${qNum}${qUnit}`)) score += 40;
-      else {
-        const candQtyMatch = fullText.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
-        if (candQtyMatch) {
-          const cNum = parseFloat(candQtyMatch[1]);
-          const cUnit = candQtyMatch[2].toLowerCase().replace(/litre|litres/, 'l').replace(/kgs?/, 'kg').replace(/gms?/, 'g');
-          if (cNum !== qNum || cUnit !== qUnit) score -= 40;
-        }
-      }
-    }
-    if (queryTokens.length > 0 && fullText.includes(queryTokens[0])) score += 25;
-    return score;
-  }
-
   function isBadTitle(str) {
     if (!str || typeof str !== "string") return true;
     const s = str.trim().toLowerCase();
@@ -765,17 +728,11 @@ function inPageExtract(searchQuery) {
     };
   }
 
-  candidates.forEach(cand => {
-    cand._score = scoreRelevance(cand.title, searchQuery, cand.quantity);
-  });
-
-  candidates.sort((a, b) => b._score - a._score);
   const best = candidates[0];
-  const isValid = best && best._score >= 20;
 
   return {
-    success: isValid,
-    data: isValid ? best : null,
+    success: true,
+    data: best,
     candidates: candidates.slice(0, 3),
     debug: {
       url: window.location.href,
@@ -783,8 +740,8 @@ function inPageExtract(searchQuery) {
       htmlLength: document.documentElement ? document.documentElement.outerHTML.length : 0,
       cardsFound: cards.length,
       candidatesFound: candidates.length,
-      topCandidate: best ? { title: best.title, price: best.price, score: best._score } : null,
-      sampleCandidates: candidates.slice(0, 3).map(c => ({ title: c.title, price: c.price, score: c._score }))
+      topCandidate: best ? { title: best.title, price: best.price } : null,
+      sampleCandidates: candidates.slice(0, 3).map(c => ({ title: c.title, price: c.price }))
     }
   };
 }
@@ -835,7 +792,7 @@ async function extractDataFromTab(tabId, cleanQ) {
   }
 
   if (data && data.price > 0) {
-    logDebug("TabExtract", `Tab ${tabId} successfully extracted: "${data.title}" at ₹${data.price} (Score: ${data._score})`, data);
+    logDebug("TabExtract", `Tab ${tabId} successfully extracted: "${data.title}" at ₹${data.price}`, data);
     return data;
   } else {
     logDebug("TabExtract", `Tab ${tabId} returned no matching product for "${cleanQ}"`);
@@ -988,8 +945,8 @@ class AmazonTezProvider extends BaseProvider {
           try {
             logDebug("AmazonTez", `Querying open Amazon Tez tab (${t.id}): ${t.url}`);
             const data = await extractDataFromTab(t.id, cleanQ);
-            if (data && data.price > 0 && MatchingEngine.scoreRelevance(data.title, cleanQ) >= 30) {
-              logDebug("AmazonTez", `Retrieved relevant price from open Amazon Tez tab: ${data.title} at ₹${data.price}`, data);
+            if (data && data.price > 0) {
+              logDebug("AmazonTez", `Retrieved first price from open Amazon Tez tab: ${data.title} at ₹${data.price}`, data);
               return this.formatResult(data, location, cleanQ);
             }
           } catch (e) {
@@ -1057,8 +1014,8 @@ class InstamartProvider extends BaseProvider {
           try {
             logDebug("Instamart", `Querying open Swiggy tab (${t.id}): ${t.url}`);
             const data = await extractDataFromTab(t.id, cleanQ);
-            if (data && data.price > 0 && MatchingEngine.scoreRelevance(data.title, cleanQ) >= 30) {
-              logDebug("Instamart", `Retrieved relevant price from open Swiggy tab: ${data.title} at ₹${data.price}`, data);
+            if (data && data.price > 0) {
+              logDebug("Instamart", `Retrieved first price from open Swiggy tab: ${data.title} at ₹${data.price}`, data);
               return this.formatResult(data, location, cleanQ);
             }
           } catch (e) {
@@ -1111,26 +1068,16 @@ class InstamartProvider extends BaseProvider {
                 price,
                 image,
                 productUrl: targetUrl,
-                _score: MatchingEngine.scoreRelevance(rawTitle, cleanQ, quantity)
               });
             }
           }
         }
 
         if (candidates.length > 0) {
-          candidates.sort((a, b) => b._score - a._score);
           const best = candidates[0];
-          if (best._score >= 20) {
-            // Do not put the ranked array on `best` by reference: that would
-            // make the first candidate self-referential and break telemetry
-            // JSON serialization.
-            best.candidates = candidates.slice(0, 3).map((candidate) => {
-              const { candidates: _nestedCandidates, ...candidateCopy } = candidate;
-              return candidateCopy;
-            });
-            logDebug("Instamart", `Retrieved best Swiggy match via background scrape: "${best.title}" at ₹${best.price} (Score: ${best._score})`, best);
-            return this.formatResult(best, location, cleanQ);
-          }
+          best.candidates = candidates.slice(0, 3).map((candidate) => ({ ...candidate }));
+          logDebug("Instamart", `Retrieved first Swiggy result via background scrape: "${best.title}" at ₹${best.price}`, best);
+          return this.formatResult(best, location, cleanQ);
         }
       }
     } catch (err) {
@@ -1191,8 +1138,8 @@ class ZeptoProvider extends BaseProvider {
           try {
             logDebug("Zepto", `Querying open Zepto tab (${t.id}): ${t.url}`);
             const data = await extractDataFromTab(t.id, cleanQ);
-            if (data && data.price > 0 && MatchingEngine.scoreRelevance(data.title, cleanQ) >= 30) {
-              logDebug("Zepto", `Retrieved relevant price from open Zepto tab: ${data.title} at ₹${data.price}`, data);
+            if (data && data.price > 0) {
+              logDebug("Zepto", `Retrieved first price from open Zepto tab: ${data.title} at ₹${data.price}`, data);
               return this.formatResult(data, location, cleanQ);
             }
           } catch (e) {
@@ -1256,8 +1203,8 @@ class BlinkitProvider extends BaseProvider {
           try {
             logDebug("Blinkit", `Querying open Blinkit tab (${t.id}): ${t.url}`);
             const data = await extractDataFromTab(t.id, cleanQ);
-            if (data && data.price > 0 && MatchingEngine.scoreRelevance(data.title, cleanQ) >= 30) {
-              logDebug("Blinkit", `Retrieved relevant price from open Blinkit tab: ${data.title} at ₹${data.price}`, data);
+            if (data && data.price > 0) {
+              logDebug("Blinkit", `Retrieved first price from open Blinkit tab: ${data.title} at ₹${data.price}`, data);
               return this.formatResult(data, location, cleanQ);
             }
           } catch (e) {

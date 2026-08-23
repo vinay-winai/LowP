@@ -393,16 +393,7 @@
 
     if (candidates.length === 0) return null;
 
-    // 4. Score Candidates Against Search Query
-    candidates.forEach(cand => {
-      cand._score = scoreRelevance(cand.title, searchQuery, cand.quantity);
-    });
-
-    candidates.sort((a, b) => b._score - a._score);
     const best = candidates[0];
-    if (searchQuery && searchQuery.trim() && best._score < 20) {
-      return null;
-    }
     return best;
   }
 

@@ -310,16 +310,8 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       return { best: null, candidates: [] };
     }
 
-    candidates.forEach(cand => {
-      cand._score = scoreRelevance(cand.title, searchQuery, cand.quantity);
-    });
-
-    candidates.sort((a, b) => b._score - a._score);
-    const validCandidates = candidates.filter(c => c._score >= 15);
-    const topCandidates = (validCandidates.length > 0 ? validCandidates : candidates).slice(0, 3);
-    const best = topCandidates[0] && topCandidates[0]._score >= 15 ? topCandidates[0] : null;
-
-    return { best, candidates: topCandidates };
+    const topCandidates = candidates.slice(0, 3);
+    return { best: topCandidates[0] || null, candidates: topCandidates };
   }
 
   // Execute and poll up to 16 attempts (8 seconds)
