@@ -365,7 +365,7 @@ class BaseProvider {
   }
 }
 
-function inPageExtract(searchQuery) {
+async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
   function isBadTitle(str) {
     if (!str || typeof str !== "string") return true;
     const s = str.trim().toLowerCase();
@@ -397,12 +397,36 @@ function inPageExtract(searchQuery) {
   function cleanTitle(str) {
     if (!str || typeof str !== "string") return "";
     return str
+      .replace(/^sponsored\s*/i, "")
+      .replace(/^\s*\d+(?:\.\d+)?\s*%\s*off\s*/i, "")
       .replace(/(?:₹|Rs\.?|INR)\s*[0-9,]+(?:\.[0-9]+)?/gi, "")
       .replace(/\b(?:delivery in\s*)?\d+(?:\s*-\s*\d+)?\s*(?:mins?|minutes?|hours?|sec|seconds?)\b/gi, "")
       .replace(/\b(?:fastest delivery|standard delivery|instant delivery|express delivery|free delivery|delivery)\b/gi, "")
       .replace(/\b(?:mrp|add|buy|added|in stock|out of stock|off|\d+%\s*off|save)\b/gi, "")
       .replace(/\s+/g, " ")
       .trim();
+  }
+
+  // Self-contained relevance scorer (this function is serialized into the
+  // target page, so service-worker globals are unavailable here).
+  function scoreCandidate(itemTitle, query, packSize = '') {
+    if (!itemTitle || !query || !query.trim()) return 0;
+    const normalize = (s) => (s || "").toLowerCase()
+      .replace(/['’`"]/g, "")
+      .replace(/[^a-z0-9\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const fullText = normalize(`${itemTitle} ${packSize}`);
+    const q = normalize(query);
+    const tokens = q.split(/\s+/).filter(Boolean);
+    let score = 0;
+    tokens.forEach((token) => {
+      if (fullText.includes(token)) score += 30;
+      else if (token.endsWith('s') && token.length > 3 && fullText.includes(token.slice(0, -1))) score += 25;
+      else if (!token.endsWith('s') && fullText.includes(token + 's')) score += 25;
+    });
+    if (tokens.length > 0 && fullText.includes(tokens[0])) score += 25;
+    return score;
   }
 
   function getSpacedText(node) {
@@ -539,179 +563,195 @@ function inPageExtract(searchQuery) {
     };
   }
 
-  const host = (window.location.hostname || "").toLowerCase();
-  const pathname = (window.location.pathname || "").toLowerCase();
-  const href = (window.location.href || "").toLowerCase();
-  const isPDP = pathname.includes("/pn/") || pathname.includes("/product/") || pathname.includes("/item/") || pathname.includes("/dp/") || pathname.includes("/prid/") || pathname.includes("/shopping/product/");
+  function runExtraction() {
+    const host = (window.location.hostname || "").toLowerCase();
+    const pathname = (window.location.pathname || "").toLowerCase();
+    const href = (window.location.href || "").toLowerCase();
+    const isPDP = pathname.includes("/pn/") || pathname.includes("/product/") || pathname.includes("/item/") || pathname.includes("/dp/") || pathname.includes("/prid/") || pathname.includes("/shopping/product/");
 
-  let platformId = "unknown";
-  if (host.includes("amazon") || href.includes("amazon")) {
-    platformId = "amazon_tez";
-  } else if (host.includes("swiggy") || href.includes("swiggy")) {
-    platformId = "instamart";
-  } else if (host.includes("zepto") || href.includes("zepto")) {
-    platformId = "zepto";
-  } else if (host.includes("blinkit") || href.includes("blinkit")) {
-    platformId = "blinkit";
-  }
+    let platformId = "unknown";
+    if (host.includes("amazon") || href.includes("amazon")) {
+      platformId = "amazon_tez";
+    } else if (host.includes("swiggy") || href.includes("swiggy")) {
+      platformId = "instamart";
+    } else if (host.includes("zepto") || href.includes("zepto")) {
+      platformId = "zepto";
+    } else if (host.includes("blinkit") || href.includes("blinkit")) {
+      platformId = "blinkit";
+    }
 
-  const candidates = [];
+    const candidates = [];
 
-  // 1. Next.js Structured State (__NEXT_DATA__)
-  try {
-    const nextEl = document.getElementById('__NEXT_DATA__');
-    if (nextEl && nextEl.textContent) {
-      const nextJson = JSON.parse(nextEl.textContent);
-      function walk(o) {
-        if (!o || typeof o !== 'object') return;
-        if ((o.name || o.display_name || o.product_name || o.title) && (o.price || o.mrp || o.final_price || o.sp || o.offer_price)) {
-          const rawTitle = o.name || o.display_name || o.product_name || o.title;
-          const cleanT = cleanTitle(rawTitle);
-          const rawPrice = o.final_price || o.sp || o.offer_price || o.price || 0;
-          const price = typeof rawPrice === 'number' ? (rawPrice > 1000 ? rawPrice / 100 : rawPrice) : parseFloat(rawPrice);
-          const rawMrp = o.mrp || rawPrice;
-          const mrp = typeof rawMrp === 'number' ? (rawMrp > 1000 ? rawMrp / 100 : rawMrp) : parseFloat(rawMrp);
-          if (cleanT && price > 0 && !isBadTitle(cleanT)) {
-            if (!candidates.some(c => c.title === cleanT && c.price === price)) {
-              candidates.push({
-                title: cleanT,
-                price,
-                mrp: Math.max(mrp, price),
-                brand: platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : "Amazon"),
-                quantity: o.quantity || o.pack_size || o.weight || "1 unit",
-                image: o.image || o.imageUrl || (o.imageId ? `https://media-assets.swiggy.com/swiggy/image/upload/fl_lossy,f_auto,q_auto,w_252,h_252/${o.imageId}` : "assets/icon48.png"),
-                productUrl: window.location.href,
-                platformId
-              });
+    // 1. Next.js Structured State (__NEXT_DATA__)
+    try {
+      const nextEl = document.getElementById('__NEXT_DATA__');
+      if (nextEl && nextEl.textContent) {
+        const nextJson = JSON.parse(nextEl.textContent);
+        function walk(o) {
+          if (!o || typeof o !== 'object') return;
+          if ((o.name || o.display_name || o.product_name || o.title) && (o.price || o.mrp || o.final_price || o.sp || o.offer_price)) {
+            const rawTitle = o.name || o.display_name || o.product_name || o.title;
+            const cleanT = cleanTitle(rawTitle);
+            const rawPrice = o.final_price || o.sp || o.offer_price || o.price || 0;
+            const price = typeof rawPrice === 'number' ? (rawPrice > 1000 ? rawPrice / 100 : rawPrice) : parseFloat(rawPrice);
+            const rawMrp = o.mrp || rawPrice;
+            const mrp = typeof rawMrp === 'number' ? (rawMrp > 1000 ? rawMrp / 100 : rawMrp) : parseFloat(rawMrp);
+            if (cleanT && price > 0 && !isBadTitle(cleanT)) {
+              if (!candidates.some(c => c.title === cleanT && c.price === price)) {
+                candidates.push({
+                  title: cleanT,
+                  price,
+                  mrp: Math.max(mrp, price),
+                  brand: platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : "Amazon"),
+                  quantity: o.quantity || o.pack_size || o.weight || "1 unit",
+                  image: o.image || o.imageUrl || (o.imageId ? `https://media-assets.swiggy.com/swiggy/image/upload/fl_lossy,f_auto,q_auto,w_252,h_252/${o.imageId}` : "assets/icon48.png"),
+                  productUrl: window.location.href,
+                  platformId
+                });
+              }
             }
           }
-        }
-        for (const k of Object.keys(o)) {
-          walk(o[k]);
-        }
-      }
-      walk(nextJson);
-    }
-  } catch (e) {}
-
-  // 2. PDP Handling
-  if (isPDP) {
-    const pdpTitle = document.querySelector('h1[data-testid*="name"], h1[data-testid*="title"], h1#title span, h1');
-    const pdpPrice = document.querySelector('[data-testid*="price"], span.a-price-whole, span.a-offscreen, h4, div[class*="price"]');
-    if (pdpTitle && pdpPrice) {
-      const title = pdpTitle.textContent?.trim();
-      const pMatch = pdpPrice.textContent?.match(/([0-9,]+(?:\.[0-9]+)?)/);
-      if (title && !isBadTitle(title) && pMatch) {
-        const price = parseFloat(pMatch[1].replace(/,/g, ""));
-        if (price > 0 && price < 500000) {
-          const imgEl = document.querySelector("#landingImage, img[class*=\"pdp\"], [data-testid*=\"image\"] img, img");
-          return {
-            title,
-            price,
-            mrp: price,
-            brand: platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : "Amazon"),
-            quantity: "1 unit",
-            image: imgEl?.src || "assets/icon48.png",
-            productUrl: window.location.href,
-            platformId
-          };
-        }
-      }
-    }
-  }
-
-  // 3. Listing Cards
-  const cardSelectors = [
-    '[data-testid="item-collection-card-full"]',
-    'div[class*="_3Rr1X"]',
-    'div[class*="sWdPz"]',
-    'div[class*="_1WDPG"]',
-    '[data-testid="product-card"]',
-    '[data-testid*="product"]',
-    '[data-testid*="item"]',
-    '[data-testid*="default_container"]',
-    'a[href*="/pn/"]',
-    'a[href*="/product/"]',
-    'a[href*="/item/"]',
-    'a[href*="/instamart/item/"]',
-    'div[class*="ProductCard"]',
-    'div[class*="product-card"]',
-    'div[class*="itemCard"]',
-    'div[class*="product_card"]',
-    'div[class*="styles__ProductCard"]',
-    'div[class*="style__Card"]',
-    'div[class*="item-card"]',
-    'div[class*="card"]',
-    'div[class*="Product__"]',
-    'div[class*="tw-relative"]',
-    'div[class*="ItemCard"]',
-    'div[class*="styled__Item"]',
-    'div[class*="nov9b"]',
-    'div[class*="_1W_4e"]',
-    'div[class*="_1lbNR"]',
-    'a[href*="/prid/"]',
-    'div[data-test-id*="plp-product"]',
-    'div[class*="Product__Updated"]',
-    'div[class*="ProductCard"]',
-    'div[class*="product"]',
-    'a[href*="/p/"]',
-    'a[href*="/dp/"]',
-    'div[class*="sh-dgr__grid-result"]',
-    'div[class*="sh-dgr__content"]',
-    'div[class*="KZmu8e"]',
-    'div[class*="sh-np__click-target"]',
-    'div[class*="pla-unit"]',
-    'div[class*="sh-dlr__list-result"]',
-    'div[class*="iU5tvd"]',
-    'div[data-docid]',
-    'div[data-component-type="s-search-result"]',
-    'div[class*="s-result-item"]',
-    'div[data-asin]'
-  ];
-
-  const cards = document.querySelectorAll(cardSelectors.join(', '));
-  for (const card of cards) {
-    const item = extractFromCard(card, platformId);
-    if (item && item.price > 0 && !candidates.some(c => c.title === item.title && c.price === item.price)) {
-      candidates.push(item);
-      if (candidates.length >= 20) break;
-    }
-  }
-
-  // 3. Proximity Fallback
-  if (candidates.length === 0) {
-    // Amazon Tez currently uses unstable product-card markup. Keep the
-    // known-good full fallback there; the other stores use targeted nodes to
-    // avoid a whole-document text walk.
-    const allEls = platformId === "amazon_tez"
-      ? document.querySelectorAll('*')
-      : document.querySelectorAll('[data-testid*="price" i], [class*="price" i], [class*="amount" i], [class*="cost" i], span');
-    for (const el of allEls) {
-      const text = el.textContent || '';
-      if (/(?:₹|Rs\.?|INR)\s*[0-9,]+/i.test(text) && text.length < 30) {
-        let parent = el.parentElement;
-        let depth = 0;
-        while (parent && depth < 6 && parent !== document.body) {
-          const item = extractFromCard(parent, platformId);
-          if (item && item.price > 0 && !candidates.some(c => c.title === item.title && c.price === item.price)) {
-            candidates.push(item);
-            break;
+          for (const k of Object.keys(o)) {
+            walk(o[k]);
           }
-          parent = parent.parentElement;
-          depth++;
         }
+        walk(nextJson);
+      }
+    } catch (e) {}
+
+    // 2. PDP Handling
+    if (isPDP) {
+      const pdpTitle = document.querySelector('h1[data-testid*="name"], h1[data-testid*="title"], h1#title span, h1');
+      const pdpPrice = document.querySelector('[data-testid*="price"], span.a-price-whole, span.a-offscreen, h4, div[class*="price"]');
+      if (pdpTitle && pdpPrice) {
+        const title = pdpTitle.textContent?.trim();
+        const pMatch = pdpPrice.textContent?.match(/([0-9,]+(?:\.[0-9]+)?)/);
+        if (title && !isBadTitle(title) && pMatch) {
+          const price = parseFloat(pMatch[1].replace(/,/g, ""));
+          if (price > 0 && price < 500000) {
+            const imgEl = document.querySelector("#landingImage, img[class*=\"pdp\"], [data-testid*=\"image\"] img, img");
+            const pdpItem = {
+              title,
+              price,
+              mrp: price,
+              brand: platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : "Amazon"),
+              quantity: "1 unit",
+              image: imgEl?.src || "assets/icon48.png",
+              productUrl: window.location.href,
+              platformId
+            };
+            return {
+              success: true,
+              data: pdpItem,
+              candidates: [pdpItem],
+            debug: {
+              url: window.location.href,
+              title: document.title,
+              vis: document.visibilityState,
+              ready: document.readyState,
+              htmlLength: document.documentElement ? document.documentElement.outerHTML.length : 0,
+              cardsFound: 0,
+              candidatesFound: 1,
+              topCandidate: { title: pdpItem.title, price: pdpItem.price }
+            }
+            };
+          }
+        }
+      }
+    }
+
+    // 3. Listing Cards
+    const cardSelectors = [
+      '[data-testid="item-collection-card-full"]',
+      'div[class*="_3Rr1X"]',
+      'div[class*="sWdPz"]',
+      'div[class*="_1WDPG"]',
+      '[data-testid="product-card"]',
+      '[data-testid*="product"]',
+      '[data-testid*="item"]',
+      '[data-testid*="default_container"]',
+      'a[href*="/pn/"]',
+      'a[href*="/product/"]',
+      'a[href*="/item/"]',
+      'a[href*="/instamart/item/"]',
+      'div[class*="ProductCard"]',
+      'div[class*="product-card"]',
+      'div[class*="itemCard"]',
+      'div[class*="product_card"]',
+      'div[class*="styles__ProductCard"]',
+      'div[class*="style__Card"]',
+      'div[class*="item-card"]',
+      'div[class*="card"]',
+      'div[class*="Product__"]',
+      'div[class*="tw-relative"]',
+      'div[class*="ItemCard"]',
+      'div[class*="styled__Item"]',
+      'div[class*="nov9b"]',
+      'div[class*="_1W_4e"]',
+      'div[class*="_1lbNR"]',
+      'a[href*="/prid/"]',
+      'div[data-test-id*="plp-product"]',
+      'div[class*="Product__Updated"]',
+      'div[class*="ProductCard"]',
+      'div[class*="product"]',
+      'a[href*="/p/"]',
+      'a[href*="/dp/"]',
+      'div[class*="sh-dgr__grid-result"]',
+      'div[class*="sh-dgr__content"]',
+      'div[class*="KZmu8e"]',
+      'div[class*="sh-np__click-target"]',
+      'div[class*="pla-unit"]',
+      'div[class*="sh-dlr__list-result"]',
+      'div[class*="iU5tvd"]',
+      'div[data-docid]',
+      'div[data-component-type="s-search-result"]',
+      'div[class*="s-result-item"]',
+      'div[data-asin]'
+    ];
+
+    const cards = document.querySelectorAll(cardSelectors.join(', '));
+    for (const card of cards) {
+      const item = extractFromCard(card, platformId);
+      if (item && item.price > 0 && !candidates.some(c => c.title === item.title && c.price === item.price)) {
+        candidates.push(item);
         if (candidates.length >= 20) break;
       }
     }
-  }
 
-  // Blinkit's first rendered listing can be a search-header card whose title
-  // is just the query while its container also exposes another item's price.
-  // Drop that leading listing before ranking so the next displayed product is
-  // used consistently for both the title and price.
-  if (platformId === "blinkit" && !isPDP && candidates.length > 0) {
-    candidates.shift();
-  }
+    // 3. Proximity Fallback
+    if (candidates.length === 0) {
+      // Amazon Tez currently uses unstable product-card markup. Keep the
+      // known-good full fallback there; the other stores use targeted nodes to
+      // avoid a whole-document text walk.
+      const allEls = platformId === "amazon_tez"
+        ? document.querySelectorAll('*')
+        : document.querySelectorAll('[data-testid*="price" i], [class*="price" i], [class*="amount" i], [class*="cost" i], span');
+      for (const el of allEls) {
+        const text = el.textContent || '';
+        if (/(?:₹|Rs\.?|INR)\s*[0-9,]+/i.test(text) && text.length < 30) {
+          let parent = el.parentElement;
+          let depth = 0;
+          while (parent && depth < 6 && parent !== document.body) {
+            const item = extractFromCard(parent, platformId);
+            if (item && item.price > 0 && !candidates.some(c => c.title === item.title && c.price === item.price)) {
+              candidates.push(item);
+              break;
+            }
+            parent = parent.parentElement;
+            depth++;
+          }
+          if (candidates.length >= 20) break;
+        }
+      }
+    }
+
+    // Blinkit's first rendered listing can be a search-header card whose title
+    // is just the query while its container also exposes another item's price.
+    // Drop that leading listing before ranking so the next displayed product is
+    // used consistently for both the title and price.
+    if (platformId === "blinkit" && !isPDP && candidates.length > 0) {
+      candidates.shift();
+    }
 
   if (candidates.length === 0) {
     return {
@@ -720,6 +760,8 @@ function inPageExtract(searchQuery) {
       debug: {
         url: window.location.href,
         title: document.title,
+        vis: document.visibilityState,
+        ready: document.readyState,
         htmlLength: document.documentElement ? document.documentElement.outerHTML.length : 0,
         cardsFound: cards.length,
         candidatesFound: 0,
@@ -728,25 +770,145 @@ function inPageExtract(searchQuery) {
     };
   }
 
-  const best = candidates[0];
+  // Rank by query relevance so banners/sponsored fragments that happen to
+  // sit near a price never outrank real matches for the searched term.
+  const ranked = candidates.map((c) => Object.assign({}, c, {
+    _score: scoreCandidate(c.title, searchQuery, c.quantity || "")
+  }));
+  ranked.sort((a, b) => b._score - a._score);
+  const qualified = ranked.filter((c) => c._score >= 20);
+  // No/blank query (popup auto-detect): preserve document order untouched.
+  const pool = (searchQuery && searchQuery.trim() && qualified.length > 0) ? qualified : ranked;
+  const best = pool[0] || candidates[0];
 
   return {
     success: true,
     data: best,
-    candidates: candidates.slice(0, 3),
+    candidates: pool.slice(0, 3),
     debug: {
       url: window.location.href,
       title: document.title,
+      vis: document.visibilityState,
+      ready: document.readyState,
       htmlLength: document.documentElement ? document.documentElement.outerHTML.length : 0,
       cardsFound: cards.length,
       candidatesFound: candidates.length,
-      topCandidate: best ? { title: best.title, price: best.price } : null,
-      sampleCandidates: candidates.slice(0, 3).map(c => ({ title: c.title, price: c.price }))
+      topCandidate: best ? { title: best.title, price: best.price, score: best._score } : null,
+      sampleCandidates: pool.slice(0, 3).map(c => ({ title: c.title, price: c.price, score: c._score }))
     }
   };
 }
 
-async function extractDataFromTab(tabId, cleanQ) {
+  // If the first synchronous pass finds nothing, keep re-running the
+  // extraction as the page hydrates. MutationObserver reacts to real DOM
+  // changes and is unaffected by background-tab timer throttling; the
+  // trailing timeout covers mutation bursts suppressed by the rate limiter
+  // and the hard deadline bounds the total wait.
+  //
+  // expectedUrlToken guards against scraping a previous query's page: when a
+  // reused pool tab's navigation fails or is still mid-flight, relevance
+  // scoring alone cannot reject stale results (e.g. "milk" items score highly
+  // for "milk 1l"), so the current URL must contain the token.
+  // Default budget is deliberately small: the ephemeral pipeline polls this
+  // extractor every 500ms, so each pass should stay cheap and let the outer
+  // loop provide the overall patience.
+  const budget = Number.isFinite(waitMs) ? Math.max(0, Math.min(Number(waitMs), 15000)) : 1500;
+  const startedAt = Date.now();
+  const wantedToken = expectedUrlToken ? String(expectedUrlToken).toLowerCase() : null;
+  const hrefMatches = () => !wantedToken || String(window.location.href || "").toLowerCase().includes(wantedToken);
+  const isValidResult = (res) => !!res && res.success === true && hrefMatches();
+  // Never let a deadline convert a URL-mismatched (stale page) success into a
+  // usable result: downgrade it to an explicit failure instead.
+  const toSafeResult = (res) => {
+    if (isValidResult(res)) return res;
+    const debug = Object.assign({}, (res && res.debug) || {}, {
+      reason: res && res.success ? "stale_page_url" : ((res && res.debug && res.debug.reason) || "no_match")
+    });
+    return { success: false, data: null, candidates: [], debug };
+  };
+
+  let result = runExtraction();
+  if (typeof MutationObserver === "undefined" || !document.body) {
+    return toSafeResult(result);
+  }
+
+  // Early-hydration fragments (banners, sponsored blocks) can look extractable
+  // before the real product grid renders. Require the candidate set to stop
+  // changing for a short settle window before accepting, and always prefer
+  // the latest differing pass (later = more hydrated).
+  const SETTLE_MS = 600;
+  let bestResult = null;
+  let lastSignature = null;
+  let lastChangeAt = startedAt;
+  const signatureOf = (res) => {
+    const list = (res && res.candidates) || [];
+    return list.slice(0, 3).map((c) => `${c.title}@${c.price}`).join("|") + "#" + ((res && res.debug && res.debug.candidatesFound) || 0);
+  };
+  if (isValidResult(result)) {
+    bestResult = result;
+    lastSignature = signatureOf(result);
+    lastChangeAt = Date.now();
+  }
+
+  return await new Promise((resolve) => {
+    let settled = false;
+    let lastAttempt = 0;
+    let trailingScheduled = false;
+    let deadlineTimer = null;
+
+    const finishWith = (res) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadlineTimer);
+      try { observer.disconnect(); } catch (e) {}
+      resolve(toSafeResult(res));
+    };
+
+    const attempt = () => {
+      if (settled) return;
+      const now = Date.now();
+      if (now - lastAttempt < 200) {
+        if (!trailingScheduled) {
+          trailingScheduled = true;
+          setTimeout(() => { trailingScheduled = false; attempt(); }, 220);
+        }
+        return;
+      }
+      lastAttempt = now;
+      const res = runExtraction();
+      if (isValidResult(res)) {
+        const signature = signatureOf(res);
+        if (signature !== lastSignature) {
+          lastSignature = signature;
+          lastChangeAt = now;
+          bestResult = res;
+        }
+      }
+      const expired = Date.now() - startedAt >= budget;
+      const stable = !!bestResult && (Date.now() - lastChangeAt >= SETTLE_MS);
+      if (expired || stable) finishWith(bestResult);
+    };
+
+    const observer = new MutationObserver(attempt);
+
+    observer.observe(document.body, { childList: true, subtree: true });
+    deadlineTimer = setTimeout(() => finishWith(runExtraction()), Math.max(0, startedAt + budget - Date.now()));
+  });
+}
+
+// waitMs bounds how long the in-page extractor keeps waiting for product
+// markup to render (see inPageExtract). Open-tab reuse passes 0 because those
+// pages have already had their full session to hydrate; fresh navigations pass
+// their remaining navigation budget. expectedUrlToken (optional) makes the
+// extractor reject results whose page URL predates the current query.
+async function extractDataFromTab(tabId, cleanQ, waitMs = 0, expectedUrlToken = null) {
+  const { data } = await extractDataFromTabDetailed(tabId, cleanQ, waitMs, expectedUrlToken);
+  return data;
+}
+
+// Same as extractDataFromTab but also surfaces the in-page debug snapshot
+// (visibilityState/readyState), which the visibility self-healing uses.
+async function extractDataFromTabDetailed(tabId, cleanQ, waitMs = 0, expectedUrlToken = null) {
   let data = null;
   let debugInfo = null;
 
@@ -757,7 +919,7 @@ async function extractDataFromTab(tabId, cleanQ) {
       const results = await chrome.scripting.executeScript({
         target: { tabId },
         func: inPageExtract,
-        args: [cleanQ]
+        args: [cleanQ, waitMs, expectedUrlToken]
       });
       const res = results && results[0] ? results[0].result : null;
       if (res) {
@@ -777,7 +939,7 @@ async function extractDataFromTab(tabId, cleanQ) {
 
   if (!data || !data.price) {
     try {
-      const res = await chrome.tabs.sendMessage(tabId, { action: "GET_PAGE_PRODUCT_DATA", query: cleanQ });
+      const res = await chrome.tabs.sendMessage(tabId, { action: "GET_PAGE_PRODUCT_DATA", query: cleanQ, waitMs: Math.min(800, waitMs), expectedUrlToken });
       if (res && res.data && res.data.price > 0) {
         data = res.data;
         if (Array.isArray(res.candidates)) {
@@ -793,10 +955,10 @@ async function extractDataFromTab(tabId, cleanQ) {
 
   if (data && data.price > 0) {
     logDebug("TabExtract", `Tab ${tabId} successfully extracted: "${data.title}" at ₹${data.price}`, data);
-    return data;
+    return { data, debug: debugInfo };
   } else {
     logDebug("TabExtract", `Tab ${tabId} returned no matching product for "${cleanQ}"`);
-    return null;
+    return { data: null, debug: debugInfo };
   }
 }
 
@@ -818,7 +980,266 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {
   }
 }
 
-async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 7500) {
+// Resolves with the first promise that produces a truthy value; resolves null
+// only when every input has settled without producing one.
+function firstPositive(promises) {
+  return new Promise((resolve) => {
+    let remaining = promises.length;
+    let done = false;
+    promises.forEach((p) => {
+      Promise.resolve(p).then((value) => {
+        if (done) return;
+        if (value) { done = true; resolve(value); return; }
+        if (--remaining === 0) { done = true; resolve(null); }
+      }).catch(() => {
+        if (!done && --remaining === 0) { done = true; resolve(null); }
+      });
+    });
+  });
+}
+
+// ==========================================
+// 4b. WARM BACKGROUND TAB POOL (DORMANT)
+// The reuse experiment fought Chrome's renderer lifecycle (minimized,
+// off-screen, and sliver placements each hit a different freezing or
+// geometry restriction). It is no longer called by the search pipeline;
+// retained only so existing registries can be garbage-collected.
+// ==========================================
+const POOL_IDLE_CLOSE_MS = 60000;
+const POOL_REGISTRY_KEY = "lowp_tab_pool_registry";
+const POOL_GC_ALARM = "lowp_tabpool_gc";
+
+const WarmTabPool = {
+  entries: new Map(),
+  hydrated: false,
+
+  platformMatches(platformId, url) {
+    if (!url || !platformId) return false;
+    const u = url.toLowerCase();
+    if (platformId === "amazon_tez") return u.includes("amazon.in");
+    if (platformId === "instamart") return u.includes("swiggy.com");
+    if (platformId === "zepto") return u.includes("zepto.com") || u.includes("zeptonow.com");
+    if (platformId === "blinkit") return u.includes("blinkit.com");
+    return false;
+  },
+
+  detectPlatformId(url) {
+    for (const id of ["amazon_tez", "instamart", "zepto", "blinkit"]) {
+      if (this.platformMatches(id, url)) return id;
+    }
+    return null;
+  },
+
+  async managedTabIdSet() {
+    await this.hydrate();
+    const ids = new Set();
+    this.entries.forEach((entry) => ids.add(entry.tabId));
+    return ids;
+  },
+
+  async _persist() {
+    try {
+      if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.session) return;
+      const plain = {};
+      this.entries.forEach((value, key) => { plain[key] = value; });
+      chrome.storage.session.set({ [POOL_REGISTRY_KEY]: plain }, () => {});
+    } catch (e) {}
+  },
+
+  // After a service-worker restart the in-memory map is empty; re-adopt pool
+  // windows from the persisted registry after verifying they still exist.
+  async hydrate() {
+    if (this.hydrated) return;
+    this.hydrated = true;
+    try {
+      if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.session) return;
+      const res = await new Promise((resolve) => chrome.storage.session.get([POOL_REGISTRY_KEY], resolve));
+      const saved = res && res[POOL_REGISTRY_KEY];
+      if (saved && typeof saved === "object") {
+        for (const platformId of Object.keys(saved)) {
+          if (this.entries.has(platformId)) continue;
+          const entry = saved[platformId];
+          let alive = false;
+          try {
+            const tab = await chrome.tabs.get(entry.tabId);
+            alive = !!tab && !tab.discarded && this.platformMatches(platformId, tab.url || tab.pendingUrl);
+          } catch (e) { alive = false; }
+          if (alive) this.entries.set(platformId, entry);
+        }
+        await this._persist();
+      }
+    } catch (e) {}
+  },
+
+  async acquire(platformId, url) {
+    if (typeof chrome === "undefined" || !chrome.tabs) return null;
+    await this.hydrate();
+
+    const canCreateWindows = !!(typeof chrome !== "undefined" && chrome.windows && chrome.windows.create);
+    const existing = this.entries.get(platformId);
+    if (existing) {
+      try {
+        const tab = await chrome.tabs.get(existing.tabId);
+        // Tab-only entries come from the degraded fallback path; upgrade them
+        // to a real window when possible because hidden background tabs keep
+        // document.visibilityState "hidden", which stalls client-side-
+        // rendered stores (Swiggy, Zepto) indefinitely.
+        if (tab && !tab.discarded && (existing.windowId || !canCreateWindows)) {
+          existing.lastUsedAt = Date.now();
+          await this._persist();
+          // Heal windows stuck in a frozen minimized/off-screen state. Note:
+          // `state` cannot be combined with bounds in one update call.
+          if (existing.windowId && chrome.windows && chrome.windows.update) {
+            try {
+              await chrome.windows.update(existing.windowId, { state: "normal", focused: false });
+              await chrome.windows.update(existing.windowId, { left: -350, top: 60, width: 420, height: 700 });
+            } catch (e) {}
+          }
+          await chrome.tabs.update(existing.tabId, { url });
+          return { tabId: existing.tabId, reused: true, winId: existing.windowId };
+        }
+      } catch (e) {}
+      await this.evict(platformId);
+    }
+
+    let winId = null;
+    let tabId = null;
+    if (canCreateWindows) {
+      // Chrome's occlusion tracker treats FULLY off-screen and minimized
+      // windows as hidden (visibilityState "hidden"), which stalls client-
+      // side hydration. A window with a thin sliver on the primary display's
+      // left edge is never occluded, so its renderer stays live, yet it is
+      // effectively invisible. Bounds cannot be reliably combined with a
+      // `state` value across Chrome builds, so `state` is omitted.
+      const strategies = [
+        { url, type: "popup", focused: false, left: -350, top: 60, width: 420, height: 700 },
+        { url, type: "popup", focused: false, width: 420, height: 700 },
+        { url, type: "popup", focused: false }
+      ];
+      for (const createData of strategies) {
+        try {
+          const win = await chrome.windows.create(createData);
+          winId = win.id;
+          tabId = win.tabs && win.tabs[0] ? win.tabs[0].id : null;
+          // Chrome does not guarantee that windows.create returns populated
+          // tabs. Resolve the newly-created tab by windowId before giving up,
+          // allowing a short propagation delay in the tabs API.
+          if (!tabId && winId && chrome.tabs.query) {
+            const deadline = Date.now() + 1000;
+            while (!tabId && Date.now() < deadline) {
+              const tabs = await chrome.tabs.query({ windowId: winId });
+              tabId = tabs && tabs[0] ? tabs[0].id : null;
+              if (!tabId) await new Promise((r) => setTimeout(r, 100));
+            }
+          }
+          if (tabId) break;
+          logDebug("TabPool", `Window ${winId} produced no usable tab`);
+          try { await chrome.windows.remove(winId); } catch (e) {}
+          winId = null;
+        } catch (winErr) {
+          logDebug("TabPool", `Window create strategy failed: ${winErr.message}`);
+          winId = null;
+          tabId = null;
+        }
+      }
+    }
+    if (!tabId) {
+      // Degraded fallback: hidden background tabs work only for server-
+      // rendered stores; they are replaced by a real window on next acquire.
+      try {
+        const tab = await chrome.tabs.create({ url, active: false });
+        tabId = tab.id;
+        logDebug("TabPool", `Degraded to hidden background tab for ${platformId}`);
+      } catch (e) { return null; }
+    }
+    if (!tabId) return null;
+
+    this.entries.set(platformId, { windowId: winId, tabId, lastUsedAt: Date.now() });
+    await this._persist();
+    this.ensureGc();
+    return { tabId, reused: false, winId };
+  },
+
+  touch(platformId) {
+    const entry = this.entries.get(platformId);
+    if (entry) {
+      entry.lastUsedAt = Date.now();
+      this._persist();
+    }
+  },
+
+  async evict(platformId) {
+    const entry = this.entries.get(platformId);
+    if (!entry) return;
+    this.entries.delete(platformId);
+    await this._persist();
+    try {
+      if (entry.windowId && typeof chrome !== "undefined" && chrome.windows && chrome.windows.remove) {
+        await chrome.windows.remove(entry.windowId);
+      } else if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.remove) {
+        await chrome.tabs.remove(entry.tabId);
+      }
+    } catch (e) {}
+  },
+
+  async closeIdle(now = Date.now()) {
+    // The GC alarm can wake a freshly restarted service worker whose
+    // in-memory map is empty; re-adopt live windows from the persisted
+    // registry before deciding what to close.
+    await this.hydrate();
+    for (const platformId of Array.from(this.entries.keys())) {
+      const entry = this.entries.get(platformId);
+      if (entry && now - entry.lastUsedAt > POOL_IDLE_CLOSE_MS) {
+        await this.evict(platformId);
+      }
+    }
+  },
+
+  ensureGc() {
+    try {
+      if (typeof chrome === "undefined" || !chrome.alarms) return;
+      chrome.alarms.create(POOL_GC_ALARM, { periodInMinutes: 1 });
+    } catch (e) {}
+  },
+
+  async handleRemovedTab(tabId) {
+    for (const platformId of Array.from(this.entries.keys())) {
+      const entry = this.entries.get(platformId);
+      if (entry && entry.tabId === tabId) {
+        this.entries.delete(platformId);
+        await this._persist();
+      }
+    }
+  }
+};
+
+// After re-navigating a pooled tab, extraction must not run against the
+// previous query's DOM. Cheap tabs.get polling (no DOM walk) waits for the
+// new URL to commit and reach 'complete'; on timeout the caller proceeds and
+// relevance scoring naturally rejects stale-page matches.
+async function waitForPooledTabNavigation(tabId, expectedUrl, budgetMs) {
+  const deadline = Date.now() + Math.max(0, Math.min(budgetMs, 4500));
+  const wanted = (() => { try { return decodeURIComponent(expectedUrl); } catch (e) { return expectedUrl; } })();
+  while (Date.now() < deadline) {
+    let tab = null;
+    try {
+      tab = await chrome.tabs.get(tabId);
+    } catch (e) {
+      return false;
+    }
+    const current = tab ? (tab.url || tab.pendingUrl || "") : "";
+    const decoded = (() => { try { return decodeURIComponent(current); } catch (e) { return current; } })();
+    if (decoded === wanted && tab.status === "complete") return true;
+    await new Promise((r) => setTimeout(r, 80));
+  }
+  return false;
+}
+
+// Ephemeral extraction strategy, restored verbatim from the known-good
+// 19789fb baseline: a fresh minimized window per store query plus patient
+// 500ms polling. A brand-new renderer hydrates reliably for all four stores,
+// and repeated polling gives slow client-side SPAs all the time they need.
+async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 8000) {
   if (typeof chrome === "undefined" || (!chrome.tabs && !chrome.windows)) {
     return null;
   }
@@ -841,7 +1262,7 @@ async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 7500) {
         // Chrome does not guarantee that windows.create returns populated
         // tabs. Resolve the newly-created tab by windowId before giving up,
         // allowing a short propagation delay in the tabs API.
-        if (!tabId && winId && chrome.tabs && chrome.tabs.query) {
+        if (!tabId && winId && chrome.tabs.query) {
           const tabLookupDeadline = Date.now() + 1000;
           while (!tabId && Date.now() < tabLookupDeadline) {
             const tabs = await chrome.tabs.query({ windowId: winId });
@@ -851,25 +1272,26 @@ async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 7500) {
         }
       } catch (winErr) {
         // Fallback to tab creation if window creation fails
+        try {
+          const tab = await chrome.tabs.create({ url, active: false });
+          tabId = tab.id;
+        } catch (e) { return null; }
+      }
+    } else if (chrome.tabs.create) {
+      try {
         const tab = await chrome.tabs.create({ url, active: false });
         tabId = tab.id;
-      }
-    } else if (chrome.tabs && chrome.tabs.create) {
-      const tab = await chrome.tabs.create({ url, active: false });
-      tabId = tab.id;
+      } catch (e) { return null; }
     }
 
     if (!tabId) return null;
 
-    // Poll every 500ms up to timeout (returns immediately once data is ready)
+    // Poll every 500ms up to timeout (returns immediately once data is ready).
+    // Each poll is a short single-pass extraction; the in-page MutationObserver
+    // wait is capped low so passes stay cheap and responsive.
     const startTime = Date.now();
     let data = null;
     while (Date.now() - startTime < timeoutMs) {
-      // Do not time-limit an individual executeScript call here. It may still
-      // be running in the page after Promise.race rejects, and starting a
-      // second extraction in that state causes overlapping full-DOM walks.
-      // The enclosing polling deadline and provider/global timeouts bound the
-      // complete operation without creating that contention.
       data = await extractDataFromTab(tabId, cleanQ);
       if (data && data.price > 0) {
         logDebug("EphemeralTab", `Successfully extracted data from ${url} in ${Date.now() - startTime}ms: "${data.title}" at ₹${data.price}`, data);
@@ -895,6 +1317,22 @@ async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 7500) {
       } catch (e) {}
     }
   }
+}
+
+// Warm DNS/TLS connections to every store origin so the first real navigation
+// skips connection setup. Fire-and-forget; failures are irrelevant here.
+const PREWARM_ORIGINS = [
+  "https://www.amazon.in/",
+  "https://www.swiggy.com/",
+  "https://www.zepto.com/",
+  "https://blinkit.com/"
+];
+
+function preWarmConnections() {
+  if (typeof fetch !== "function") return;
+  PREWARM_ORIGINS.forEach((origin) => {
+    fetchWithTimeout(origin, { mode: "no-cors", cache: "no-store" }, 2500).catch(() => {});
+  });
 }
 
 function isOpenTabMatchingQuery(tabUrl, query) {
@@ -936,9 +1374,13 @@ class AmazonTezProvider extends BaseProvider {
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
       try {
         const allTabs = await chrome.tabs.query({});
+        // Pool-managed tabs hold the PREVIOUS query's page; their URLs can
+        // partially match a new query (e.g. "milk" tab vs "milk 1l" search),
+        // so they must never be treated as user-opened result tabs here.
+        const poolTabIds = await WarmTabPool.managedTabIdSet();
         // Preserve the known-good Tez-only tab routing from 8b34689. Broadly
         // scanning unrelated Amazon tabs can select a non-Now result page.
-        const tezTabs = allTabs.filter(t => t.url && t.url.includes("amazon.in") && (t.url.includes("/tez/") || t.url.includes("searchKeyword")) && isOpenTabMatchingQuery(t.url, cleanQ));
+        const tezTabs = allTabs.filter(t => !poolTabIds.has(t.id) && t.url && t.url.includes("amazon.in") && (t.url.includes("/tez/") || t.url.includes("searchKeyword")) && isOpenTabMatchingQuery(t.url, cleanQ));
         logDebug("AmazonTez", `Found ${tezTabs.length} open matching Amazon Tez tab(s)`);
 
         for (const t of tezTabs) {
@@ -1007,7 +1449,8 @@ class InstamartProvider extends BaseProvider {
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
       try {
         const allTabs = await chrome.tabs.query({});
-        const swiggyTabs = allTabs.filter(t => t.url && t.url.includes("swiggy.com") && isOpenTabMatchingQuery(t.url, cleanQ));
+        const poolTabIds = await WarmTabPool.managedTabIdSet();
+        const swiggyTabs = allTabs.filter(t => !poolTabIds.has(t.id) && t.url && t.url.includes("swiggy.com") && isOpenTabMatchingQuery(t.url, cleanQ));
         logDebug("Instamart", `Found ${swiggyTabs.length} open matching Swiggy tab(s)`);
 
         for (const t of swiggyTabs) {
@@ -1025,15 +1468,18 @@ class InstamartProvider extends BaseProvider {
       } catch (e) {}
     }
 
-    // 3. Direct Background HTML Scraping (like Amazon)
-    try {
-      const searchRes = await fetchWithTimeout(targetUrl, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-        }
-      }, 5000);
-      if (searchRes.ok) {
+    // 3+4. Run the direct background HTML scrape and the pooled background
+    // tab extraction concurrently; the first live result wins instead of
+    // paying for both sequentially.
+    const scrapeViaHtml = async () => {
+      try {
+        const searchRes = await fetchWithTimeout(targetUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+          }
+        }, 5000);
+        if (!searchRes.ok) return null;
         const html = await searchRes.text();
         const cardBlocks = html.split(/data-testid="item-collection-card-full"|class="[^"]*_3Rr1X[^"]*"/);
         const candidates = [];
@@ -1074,27 +1520,37 @@ class InstamartProvider extends BaseProvider {
         }
 
         if (candidates.length > 0) {
+          // Do not put the ranked array on `best` by reference: that would
+          // make the first candidate self-referential and break telemetry
+          // JSON serialization.
           const best = candidates[0];
           best.candidates = candidates.slice(0, 3).map((candidate) => ({ ...candidate }));
-          logDebug("Instamart", `Retrieved first Swiggy result via background scrape: "${best.title}" at ₹${best.price}`, best);
+          logDebug("Instamart", `Retrieved best Swiggy match via background scrape: "${best.title}" at ₹${best.price}`, best);
           return this.formatResult(best, location, cleanQ);
         }
+        return null;
+      } catch (err) {
+        logDebug("Instamart", `Swiggy background fetch error: ${err.message}`);
+        return null;
       }
-    } catch (err) {
-      logDebug("Instamart", `Swiggy background fetch error: ${err.message}`);
-    }
+    };
 
-    // 4. Automated Ephemeral Background Tab Extractor (when background HTML is empty or blocked)
-    try {
-      logDebug("Instamart", `Attempting automated ephemeral background tab extraction for "${cleanQ}"`);
-      const ephemeralData = await fetchViaEphemeralTab(targetUrl, cleanQ);
-      if (ephemeralData && ephemeralData.price > 0) {
-        logDebug("Instamart", `Retrieved live price via ephemeral background tab: ${ephemeralData.title} at ₹${ephemeralData.price}`, ephemeralData);
-        return this.formatResult(ephemeralData, location, cleanQ);
+    const scrapeViaTab = async () => {
+      try {
+        logDebug("Instamart", `Attempting automated ephemeral background tab extraction for "${cleanQ}"`);
+        const ephemeralData = await fetchViaEphemeralTab(targetUrl, cleanQ);
+        if (ephemeralData && ephemeralData.price > 0) {
+          logDebug("Instamart", `Retrieved live price via ephemeral background tab: ${ephemeralData.title} at ₹${ephemeralData.price}`, ephemeralData);
+          return this.formatResult(ephemeralData, location, cleanQ);
+        }
+      } catch (e) {
+        logDebug("Instamart", `Ephemeral tab extraction failed: ${e.message}`);
       }
-    } catch (e) {
-      logDebug("Instamart", `Ephemeral tab extraction failed: ${e.message}`);
-    }
+      return null;
+    };
+
+    const winner = await firstPositive([scrapeViaHtml(), scrapeViaTab()]);
+    if (winner) return winner;
 
     // 5. Fallback: Provide direct search link
     return this.formatResult({
@@ -1131,7 +1587,8 @@ class ZeptoProvider extends BaseProvider {
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
       try {
         const allTabs = await chrome.tabs.query({});
-        const zeptoTabs = allTabs.filter(t => t.url && (t.url.includes("zepto.com") || t.url.includes("zeptonow.com")) && isOpenTabMatchingQuery(t.url, cleanQ));
+        const poolTabIds = await WarmTabPool.managedTabIdSet();
+        const zeptoTabs = allTabs.filter(t => !poolTabIds.has(t.id) && t.url && (t.url.includes("zepto.com") || t.url.includes("zeptonow.com")) && isOpenTabMatchingQuery(t.url, cleanQ));
         logDebug("Zepto", `Found ${zeptoTabs.length} open matching Zepto tab(s)`);
 
         for (const t of zeptoTabs) {
@@ -1196,7 +1653,8 @@ class BlinkitProvider extends BaseProvider {
     if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
       try {
         const allTabs = await chrome.tabs.query({});
-        const blinkitTabs = allTabs.filter(t => t.url && t.url.includes("blinkit.com") && isOpenTabMatchingQuery(t.url, cleanQ));
+        const poolTabIds = await WarmTabPool.managedTabIdSet();
+        const blinkitTabs = allTabs.filter(t => !poolTabIds.has(t.id) && t.url && t.url.includes("blinkit.com") && isOpenTabMatchingQuery(t.url, cleanQ));
         logDebug("Blinkit", `Found ${blinkitTabs.length} open matching Blinkit tab(s)`);
 
         for (const t of blinkitTabs) {
@@ -1252,26 +1710,145 @@ const PROVIDERS = [
 const PROVIDER_TIMEOUT_MS = 11000;
 const SEARCH_TIMEOUT_MS = 12000;
 
-async function handleSearchQuery(query, locationId = null) {
-  if (!query || !query.trim()) return [];
+// ==========================================
+// 5b. SHORT-TTL SEARCH RESULT CACHE
+// Repeat searches for the same item within TTL return instantly. Prices are
+// effectively stable minute-to-minute, so a short window carries near-zero
+// staleness risk while eliminating the full scrape cost.
+// ==========================================
+const SEARCH_CACHE_KEY = "lowp_search_cache_v1";
+class SearchCache {
+  static TTL_MS = 90000;
+  static MAX_ENTRIES = 30;
 
+  // In-memory map is the fast path; chrome.storage.session mirrors it so
+  // entries survive service-worker restarts.
+  static memory = null;
+  static hydration = null;
+
+  static makeKey(pincode, query) {
+    return `${pincode || "unknown"}|${String(query || "").toLowerCase().trim()}`;
+  }
+
+  static async hydrate() {
+    if (this.memory) return this.memory;
+    if (!this.hydration) {
+      this.hydration = (async () => {
+        const map = new Map();
+        try {
+          if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.session) {
+            const res = await new Promise((resolve) => chrome.storage.session.get([SEARCH_CACHE_KEY], resolve));
+            const saved = res && res[SEARCH_CACHE_KEY];
+            if (saved && typeof saved === "object") {
+              Object.keys(saved).forEach((key) => map.set(key, saved[key]));
+            }
+          }
+        } catch (e) {}
+        return map;
+      })();
+    }
+    this.memory = await this.hydration;
+    return this.memory;
+  }
+
+  static persist() {
+    try {
+      if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.session || !this.memory) return;
+      const plain = {};
+      this.memory.forEach((value, key) => { plain[key] = value; });
+      chrome.storage.session.set({ [SEARCH_CACHE_KEY]: plain }, () => {});
+    } catch (e) {}
+  }
+
+  static prune(map, now = Date.now()) {
+    for (const [key, entry] of Array.from(map)) {
+      if (!entry || typeof entry.ts !== "number" || now - entry.ts >= this.TTL_MS) {
+        map.delete(key);
+      }
+    }
+    if (map.size > this.MAX_ENTRIES) {
+      const oldest = Array.from(map.entries()).sort((a, b) => a[1].ts - b[1].ts);
+      while (map.size > this.MAX_ENTRIES) {
+        const [key] = oldest.shift();
+        if (map.has(key)) map.delete(key);
+      }
+    }
+  }
+
+  static async get(pincode, query, now = Date.now()) {
+    const map = await this.hydrate();
+    const key = this.makeKey(pincode, query);
+    const entry = map.get(key);
+    if (!entry) return null;
+    if (now - entry.ts >= this.TTL_MS) {
+      map.delete(key);
+      this.persist();
+      return null;
+    }
+    return entry;
+  }
+
+  static async set(pincode, query, results, now = Date.now()) {
+    const map = await this.hydrate();
+    map.set(this.makeKey(pincode, query), { ts: now, results });
+    this.prune(map, now);
+    this.persist();
+    return true;
+  }
+
+  static resetForTests() {
+    this.memory = null;
+    this.hydration = null;
+  }
+}
+
+async function resolveSearchContext(query, locationId = null) {
   const activeLoc = await LocationService.getActiveLocation();
   let userSettings = activeLoc;
-
   if (locationId) {
     const profiles = await LocationService.getProfiles();
     const custom = profiles.find((p) => p.id === locationId);
     if (custom) userSettings = custom;
   }
+  return { userSettings, cleanQuery: MatchingEngine.cleanSearchTerm(query) };
+}
 
+// Runs every provider in parallel and reports each result through onResult as
+// soon as it settles, so callers can render progressively instead of waiting
+// for the slowest store. Resolves with the fully annotated result array.
+async function streamSearchResults(query, locationId = null, onResult = () => {}) {
+  if (!query || !query.trim()) return [];
+
+  const emit = (store) => {
+    try { onResult(store); } catch (e) {}
+  };
+
+  const { userSettings, cleanQuery } = await resolveSearchContext(query, locationId);
   const startTime = Date.now();
-  const cleanQuery = MatchingEngine.cleanSearchTerm(query);
   logDebug("Search", `Executing search for "${cleanQuery}" in ${userSettings.name} (Pincode: ${userSettings.pincode})`);
+
+  // Cache identity is the RAW search term exactly as typed (only case and
+  // surrounding whitespace normalized). It must never be derived from
+  // cleanSearchTerm output or scored/fuzzed: "milk" and "milk 1l" are
+  // different searches and must never share an entry.
+  const cacheTerm = String(query || "").toLowerCase().trim();
+
+  const cached = await SearchCache.get(userSettings.pincode, cacheTerm);
+  if (cached) {
+    logDebug("Search", `Cache hit for "${cleanQuery}" (age ${Date.now() - cached.ts}ms)`);
+    const cachedResults = cached.results.map((result) => ({ ...result, cachedAt: cached.ts }));
+    cachedResults.forEach(emit);
+    return cachedResults;
+  }
 
   const unavailableResult = (provider, reason) => {
     if (reason) logDebug("ProviderTimeout", `${provider.platformId} ${reason}`);
     return provider.formatResult(null, userSettings, cleanQuery);
   };
+
+  const collected = [];
+  const hasResultFor = (platformId) => collected.some((r) => r.platformId === platformId);
+
   const providerPromises = PROVIDERS.map((provider) =>
     withTimeout(
       Promise.resolve().then(() => provider.search(cleanQuery, userSettings)),
@@ -1280,6 +1857,11 @@ async function handleSearchQuery(query, locationId = null) {
     ).catch((err) => {
       logDebug("ProviderError", `${provider.platformId} failed: ${err.message}`);
       return unavailableResult(provider, err.message.includes("timed out") ? "timed out" : null);
+    }).then((result) => {
+      if (!hasResultFor(result.platformId)) {
+        collected.push(result);
+        emit(result);
+      }
     })
   );
 
@@ -1287,16 +1869,33 @@ async function handleSearchQuery(query, locationId = null) {
   const globalTimeout = new Promise((resolve) => {
     globalTimer = setTimeout(() => {
       logDebug("Search", `Global search timeout reached after ${SEARCH_TIMEOUT_MS}ms`);
-      resolve(PROVIDERS.map((provider) => unavailableResult(provider, "cancelled by global timeout")));
+      PROVIDERS.forEach((provider) => {
+        if (!hasResultFor(provider.platformId)) {
+          const fill = unavailableResult(provider, "cancelled by global timeout");
+          collected.push(fill);
+          emit(fill);
+        }
+      });
+      resolve(null);
     }, SEARCH_TIMEOUT_MS);
   });
-  const rawResults = await Promise.race([Promise.all(providerPromises), globalTimeout]);
+  await Promise.race([Promise.all(providerPromises), globalTimeout]);
   clearTimeout(globalTimer);
-  const annotatedResults = MatchingEngine.annotateBestOffers(rawResults);
+
+  const annotatedResults = MatchingEngine.annotateBestOffers(collected);
+  annotatedResults.sort((a, b) =>
+    PROVIDERS.findIndex((p) => p.platformId === a.platformId) -
+    PROVIDERS.findIndex((p) => p.platformId === b.platformId)
+  );
+  await SearchCache.set(userSettings.pincode, cacheTerm, annotatedResults);
   const durationMs = Date.now() - startTime;
 
   logDebug("Search", `Completed search in ${durationMs}ms (${(durationMs / 1000).toFixed(2)}s). Available stores: ${annotatedResults.filter(r => r.isAvailable && r.priceBreakdown?.finalPayable > 0).length}`);
   return annotatedResults;
+}
+
+async function handleSearchQuery(query, locationId = null) {
+  return streamSearchResults(query, locationId);
 }
 
 // ==========================================
@@ -1318,6 +1917,7 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage)
     const { action, payload } = message;
 
     if (action === "SEARCH_QUERY") {
+      preWarmConnections();
       handleSearchQuery(payload.query, payload.locationId)
         .then((results) => sendResponse({ success: true, data: results }))
         .catch((err) => sendResponse({ success: false, error: err.message }));
@@ -1377,6 +1977,46 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage)
   });
 }
 
+// Progressive search streaming: the panel connects once per search and
+// receives each provider result as it settles, then a final DONE marker.
+if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onConnect) {
+  chrome.runtime.onConnect.addListener((port) => {
+    if (port.name !== "search-stream") return;
+    preWarmConnections();
+
+    port.onMessage.addListener((message) => {
+      if (!message || message.action !== "SEARCH_QUERY_STREAM") return;
+      const payload = message.payload || {};
+      const startedAt = Date.now();
+      streamSearchResults(payload.query, payload.locationId, (store) => {
+        try { port.postMessage({ type: "RESULT", store }); } catch (e) {}
+      })
+        .then((results) => {
+          try {
+            port.postMessage({ type: "DONE", durationMs: Date.now() - startedAt, count: results.length });
+          } catch (e) {}
+        })
+        .catch((err) => {
+          try { port.postMessage({ type: "ERROR", error: err.message }); } catch (e) {}
+        });
+    });
+  });
+}
+
+// Warm tab pool housekeeping.
+if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.onRemoved) {
+  chrome.tabs.onRemoved.addListener((tabId) => {
+    WarmTabPool.handleRemovedTab(tabId);
+  });
+}
+if (typeof chrome !== "undefined" && chrome.alarms && chrome.alarms.onAlarm) {
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm && alarm.name === POOL_GC_ALARM) {
+      WarmTabPool.closeIdle();
+    }
+  });
+}
+
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     DEFAULT_LOCATION,
@@ -1390,6 +2030,10 @@ if (typeof module !== "undefined" && module.exports) {
     BlinkitProvider,
     PROVIDERS,
     handleSearchQuery,
+    streamSearchResults,
+    SearchCache,
+    WarmTabPool,
+    firstPositive,
     DEBUG_LOGS,
     logDebug
   };

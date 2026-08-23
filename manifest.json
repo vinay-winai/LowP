@@ -6,6 +6,7 @@
   "description": "Hyperlocal real-time price comparison across Amazon India, Swiggy Instamart, and Zepto with live in-browser synchronization.",
   "permissions": [
     "storage",
+    "alarms",
     "geolocation",
     "cookies",
     "tabs",

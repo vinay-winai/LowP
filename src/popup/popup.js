@@ -70,7 +70,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (tabs && tabs[0] && tabs[0].url) {
       const activeUrl = tabs[0].url;
       if (activeUrl.includes("amazon.in") || activeUrl.includes("swiggy.com") || activeUrl.includes("zepto.com")) {
-        chrome.tabs.sendMessage(tabs[0].id, { action: "GET_PAGE_PRODUCT_DATA" }, (resp) => {
+        chrome.tabs.sendMessage(tabs[0].id, { action: "GET_PAGE_PRODUCT_DATA", waitMs: 800 }, (resp) => {
           if (chrome.runtime.lastError) {
             return;
           }
@@ -96,12 +96,103 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // 4. Perform Search
+  // 4. Perform Search (progressive: each store card appears as soon as its
+  // provider settles, instead of waiting for all stores)
+  let activeSearchPort = null;
+
+  function disconnectSearchPort() {
+    if (activeSearchPort) {
+      try { activeSearchPort.disconnect(); } catch (e) {}
+      activeSearchPort = null;
+    }
+  }
+
+  function finishSearch(results, { error = null } = {}) {
+    loadingState.style.display = "none";
+    if (error) {
+      cardsGrid.innerHTML = `<div class="error-msg" style="text-align:center; padding:20px; color:#EF4444;">Search failed: ${error}</div>`;
+      updateDebugLogs();
+      return;
+    }
+    currentResults = results;
+    renderCards(results);
+    updateDebugLogs();
+
+    // Enable Add to Matrix if any price is available
+    const hasPrice = currentResults.some(s => s.isAvailable && s.priceBreakdown && s.priceBreakdown.finalPayable > 0);
+    if (addToMatrixBtn) {
+      addToMatrixBtn.disabled = !hasPrice;
+    }
+  }
+
   function performSearch(query) {
     loadingState.style.display = "flex";
     cardsGrid.innerHTML = "";
+    currentResults = [];
     if (addToMatrixBtn) addToMatrixBtn.disabled = true;
+    disconnectSearchPort();
 
+    if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.connect) {
+      legacySearch(query);
+      return;
+    }
+
+    try {
+      activeSearchPort = chrome.runtime.connect({ name: "search-stream" });
+    } catch (e) {
+      legacySearch(query);
+      return;
+    }
+
+    const results = [];
+    const render = () => renderCards(results.slice());
+    const port = activeSearchPort;
+
+    port.onMessage.addListener((msg) => {
+      if (!msg || typeof msg.type !== "string") return;
+
+      if (msg.type === "RESULT" && msg.store) {
+        results.push(msg.store);
+        loadingState.style.display = "none";
+        render();
+        updateDebugLogs();
+        return;
+      }
+
+      if (msg.type === "DONE") {
+        disconnectSearchPort();
+        if (results.length === 0) {
+          cardsGrid.innerHTML = `<div class="error-msg" style="text-align:center; padding:20px; color:var(--text-sub);">No live prices found for this item.</div>`;
+          loadingState.style.display = "none";
+          updateDebugLogs();
+          return;
+        }
+        finishSearch(results.slice());
+        return;
+      }
+
+      if (msg.type === "ERROR") {
+        disconnectSearchPort();
+        if (results.length > 0) {
+          finishSearch(results.slice());
+        } else {
+          finishSearch([], { error: msg.error || "Unknown error" });
+        }
+      }
+    });
+
+    port.onDisconnect.addListener(() => {
+      if (activeSearchPort === port) activeSearchPort = null;
+      // If the worker died mid-stream, fall back to whatever arrived.
+      if (results.length > 0) {
+        finishSearch(results.slice());
+      }
+    });
+
+    port.postMessage({ action: "SEARCH_QUERY_STREAM", payload: { query } });
+  }
+
+  function legacySearch(query) {
     chrome.runtime.sendMessage({
       action: "SEARCH_QUERY",
       payload: { query }
@@ -169,6 +260,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       let badgesHtml = "";
       if (store.isLowestPrice && hasPrice) badgesHtml += `<span class="badge badge-lowest">🏆 Lowest Price</span>`;
+      if (store.cachedAt && hasPrice) badgesHtml += `<span class="badge" style="background:rgba(148,163,184,0.2);color:var(--text-sub);">⚡ Cached</span>`;
 
       let priceHtml = "";
       if (hasPrice) {

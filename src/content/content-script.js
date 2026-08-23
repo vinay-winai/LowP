@@ -37,6 +37,8 @@
   function cleanTitle(str) {
     if (!str || typeof str !== "string") return "";
     return str
+      .replace(/^sponsored\s*/i, "")
+      .replace(/^\s*\d+(?:\.\d+)?\s*%\s*off\s*/i, "")
       .replace(/(?:₹|Rs\.?|INR)\s*[0-9,]+(?:\.[0-9]+)?/gi, "")
       .replace(/\b(?:delivery in\s*)?\d+(?:\s*-\s*\d+)?\s*(?:mins?|minutes?|hours?|sec|seconds?)\b/gi, "")
       .replace(/\b(?:add|options?)\s*\d*\b/gi, "")
@@ -413,24 +415,96 @@
 
     if (candidates.length === 0) return { best: null, candidates: [] };
 
-    const best = candidates[0];
+    // Rank by query relevance so banners/sponsored fragments near a price
+    // never outrank real matches for the searched term.
+    const ranked = candidates.map((c) => Object.assign({}, c, {
+      _score: scoreRelevance(c.title, searchQuery, c.quantity || "")
+    }));
+    ranked.sort((a, b) => b._score - a._score);
+    const qualified = ranked.filter((c) => c._score >= 20);
+    // No/blank query (popup auto-detect): preserve document order untouched.
+    const pool = (searchQuery && searchQuery.trim() && qualified.length > 0) ? qualified : ranked;
+    const best = pool[0] || candidates[0];
     return {
       best,
-      candidates: candidates.slice(0, 3)
+      candidates: pool.slice(0, 3)
     };
+  }
+
+  // Wait for product markup to appear instead of failing after a single
+  // synchronous pass. MutationObserver reacts to real DOM changes (timer
+  // throttling does not affect it in background tabs); the trailing timeout
+  // covers mutations suppressed by the rate limiter, and the hard deadline
+  // bounds the total wait.
+  function waitForExtraction(searchQuery, waitMs) {
+    const startedAt = Date.now();
+    const budget = Number.isFinite(waitMs) ? Math.max(0, Math.min(Number(waitMs), 15000)) : 2000;
+
+    const runOnce = () => extractStorePageData(searchQuery);
+    const isValid = (extraction) => !!(extraction && extraction.best && extraction.best.price > 0);
+
+    const first = runOnce();
+    if (isValid(first) || typeof MutationObserver === "undefined" || !document.body) {
+      return Promise.resolve(first);
+    }
+
+    return new Promise((resolve) => {
+      let settled = false;
+      let lastAttempt = 0;
+      let trailingScheduled = false;
+      let deadlineTimer = null;
+
+      const finishWith = (res) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(deadlineTimer);
+        try { observer.disconnect(); } catch (e) {}
+        resolve(res);
+      };
+
+      const attempt = () => {
+        if (settled) return;
+        const now = Date.now();
+        if (now - lastAttempt < 200) {
+          if (!trailingScheduled) {
+            trailingScheduled = true;
+            setTimeout(() => { trailingScheduled = false; attempt(); }, 220);
+          }
+          return;
+        }
+        lastAttempt = now;
+        const res = runOnce();
+        if (isValid(res) || Date.now() - startedAt >= budget) finishWith(res);
+      };
+
+      const observer = new MutationObserver(attempt);
+
+      observer.observe(document.body, { childList: true, subtree: true });
+      deadlineTimer = setTimeout(() => finishWith(runOnce()), Math.max(0, startedAt + budget - Date.now()));
+    });
   }
 
   // Handle messages from Extension Popup & Background Worker
   if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.action === "GET_PAGE_PRODUCT_DATA") {
-        const extraction = extractStorePageData(message.query || "");
-        const bestData = extraction?.best;
-        if (bestData && bestData.price > 0) {
-          sendResponse({ success: true, data: bestData, candidates: extraction.candidates || [] });
+        // When a URL token is supplied (pooled-tab extraction), the page must
+        // belong to the current query. A stale page will not self-correct, so
+        // fail fast instead of waiting.
+        const token = message.expectedUrlToken;
+        if (token && !String(window.location.href || "").toLowerCase().includes(String(token).toLowerCase())) {
+          sendResponse({ success: false, data: null, reason: "url_mismatch" });
           return true;
         }
-        sendResponse({ success: false, data: null });
+        const waitMs = Number.isFinite(message.waitMs) ? message.waitMs : 2000;
+        waitForExtraction(message.query || "", waitMs).then((extraction) => {
+          const bestData = extraction?.best;
+          if (bestData && bestData.price > 0) {
+            sendResponse({ success: true, data: bestData, candidates: extraction.candidates || [] });
+            return;
+          }
+          sendResponse({ success: false, data: null });
+        });
         return true;
       }
     });

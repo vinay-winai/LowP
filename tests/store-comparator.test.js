@@ -30,7 +30,11 @@ const {
   InstamartProvider,
   ZeptoProvider,
   BlinkitProvider,
-  handleSearchQuery
+  handleSearchQuery,
+  streamSearchResults,
+  SearchCache,
+  WarmTabPool,
+  firstPositive
 } = require('../src/background/service-worker.js');
 
 test('MatchingEngine - calculateTotalCost computes pure base price and savings', () => {
@@ -186,4 +190,128 @@ test('handleSearchQuery - executes parallel search and returns 4 quick commerce 
   assert.ok(results.some(r => r.platformId === 'instamart'));
   assert.ok(results.some(r => r.platformId === 'zepto'));
   assert.ok(results.some(r => r.platformId === 'blinkit'));
+});
+
+test('firstPositive - resolves with the first truthy result', async () => {
+  const slow = new Promise((resolve) => setTimeout(() => resolve(null), 50));
+  const fast = Promise.resolve({ id: 'fast' });
+  const winner = await firstPositive([slow, fast]);
+  assert.strictEqual(winner.id, 'fast');
+});
+
+test('firstPositive - resolves null when every attempt fails or yields nothing', async () => {
+  const winner = await firstPositive([
+    Promise.reject(new Error('boom')),
+    new Promise((resolve) => setTimeout(() => resolve(null), 10))
+  ]);
+  assert.strictEqual(winner, null);
+});
+
+test('SearchCache - round-trips entries and expires them after the TTL', async () => {
+  SearchCache.resetForTests();
+  const t0 = 1000000;
+  await SearchCache.set('500085', 'cache ttl probe', [{ platformId: 'zepto' }], t0);
+
+  const fresh = await SearchCache.get('500085', 'Cache TTL Probe', t0 + 1000);
+  assert.ok(fresh && Array.isArray(fresh.results));
+
+  const expired = await SearchCache.get('500085', 'cache ttl probe', t0 + SearchCache.TTL_MS + 1);
+  assert.strictEqual(expired, null);
+});
+
+test('SearchCache - evicts oldest entries beyond the cap', async () => {
+  SearchCache.resetForTests();
+  const base = 2000000;
+  for (let i = 0; i < 35; i++) {
+    await SearchCache.set('500085', `item ${i}`, [{ index: i }], base + i * 10);
+  }
+  const map = await SearchCache.hydrate();
+  assert.ok(map.size <= SearchCache.MAX_ENTRIES);
+
+  const evicted = await SearchCache.get('500085', 'item 0', base);
+  assert.strictEqual(evicted, null);
+
+  const kept = await SearchCache.get('500085', 'item 34', base + 340);
+  assert.ok(kept);
+});
+
+test('WarmTabPool - maps store URLs to platform ids', () => {
+  assert.strictEqual(WarmTabPool.detectPlatformId('https://www.amazon.in/tez/browse/search?searchKeyword=milk'), 'amazon_tez');
+  assert.strictEqual(WarmTabPool.detectPlatformId('https://www.swiggy.com/instamart/search?query=milk'), 'instamart');
+  assert.strictEqual(WarmTabPool.detectPlatformId('https://www.zeptonow.com/search?query=milk'), 'zepto');
+  assert.strictEqual(WarmTabPool.detectPlatformId('https://blinkit.com/s/?q=milk'), 'blinkit');
+  assert.strictEqual(WarmTabPool.detectPlatformId('https://example.com/'), null);
+});
+
+test('streamSearchResults - emits each provider result as it settles then resolves the annotated set', async () => {
+  SearchCache.resetForTests();
+  const emitted = [];
+  const results = await streamSearchResults('emission probe', null, (store) => emitted.push(store.platformId));
+
+  assert.strictEqual(emitted.length, 4);
+  assert.strictEqual(results.length, 4);
+  assert.deepStrictEqual(
+    results.map((r) => r.platformId).sort(),
+    ['amazon_tez', 'blinkit', 'instamart', 'zepto']
+  );
+});
+
+test('handleSearchQuery - serves repeat queries from the short-TTL cache without re-running providers', async () => {
+  SearchCache.resetForTests();
+  const seedTs = Date.now();
+  const seededResults = [
+    { platformId: 'amazon_tez', isAvailable: true, priceBreakdown: { finalPayable: 99 }, isLowestPrice: true },
+    { platformId: 'instamart', isAvailable: false, priceBreakdown: null, isLowestPrice: false }
+  ];
+  await SearchCache.set(DEFAULT_LOCATION.pincode, 'cache hit probe', seededResults, seedTs);
+
+  const results = await handleSearchQuery('cache hit probe');
+
+  assert.strictEqual(results.length, 2);
+  assert.ok(results.every((r) => typeof r.cachedAt === 'number' && r.cachedAt >= seedTs));
+  assert.deepStrictEqual(
+    results.map((r) => r.platformId),
+    ['amazon_tez', 'instamart']
+  );
+});
+
+test('SearchCache - treats variations of a search term as distinct entries', async () => {
+  SearchCache.resetForTests();
+  const seedTs = Date.now();
+  await SearchCache.set(DEFAULT_LOCATION.pincode, 'milk', [
+    { platformId: 'amazon_tez', isAvailable: true, priceBreakdown: { finalPayable: 30 }, title: 'plain milk' }
+  ], seedTs);
+
+  // "milk 1l" must NOT be served from the "milk" entry...
+  const miss = await SearchCache.get(DEFAULT_LOCATION.pincode, 'milk 1l', seedTs + 1000);
+  assert.strictEqual(miss, null);
+
+  // ...and only an exact term match (case/whitespace aside) hits.
+  const hit = await SearchCache.get(DEFAULT_LOCATION.pincode, '  MILK ', seedTs + 1000);
+  assert.ok(hit);
+});
+
+test('MatchingEngine - relevance ranking rejects promo-banner fragments for the searched term', () => {
+  // Mirrors the candidate set observed on Amazon Tez where proximity
+  // extraction grabs sponsored banners before the product grid hydrates.
+  const candidates = [
+    { title: '54% OFFFresh Milk Pouch', price: 30 },
+    { title: 'Sunfeast YiPPee! Magic Masala Noodles', price: 131 },
+    { title: 'MAGGI 2-Minute Instant Masala Noodles', price: 60 }
+  ];
+  const query = 'maggi';
+  const ranked = candidates
+    .map((c) => Object.assign({}, c, { _score: MatchingEngine.scoreRelevance(c.title, query) }))
+    .sort((a, b) => b._score - a._score);
+
+  assert.strictEqual(ranked[0].title, 'MAGGI 2-Minute Instant Masala Noodles');
+  assert.ok(ranked[0]._score >= 20);
+});
+
+test('MatchingEngine - cleanTitle-style rules strip glued discount and sponsored prefixes', () => {
+  const raw = 'Sponsored54% OFFFresh Milk Pouch';
+  const cleaned = raw
+    .replace(/^sponsored\s*/i, "")
+    .replace(/^\s*\d+(?:\.\d+)?\s*%\s*off\s*/i, "");
+  assert.strictEqual(cleaned, 'Fresh Milk Pouch');
 });
