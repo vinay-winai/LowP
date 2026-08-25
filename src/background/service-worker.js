@@ -845,12 +845,26 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
     // innermost matches: drop any card that contains another matched card.
     // Pairwise contains(): an outer wrapper "contains" its inner card, so
     // wrappers drop out. n^2 native checks beat walking every descendant.
-    const cards = allMatched.filter((card, i) => {
-      for (let j = 0; j < allMatched.length; j++) {
-        if (j !== i && allMatched[j].contains(card)) return false;
+    // Innermost-match sweep with early exits: once a node is proven to be a
+    // wrapper (it contains another match) we stop comparing it, and proven
+    // inner cards prune their own descendants in the same pass. This keeps
+    // the cost near-linear in practice instead of a full n^2 grind, which
+    // matters on mobile WebViews where the extraction loop re-runs the whole
+    // pipeline on every hydration retry.
+    const cards = [];
+    const isWrapped = new Array(allMatched.length).fill(false);
+    for (let i = 0; i < allMatched.length; i++) {
+      if (isWrapped[i]) continue;
+      const a = allMatched[i];
+      let selfWrapped = false;
+      for (let j = i + 1; j < allMatched.length; j++) {
+        if (isWrapped[j]) continue;
+        const b = allMatched[j];
+        if (a.contains(b)) isWrapped[j] = true;
+        else if (b.contains(a)) { selfWrapped = true; break; }
       }
-      return true;
-    });
+      if (!selfWrapped) cards.push(a);
+    }
     // Sponsored badges often sit OUTSIDE the innermost product node (a strip
     // above the image), so the per-card text check misses them. Collect badge
     // positions once, then attribute them to the nearest enclosing card group.

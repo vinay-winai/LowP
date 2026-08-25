@@ -13,10 +13,39 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
   const searchQuery = ${sanitizedQuery};
   const targetPlatformId = ${sanitizedPlatformId};
 
+  function titleKey(str) {
+    return String(str || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  }
+
+  // Same physical product scraped twice (outer grid cell + inner card, or at
+  // two ancestor depths) must not yield two candidates. Titles scraped from
+  // different depths differ by a glued pack size, so equal-priced containment
+  // counts as a duplicate too.
+  function isDuplicateCandidate(list, item) {
+    const key = titleKey(item.title);
+    return list.some((c) => {
+      if (c.price !== item.price) return false;
+      const k = titleKey(c.title);
+      return k === key ||
+        (key.length >= 8 && k.includes(key)) ||
+        (k.length >= 8 && key.includes(k));
+    });
+  }
+
   function isBadTitle(str) {
     if (!str || typeof str !== "string") return true;
     const s = str.trim().toLowerCase();
     if (s.length < 2 || s.length > 150) return true;
+
+    // Reject numeric / unit fragments ("/100 ml", "466", "% off") that the
+    // generic text fallback sometimes grabs instead of a real product name.
+    if ((s.match(/[a-z]/g) || []).length < 3) return true;
+
+    // Reject UI glyph names picked up as text ("down-chevron-icon", svg ids).
+    if (/(^|[\s-])(icon|chevron|arrow|sprite|svg)([\s-]|$)|-icon$/.test(s)) return true;
+
+    // Reject shelf/category labels and badges scraped instead of a name.
+    if (/previously bought|earlier bought|already bought/.test(s)) return true;
 
     const bannedPatterns = [
       /^(home|cart|search|login|help|offers|new|corporate|swiggy|zepto|amazon|blinkit|menu|account|profile|orders|notifications)$/i,
@@ -233,7 +262,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
             const rawMrp = o.mrp || rawPrice;
             const mrp = typeof rawMrp === 'number' ? (rawMrp > 1000 ? rawMrp / 100 : rawMrp) : parseFloat(rawMrp);
             if (cleanT && price > 0 && !isBadTitle(cleanT)) {
-              if (!candidates.some(c => c.title === cleanT && c.price === price)) {
+              if (!isDuplicateCandidate(candidates, { title: cleanT, price })) {
                 candidates.push({
                   title: cleanT,
                   price,
@@ -284,14 +313,67 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       'div[data-asin]'
     ];
 
-    const cards = document.querySelectorAll(cardSelectors.join(', '));
+    const allMatched = Array.from(document.querySelectorAll(cardSelectors.join(', ')));
+    // Amazon wraps every product in BOTH an outer grid cell and an inner card
+    // container; both match broad selectors so the same product is scraped
+    // twice. Keep only innermost matches via pairwise contains().
+    // Innermost-match sweep with early exits: once a node is proven to be a
+    // wrapper (it contains another match) we stop comparing it, and proven
+    // inner cards prune their own descendants in the same pass. This keeps
+    // the cost near-linear in practice instead of a full n^2 grind, which
+    // matters on mobile WebViews where the extraction loop re-runs the whole
+    // pipeline on every hydration retry.
+    const cards = [];
+    const isWrapped = new Array(allMatched.length).fill(false);
+    for (let i = 0; i < allMatched.length; i++) {
+      if (isWrapped[i]) continue;
+      const a = allMatched[i];
+      let selfWrapped = false;
+      for (let j = i + 1; j < allMatched.length; j++) {
+        if (isWrapped[j]) continue;
+        const b = allMatched[j];
+        if (a.contains(b)) isWrapped[j] = true;
+        else if (b.contains(a)) { selfWrapped = true; break; }
+      }
+      if (!selfWrapped) cards.push(a);
+    }
+    let scannedCards = 0;
     for (const card of cards) {
+      if (++scannedCards > 150) break;
       const item = extractFromCard(card, targetPlatformId);
-      if (item && item.price > 0 && !candidates.some(c => c.title === item.title && c.price === item.price)) {
+      if (item && item.price > 0 && !isDuplicateCandidate(candidates, item)) {
+        item.__el = card;
         candidates.push(item);
         if (candidates.length >= 20) break;
       }
     }
+    // Sponsored badges often sit OUTSIDE the innermost product node, so mark
+    // items by geometry: badge rect -> nearest product card below it.
+    try {
+      const sponsoredRoots = [];
+      const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let tn;
+      while ((tn = tw.nextNode())) {
+        if (/^sponsored$/i.test((tn.nodeValue || "").trim()) && tn.parentElement) {
+          sponsoredRoots.push(tn.parentElement);
+        }
+      }
+      const itemRects = sponsoredRoots.length
+        ? candidates.filter((c) => c.__el).map((ci) => ({ ci, r: ci.__el.getBoundingClientRect() }))
+        : [];
+      for (const root of sponsoredRoots) {
+        const b = root.getBoundingClientRect();
+        let best = null;
+        for (const ir of itemRects) {
+          const vGap = ir.r.top - b.bottom;
+          if (vGap < -24 || vGap > 220) continue;
+          const overlap = Math.min(ir.r.right, b.right) - Math.max(ir.r.left, b.left);
+          if (overlap < Math.min(ir.r.width, b.width) * 0.4) continue;
+          if (!best || vGap < best.vGap) best = { ci: ir.ci, vGap };
+        }
+        if (best) best.ci.sponsored = true;
+      }
+    } catch (e) {}
 
     // 3. Proximity Fallback — the most expensive walk. Skip it while the
     // document is still a shell, cap the scan, and use targeted nodes for
@@ -311,7 +393,8 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
             let depth = 0;
             while (parent && depth < 6 && parent !== document.body) {
               const item = extractFromCard(parent, targetPlatformId);
-              if (item && item.price > 0 && !candidates.some(c => c.title === item.title && c.price === item.price)) {
+              if (item && item.price > 0 && !isDuplicateCandidate(candidates, item)) {
+                item.__el = parent;
                 candidates.push(item);
                 break;
               }
@@ -335,11 +418,20 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       return { best: null, candidates: [], found: 0 };
     }
 
+    // Strip element references BEFORE anything crosses the React Native
+    // bridge: DOM nodes are not serializable and leak from BOTH the
+    // card-selector path and the proximity-fallback path.
+    candidates.forEach((ci) => { delete ci.__el; });
+
     // Rank by query relevance so banners/sponsored fragments near a price
     // never outrank real matches for the searched term.
     const ranked = candidates.map((c) => Object.assign({}, c, {
-      _score: scoreRelevance(c.title, searchQuery, c.quantity || "")
+      _score: scoreRelevance(c.title, searchQuery, c.quantity || "") - (c.sponsored ? 60 : 0)
     }));
+    // Amazon Tez pins its sponsored/ad slot at position #1 of the listing.
+    // Badge detection there is unreliable, so apply a flat demotion to the
+    // first-listed candidate regardless.
+    if (targetPlatformId === "amazon_tez" && ranked.length > 0) ranked[0]._score -= 30;
     ranked.sort((a, b) => b._score - a._score);
     const qualified = ranked.filter((c) => c._score >= 20);
     // No/blank query: preserve document order untouched.
