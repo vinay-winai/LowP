@@ -70,7 +70,7 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
           onStoreResult(platformId, null, elapsed);
         }
       });
-    }, 10000);
+    }, 9000);
 
     return () => clearTimeout(timeout);
   }, [searchId, searchQuery]);

@@ -242,21 +242,44 @@ class MatchingEngine {
       .replace(/\s+/g, " ")
       .trim();
 
-    const fullText = normalize(`${itemTitle} ${packSize}`);
+    // Rank on BOTH views of the title: the primary name with parenthetical
+    // alt names removed ("Potato (Aalugadda)" -> "Potato") keeps ranking
+    // focused, while the untouched title still lets users find items by
+    // their alternate name ("searching aalugadda"). The better score wins.
+    const fullText = normalize(String(itemTitle).replace(/\([^)]*\)/g, " ") + " " + packSize);
+    const fullTextAlt = normalize(`${itemTitle} ${packSize}`);
     const q = normalize(query);
     const queryTokens = q.split(/\s+/).filter(t => t.length > 0);
 
     let score = 0;
+    let altScore = 0;
+
+    const matchToken = (text, token) => {
+      if (text.includes(token)) return 30;
+      if (token.endsWith('s') && token.length > 3 && text.includes(token.slice(0, -1))) return 25;
+      if (!token.endsWith('s') && text.includes(token + 's')) return 25;
+      return 0;
+    };
 
     queryTokens.forEach(token => {
-      if (fullText.includes(token)) {
-        score += 30;
-      } else if (token.endsWith('s') && token.length > 3 && fullText.includes(token.slice(0, -1))) {
-        score += 25;
-      } else if (!token.endsWith('s') && fullText.includes(token + 's')) {
-        score += 25;
-      }
+      score += matchToken(fullText, token);
+      altScore += matchToken(fullTextAlt, token);
     });
+    score = Math.max(score, altScore);
+    // Exact-name preference: a product whose PRIMARY name (parentheticals
+    // removed) starts with the query ("Onion (...)" for "onion") outranks
+    // products that merely contain the word ("Sambar Onion (...)").
+    const strippedTitle = normalize(String(itemTitle).replace(/\([^)]*\)/g, " "));
+    if (q && strippedTitle.startsWith(q)) score += 20;
+
+    // Variety modifiers denote DIFFERENT products ("spring onion",
+    // "sambar onion", "green onion" are not generic onions) — rank them
+    // below plain matches instead of letting them tie on relevance.
+    const VARIETY_MODIFIERS = ["spring", "sambar", "green", "bunch", "shallot"];
+    if (q) {
+      const varietyRx = new RegExp("\\b(" + VARIETY_MODIFIERS.join("|") + ")\\s+" + q + "\\b");
+      if (varietyRx.test(strippedTitle)) score -= 15;
+    }
 
     const qtyMatch = query.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
     if (qtyMatch) {
@@ -387,7 +410,11 @@ class BaseProvider {
 
 async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
   function titleKey(str) {
-    return String(str || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    // Drop parenthetical alt names so "Potato (Aalugadda)" and "Potato"
+    // dedupe as the same product at the same price.
+    return String(str || "").replace(/\([^)]*\)/g, " ")
+      .replace(/(?<=[a-z])(?=\d)/gi, " ").replace(/(?<=\d)(?=[a-z])/gi, " ")
+      .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   }
 
   // Same physical product scraped twice (outer grid cell + inner card) must
@@ -456,6 +483,10 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
       .replace(/\b(?:delivery in\s*)?\d+(?:\s*-\s*\d+)?\s*(?:mins?|minutes?|hours?|sec|seconds?)\b/gi, "")
       .replace(/\b(?:fastest delivery|standard delivery|instant delivery|express delivery|free delivery|delivery)\b/gi, "")
       .replace(/\b(?:mrp|add|buy|added|in stock|out of stock|off|\d+%\s*off|save)\b/gi, "")
+      // Split glued boundaries FIRST so welded button text separates
+      // ("Potato1 kgAdd" -> "Potato1 kg Add"), then strip UI verbs.
+      .replace(/(?<=[a-z])(?=[A-Z])/g, " ")
+      .replace(/\badd\b/gi, "")
       .replace(/\b(?:previously bought|earlier bought)\b/gi, "")
       // Stray UI glyph letters glued to the end ("... Cow MilkR" from an
       // R-badge text node). Only strip a lone capital appended to a word;
@@ -474,7 +505,12 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
       .replace(/[^a-z0-9\s]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
-    const fullText = normalize(`${itemTitle} ${packSize}`);
+    // Rank on BOTH views of the title: the primary name with parenthetical
+    // alt names removed ("Potato (Aalugadda)" -> "Potato") keeps ranking
+    // focused, while the untouched title still lets users find items by
+    // their alternate name ("searching aalugadda"). The better score wins.
+    const fullText = normalize(String(itemTitle).replace(/\([^)]*\)/g, " ") + " " + packSize);
+    const fullTextAlt = normalize(`${itemTitle} ${packSize}`);
     const q = normalize(query);
     const tokens = q.split(/\s+/).filter(Boolean);
     let score = 0;
@@ -851,20 +887,32 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
     // the cost near-linear in practice instead of a full n^2 grind, which
     // matters on mobile WebViews where the extraction loop re-runs the whole
     // pipeline on every hydration retry.
-    const cards = [];
-    const isWrapped = new Array(allMatched.length).fill(false);
-    for (let i = 0; i < allMatched.length; i++) {
-      if (isWrapped[i]) continue;
-      const a = allMatched[i];
-      let selfWrapped = false;
-      for (let j = i + 1; j < allMatched.length; j++) {
-        if (isWrapped[j]) continue;
-        const b = allMatched[j];
-        if (a.contains(b)) isWrapped[j] = true;
-        else if (b.contains(a)) { selfWrapped = true; break; }
+    // Product-card selection: keep matched nodes holding an image plus a
+    // plausible price in their text. Some stores (Blinkit) render prices as
+    // bare "₹77" text with no class hooks, so a price ELEMENT probe fails.
+    // Qualify on price-text only. Requiring an <img> races Blinkit's lazy
+    // image insertion and drops real cards during early passes.
+    let cards = allMatched.filter((c) => {
+      const t = c.textContent || "";
+      if (/(?:₹|Rs\.?|INR)\s*[0-9,]{1,6}/i.test(t)) return true;
+      for (const el of c.querySelectorAll("div, span, p")) {
+        if (el.children && el.children.length > 0) continue;
+        if (/^[0-9]{1,6}$/.test((el.textContent || "").trim())) return true;
       }
-      if (!selfWrapped) cards.push(a);
-    }
+      return false;
+    });
+    // Prefer image-holding cards when available (better titles via alt text),
+    // but never at the cost of dropping price-valid cards that lack images yet.
+    const withImg = cards.filter((c) => c.querySelector("img"));
+    if (withImg.length >= 3) cards = withImg;
+    // If several nested matches qualify, keep the innermost per family
+    // (drop the node that CONTAINS another qualifying node).
+    cards = cards.filter((c, i) => {
+      for (let j = 0; j < cards.length; j++) {
+        if (j !== i && c.contains(cards[j])) return false;
+      }
+      return true;
+    });
     // Sponsored badges often sit OUTSIDE the innermost product node (a strip
     // above the image), so the per-card text check misses them. Collect badge
     // positions once, then attribute them to the nearest enclosing card group.
@@ -873,7 +921,7 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
       const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       let tn;
       while ((tn = tw.nextNode())) {
-        if (/^sponsored$/i.test((tn.nodeValue || "").trim()) && tn.parentElement) {
+        if (/^(?:sponsored|ad)$/i.test((tn.nodeValue || "").trim()) && tn.parentElement) {
           sponsoredRoots.push(tn.parentElement);
         }
       }
@@ -882,13 +930,15 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
     let scannedCards = 0;
     const cardItems = [];
     for (const card of cards) {
-      if (++scannedCards > 150) break;
+      if (++scannedCards > 60) break;
       const item = extractFromCard(card, platformId);
       if (item && item.price > 0 && !isDuplicateCandidate(candidates, item)) {
         item.__el = card;
         cardItems.push(item);
         candidates.push(item);
-        if (candidates.length >= 20) break;
+        // Only the store's own top listings matter: deep-page sponsored
+        // strips were polluting results. 5 is enough to pick a best-of-3.
+        if (candidates.length >= 5) break;
       }
     }
 
@@ -923,7 +973,7 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
               parent = parent.parentElement;
               depth++;
             }
-            if (candidates.length >= 20) break;
+            if (candidates.length >= 5) break;
           }
         }
       }
@@ -940,25 +990,41 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
     // vertical proximity is what the visual layout actually guarantees.
     const allItems = candidates.filter((c) => c.__el);
     try {
+      // Attribution must be tight: an "Ad" chip belongs to the product in the
+      // SAME grid cell — directly below within one row height (~120px) and
+      // horizontally inside that cell. Loose windows mis-attribute to the
+      // next row's organic products and wrongly demote them.
       const itemRects = allItems.map((ci) => ({ ci, r: ci.__el.getBoundingClientRect() }));
       for (const root of sponsoredRoots) {
-        const b = root.getBoundingClientRect();
-        let best = null;
-        for (const ir of itemRects) {
-          // must sit below the badge and overlap its horizontal span
-          const vGap = ir.r.top - b.bottom;
-          if (vGap < -24 || vGap > 220) continue;
-          const overlap = Math.min(ir.r.right, b.right) - Math.max(ir.r.left, b.left);
-          if (overlap < Math.min(ir.r.width, b.width) * 0.4) continue;
-          if (!best || vGap < best.vGap) best = { ci: ir.ci, vGap };
+        let cellRoot = root;
+        for (let up = 0; up < 4 && cellRoot.parentElement; up++) {
+          cellRoot = cellRoot.parentElement;
+          if (cellRoot.getBoundingClientRect().width > 120) break;
         }
-        if (best) best.ci.sponsored = true;
+        const cw = cellRoot.getBoundingClientRect();
+        for (const ir of itemRects) {
+          const vGap = ir.r.top - cw.bottom;
+          if (vGap < -8 || vGap > 120) continue;
+          const overlapStart = Math.max(ir.r.left, cw.left);
+          const overlapEnd = Math.min(ir.r.right, cw.right);
+          if (overlapEnd - overlapStart < Math.min(ir.r.width, cw.width) * 0.5) continue;
+          ir.ci.sponsored = true;
+          break;
+        }
       }
     } catch (e) {}
     // DOM nodes cannot cross the extension messaging boundary.
     allItems.forEach((ci) => { delete ci.__el; });
-    if (platformId === "blinkit" && !isPDP && candidates.length > 0) {
-      candidates.shift();
+    // Old behavior dropped Blinkit's first listing unconditionally (it used to
+    // be a search-header card echoing the query verbatim, e.g. title "raw mango"
+    // with another item's price). Only strip when the title is EXACTLY the
+    // query — real products always carry brand/pack/variant words.
+    if (platformId === "blinkit" && !isPDP && candidates.length > 1) {
+      const firstTitle = String(candidates[0].title || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+      const qNorm = String(searchQuery || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+      if (qNorm && firstTitle === qNorm) {
+        candidates.shift();
+      }
     }
 
   if (candidates.length === 0) {
@@ -980,15 +1046,27 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
 
   // Rank by query relevance so banners/sponsored fragments that happen to
   // sit near a price never outrank real matches for the searched term.
-  const ranked = candidates.map((c) => Object.assign({}, c, {
-    _score: scoreCandidate(c.title, searchQuery, c.quantity || "") - (c.sponsored ? 60 : 0)
-  }));
-  // Amazon Tez pins its sponsored/ad slot at position #1 of the listing.
-  // Badge detection there is unreliable, so apply a flat demotion to the
-  // first-listed candidate regardless.
-  if (platformId === "amazon_tez" && ranked.length > 0) ranked[0]._score -= 30;
+  // Word-level relevance: the word is the minimum matching unit (no
+  // character substrings). Score counts how many query words appear in the
+  // title; ties keep the store's own display order (stable sort).
+  const qWords = String(searchQuery || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
+  const stem = (w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w);
+  const ranked = candidates.map((c) => {
+    // Split glued letter/digit boundaries ("Potato1 kg" -> "potato","kg"):
+    // Tez glues title+packSize into one string, and without this the token
+    // "potato1" never matches the query word "potato".
+    const tSet = new Set(
+      String(c.title || "").replace(/\([^)]*\)/g, " ")
+        .replace(/(?<=[a-z])(?=\d)/gi, " ").replace(/(?<=\d)(?=[a-z])/gi, " ")
+        .toLowerCase().replace(/[^a-z0-9\s]/g, " ")
+        .split(/\s+/).filter(Boolean).map(stem)
+    );
+    let _score = 0;
+    for (const w of qWords) if (tSet.has(stem(w))) _score += 1;
+    return Object.assign({}, c, { _score });
+  });
   ranked.sort((a, b) => b._score - a._score);
-  const qualified = ranked.filter((c) => c._score >= 20);
+  const qualified = ranked.filter((c) => c._score > 0);
   // No/blank query (popup auto-detect): preserve document order untouched.
   const pool = (searchQuery && searchQuery.trim() && qualified.length > 0) ? qualified : ranked;
   const best = pool[0] || candidates[0];
@@ -1027,7 +1105,12 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
   const budget = Number.isFinite(waitMs) ? Math.max(0, Math.min(Number(waitMs), 15000)) : 1500;
   const startedAt = Date.now();
   const wantedToken = expectedUrlToken ? String(expectedUrlToken).toLowerCase() : null;
-  const hrefMatches = () => !wantedToken || String(window.location.href || "").toLowerCase().includes(wantedToken);
+  const hrefMatches = () => {
+      if (!wantedToken) return true;
+      let href = String(window.location.href || "").toLowerCase();
+      try { href += " " + (decodeURIComponent(href)); } catch (e) {}
+      return href.includes(wantedToken);
+    };
   const isValidResult = (res) => !!res && res.success === true && hrefMatches();
   // Never let a deadline convert a URL-mismatched (stale page) success into a
   // usable result: downgrade it to an explicit failure instead.
@@ -1493,10 +1576,9 @@ async function waitForPooledTabNavigation(tabId, expectedUrl, budgetMs) {
 // share one position (see the stagger comment inside fetchViaEphemeralTab).
 let ephemeralWindowSeq = 0;
 
-// 15s: cold SPA loads (notably Blinkit after an extension reload wipes the
-// warm tab pool) regularly exceed the previous 8s budget before rendering
-// their product grid, even though warm loads land in 3-4s.
-async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 15000) {
+// 9s: enough for warm loads (3-4s typical) plus a cold-load margin;
+// longer budgets just delay the user-facing failure when a store is down.
+async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 9000) {
   if (typeof chrome === "undefined" || (!chrome.tabs && !chrome.windows)) {
     return null;
   }
@@ -1567,19 +1649,50 @@ async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 15000) {
     // wait is capped low so passes stay cheap and responsive.
     const startTime = Date.now();
     let data = null;
+    let nudged = false;
+    let passCount = 0;
+    // SPAs hydrate progressively: the first passing extraction can see a
+    // PARTIAL grid (Blinkit streams rows in). Keep polling and keep the
+    // RICHEST result (most candidates) instead of taking the first success.
+    let stablePasses = 0;
     while (Date.now() - startTime < timeoutMs) {
-      const extracted = await extractDataFromTabDetailed(tabId, cleanQ);
-      data = extracted.data;
-      if (data && data.price > 0) {
-        logDebug("EphemeralTab", `Successfully extracted data from ${url} in ${Date.now() - startTime}ms: "${data.title}" at ₹${data.price}`, data);
-        break;
+      const extracted = await extractDataFromTabDetailed(tabId, cleanQ, 0, cleanQ);
+      const cand = (extracted.data && extracted.data.price > 0)
+        ? Object.assign({}, extracted.data, { _nc: ((extracted.data.candidates || []).length + 1) })
+        : null;
+
+      const curCount = data ? (data._nc || 0) : -1;
+      if (cand && (!data || cand._nc > curCount)) {
+        data = cand;
+        stablePasses = 0;
+        logDebug("EphemeralTab", `Extraction improved (${cand._nc} candidates): "${cand.title}" at ₹${cand.price} [${Math.round(Date.now()-startTime)}ms]`);
+      } else if (data) {
+        stablePasses++;
+        // One quiet pass (~250ms) after the first success is enough now that
+        // the first-result bug is fixed: extraction is deterministic on a
+        // rendered grid, so an unchanged count means we are done.
+        if (stablePasses >= 1) break;
       }
-      if (extracted.debug && extracted.debug.reason === "empty_state") {
+      if (extracted.debug && extracted.debug.reason === "empty_state" && !data) {
         logDebug("EphemeralTab", `No visible results for "${cleanQ}" after ${Date.now() - startTime}ms`);
         break;
       }
+      passCount++;
+      // Occlusion rescue: if the page still has nothing after ~2.5s, the
+      // window is likely fully covered (Windows reports it hidden and store
+      // SPAs stop rendering). Bring it to the front briefly so rendering
+      // starts; restore the user's previous window when done.
+      if (!nudged && passCount >= 10 && winId && chrome.windows && chrome.windows.update) {
+        nudged = true;
+        try { await chrome.windows.update(winId, { focused: true }); } catch (e) {}
+        logDebug("EphemeralTab", `Window not rendering (likely occluded) — briefly focused: ${url}`);
+      }
       await new Promise((r) => setTimeout(r, 250));
     }
+    if (nudged) {
+      try { if (prevWindowId) await chrome.windows.update(prevWindowId, { focused: true }); } catch (e) {}
+    }
+    if (data) delete data._nc;
 
     return data;
   } catch (err) {
@@ -1667,7 +1780,7 @@ class AmazonTezProvider extends BaseProvider {
         for (const t of tezTabs) {
           try {
             logDebug("AmazonTez", `Querying open Amazon Tez tab (${t.id}): ${t.url}`);
-            const data = await extractDataFromTab(t.id, cleanQ);
+            const data = await extractDataFromTab(t.id, cleanQ, 0, cleanQ);
             if (data && data.price > 0) {
               logDebug("AmazonTez", `Retrieved first price from open Amazon Tez tab: ${data.title} at ₹${data.price}`, data);
               return this.formatResult(data, location, cleanQ);
@@ -1737,7 +1850,7 @@ class InstamartProvider extends BaseProvider {
         for (const t of swiggyTabs) {
           try {
             logDebug("Instamart", `Querying open Swiggy tab (${t.id}): ${t.url}`);
-            const data = await extractDataFromTab(t.id, cleanQ);
+            const data = await extractDataFromTab(t.id, cleanQ, 0, cleanQ);
             if (data && data.price > 0) {
               logDebug("Instamart", `Retrieved first price from open Swiggy tab: ${data.title} at ₹${data.price}`, data);
               return this.formatResult(data, location, cleanQ);
@@ -1875,7 +1988,7 @@ class ZeptoProvider extends BaseProvider {
         for (const t of zeptoTabs) {
           try {
             logDebug("Zepto", `Querying open Zepto tab (${t.id}): ${t.url}`);
-            const data = await extractDataFromTab(t.id, cleanQ);
+            const data = await extractDataFromTab(t.id, cleanQ, 0, cleanQ);
             if (data && data.price > 0) {
               logDebug("Zepto", `Retrieved first price from open Zepto tab: ${data.title} at ₹${data.price}`, data);
               return this.formatResult(data, location, cleanQ);
@@ -1941,7 +2054,7 @@ class BlinkitProvider extends BaseProvider {
         for (const t of blinkitTabs) {
           try {
             logDebug("Blinkit", `Querying open Blinkit tab (${t.id}): ${t.url}`);
-            const data = await extractDataFromTab(t.id, cleanQ);
+            const data = await extractDataFromTab(t.id, cleanQ, 0, cleanQ);
             if (data && data.price > 0) {
               logDebug("Blinkit", `Retrieved first price from open Blinkit tab: ${data.title} at ₹${data.price}`, data);
               return this.formatResult(data, location, cleanQ);
@@ -1988,8 +2101,8 @@ const PROVIDERS = [
   new ZeptoProvider(),
   new BlinkitProvider()
 ];
-const PROVIDER_TIMEOUT_MS = 16000;
-const SEARCH_TIMEOUT_MS = 18000;
+const PROVIDER_TIMEOUT_MS = 9000;
+const SEARCH_TIMEOUT_MS = 10000;
 
 // ==========================================
 // 5b. SHORT-TTL SEARCH RESULT CACHE
@@ -2097,8 +2210,35 @@ async function resolveSearchContext(query, locationId = null) {
 // Runs every provider in parallel and reports each result through onResult as
 // soon as it settles, so callers can render progressively instead of waiting
 // for the slowest store. Resolves with the fully annotated result array.
+// Store SPAs (notably Zepto/Blinkit, and Amazon in some layouts) refuse to
+// render their product grid while the window is maximized/fullscreen: the
+// renderer reports the pages as occluded/hidden. Rather than returning
+// mysterious empty results, block the query outright with an actionable
+// message whenever the focused window is maximized.
+function getWindowBlockReason() {
+  return new Promise((resolve) => {
+    if (typeof chrome === "undefined" || !chrome.windows || !chrome.windows.getLastFocused) return resolve(null);
+    try {
+      chrome.windows.getLastFocused((win) => {
+        if (chrome.runtime.lastError) return resolve(null);
+        const state = win && win.state;
+        if (state === "maximized" || state === "fullscreen") {
+          resolve("Chrome is " + state + ". Store pages will not render results in this mode — please restore (un-maximize) the Chrome window and search again.");
+        } else {
+          resolve(null);
+        }
+      });
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
+
 async function streamSearchResults(query, locationId = null, onResult = () => {}) {
   if (!query || !query.trim()) return [];
+
+  const windowBlock = await getWindowBlockReason();
+  if (windowBlock) throw new Error(windowBlock);
 
   const emit = (store) => {
     try { onResult(store); } catch (e) {}

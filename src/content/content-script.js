@@ -7,7 +7,11 @@
   if (typeof window === "undefined" || typeof document === "undefined") return;
 
   function titleKey(str) {
-    return String(str || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    // Drop parenthetical alt names so "Potato (Aalugadda)" and "Potato"
+    // dedupe as the same product at the same price.
+    return String(str || "").replace(/\([^)]*\)/g, " ")
+      .replace(/(?<=[a-z])(?=\d)/gi, " ").replace(/(?<=\d)(?=[a-z])/gi, " ")
+      .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   }
 
   // Same physical product scraped twice (outer grid cell + inner card) must
@@ -78,6 +82,10 @@
       .replace(/\b\d+(?:\.\d+)?\s*(?:lac|lakh)\b/gi, "")
       .replace(/\b(?:fastest delivery|standard delivery|instant delivery|express delivery|free delivery|delivery)\b/gi, "")
       .replace(/\b(?:mrp|add|buy|added|in stock|out of stock|off|\d+%\s*off|save)\b/gi, "")
+      // Split glued boundaries FIRST so welded button text separates
+      // ("Potato1 kgAdd" -> "Potato1 kg Add"), then strip UI verbs.
+      .replace(/(?<=[a-z])(?=[A-Z])/g, " ")
+      .replace(/\badd\b/gi, "")
       .replace(/\b(?:previously bought|earlier bought)\b/gi, "")
       // Stray UI glyph letters glued to the end ("... Cow MilkR" from an
       // R-badge text node). Only strip a lone capital appended to a word;
@@ -96,22 +104,45 @@
       .replace(/\s+/g, " ")
       .trim();
 
-    const fullText = normalize(`${itemTitle} ${packSize}`);
+    // Rank on BOTH views of the title: the primary name with parenthetical
+    // alt names removed ("Potato (Aalugadda)" -> "Potato") keeps ranking
+    // focused, while the untouched title still lets users find items by
+    // their alternate name ("searching aalugadda"). The better score wins.
+    const fullText = normalize(String(itemTitle).replace(/\([^)]*\)/g, " ") + " " + packSize);
+    const fullTextAlt = normalize(`${itemTitle} ${packSize}`);
     const q = normalize(query);
     const queryTokens = q.split(/\s+/).filter(t => t.length > 0);
 
     let score = 0;
+    let altScore = 0;
+
+    const matchToken = (text, token) => {
+      if (text.includes(token)) return 30;
+      if (token.endsWith('s') && token.length > 3 && text.includes(token.slice(0, -1))) return 25;
+      if (!token.endsWith('s') && text.includes(token + 's')) return 25;
+      return 0;
+    };
 
     // 1. Keyword Overlap (+30 for each matching word, +25 for plural/singular)
     queryTokens.forEach(token => {
-      if (fullText.includes(token)) {
-        score += 30;
-      } else if (token.endsWith('s') && token.length > 3 && fullText.includes(token.slice(0, -1))) {
-        score += 25;
-      } else if (!token.endsWith('s') && fullText.includes(token + 's')) {
-        score += 25;
-      }
+      score += matchToken(fullText, token);
+      altScore += matchToken(fullTextAlt, token);
     });
+    score = Math.max(score, altScore);
+    // Exact-name preference: a product whose PRIMARY name (parentheticals
+    // removed) starts with the query ("Onion (...)" for "onion") outranks
+    // products that merely contain the word ("Sambar Onion (...)").
+    const strippedTitle = normalize(String(itemTitle).replace(/\([^)]*\)/g, " "));
+    if (q && strippedTitle.startsWith(q)) score += 20;
+
+    // Variety modifiers denote DIFFERENT products ("spring onion",
+    // "sambar onion", "green onion" are not generic onions) — rank them
+    // below plain matches instead of letting them tie on relevance.
+    const VARIETY_MODIFIERS = ["spring", "sambar", "green", "bunch", "shallot"];
+    if (q) {
+      const varietyRx = new RegExp("\\b(" + VARIETY_MODIFIERS.join("|") + ")\\s+" + q + "\\b");
+      if (varietyRx.test(strippedTitle)) score -= 15;
+    }
 
     // 2. Quantity & Unit matching (1l, 1kg, 200g, 500g, 5l)
     const qtyMatch = query.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
@@ -441,20 +472,32 @@
     // the cost near-linear in practice instead of a full n^2 grind, which
     // matters on mobile WebViews where the extraction loop re-runs the whole
     // pipeline on every hydration retry.
-    const cards = [];
-    const isWrapped = new Array(allMatched.length).fill(false);
-    for (let i = 0; i < allMatched.length; i++) {
-      if (isWrapped[i]) continue;
-      const a = allMatched[i];
-      let selfWrapped = false;
-      for (let j = i + 1; j < allMatched.length; j++) {
-        if (isWrapped[j]) continue;
-        const b = allMatched[j];
-        if (a.contains(b)) isWrapped[j] = true;
-        else if (b.contains(a)) { selfWrapped = true; break; }
+    // Product-card selection: keep matched nodes holding an image plus a
+    // plausible price in their text. Some stores (Blinkit) render prices as
+    // bare "₹77" text with no class hooks, so a price ELEMENT probe fails.
+    // Qualify on price-text only. Requiring an <img> races Blinkit's lazy
+    // image insertion and drops real cards during early passes.
+    let cards = allMatched.filter((c) => {
+      const t = c.textContent || "";
+      if (/(?:₹|Rs\.?|INR)\s*[0-9,]{1,6}/i.test(t)) return true;
+      for (const el of c.querySelectorAll("div, span, p")) {
+        if (el.children && el.children.length > 0) continue;
+        if (/^[0-9]{1,6}$/.test((el.textContent || "").trim())) return true;
       }
-      if (!selfWrapped) cards.push(a);
-    }
+      return false;
+    });
+    // Prefer image-holding cards when available (better titles via alt text),
+    // but never at the cost of dropping price-valid cards that lack images yet.
+    const withImg = cards.filter((c) => c.querySelector("img"));
+    if (withImg.length >= 3) cards = withImg;
+    // If several nested matches qualify, keep the innermost per family
+    // (drop the node that CONTAINS another qualifying node).
+    cards = cards.filter((c, i) => {
+      for (let j = 0; j < cards.length; j++) {
+        if (j !== i && c.contains(cards[j])) return false;
+      }
+      return true;
+    });
     // Sponsored badges often sit OUTSIDE the innermost product node (a strip
     // above the image), so the per-card text check misses them. Collect badge
     // positions once, then attribute them to the nearest enclosing card group.
@@ -463,7 +506,7 @@
       const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       let tn;
       while ((tn = tw.nextNode())) {
-        if (/^sponsored$/i.test((tn.nodeValue || "").trim()) && tn.parentElement) {
+        if (/^(?:sponsored|ad)$/i.test((tn.nodeValue || "").trim()) && tn.parentElement) {
           sponsoredRoots.push(tn.parentElement);
         }
       }
@@ -472,13 +515,15 @@
     let scannedCards = 0;
     const cardItems = [];
     for (const card of cards) {
-      if (++scannedCards > 150) break;
+      if (++scannedCards > 60) break;
       const item = extractFromCard(card, platformId);
       if (item && item.price > 0 && !isDuplicateCandidate(candidates, item)) {
         item.__el = card;
         cardItems.push(item);
         candidates.push(item);
-        if (candidates.length >= 20) break;
+        // Only the store's own top listings matter: deep-page sponsored
+        // strips were polluting results. 5 is enough to pick a best-of-3.
+        if (candidates.length >= 5) break;
       }
     }
 
@@ -512,7 +557,7 @@
               parent = parent.parentElement;
               depth++;
             }
-            if (candidates.length >= 20) break;
+            if (candidates.length >= 5) break;
           }
         }
       }
@@ -528,40 +573,68 @@
     // vertical proximity is what the visual layout actually guarantees.
     const allItems = candidates.filter((c) => c.__el);
     try {
+      // Attribution must be tight: an "Ad" chip belongs to the product in the
+      // SAME grid cell — directly below within one row height (~120px) and
+      // horizontally inside that cell. Loose windows mis-attribute to the
+      // next row's organic products and wrongly demote them.
       const itemRects = allItems.map((ci) => ({ ci, r: ci.__el.getBoundingClientRect() }));
       for (const root of sponsoredRoots) {
-        const b = root.getBoundingClientRect();
-        let best = null;
-        for (const ir of itemRects) {
-          // must sit below the badge and overlap its horizontal span
-          const vGap = ir.r.top - b.bottom;
-          if (vGap < -24 || vGap > 220) continue;
-          const overlap = Math.min(ir.r.right, b.right) - Math.max(ir.r.left, b.left);
-          if (overlap < Math.min(ir.r.width, b.width) * 0.4) continue;
-          if (!best || vGap < best.vGap) best = { ci: ir.ci, vGap };
+        let cellRoot = root;
+        for (let up = 0; up < 4 && cellRoot.parentElement; up++) {
+          cellRoot = cellRoot.parentElement;
+          if (cellRoot.getBoundingClientRect().width > 120) break;
         }
-        if (best) best.ci.sponsored = true;
+        const cw = cellRoot.getBoundingClientRect();
+        for (const ir of itemRects) {
+          const vGap = ir.r.top - cw.bottom;
+          if (vGap < -8 || vGap > 120) continue;
+          const overlapStart = Math.max(ir.r.left, cw.left);
+          const overlapEnd = Math.min(ir.r.right, cw.right);
+          if (overlapEnd - overlapStart < Math.min(ir.r.width, cw.width) * 0.5) continue;
+          ir.ci.sponsored = true;
+          break;
+        }
       }
     } catch (e) {}
     // DOM nodes cannot cross the extension messaging boundary.
     allItems.forEach((ci) => { delete ci.__el; });
-    if (platformId === "blinkit" && !isPDP && candidates.length > 0) {
-      candidates.shift();
+    // Old behavior dropped Blinkit's first listing unconditionally (it used to
+    // be a search-header card echoing the query verbatim, e.g. title "raw mango"
+    // with another item's price). Only strip when the title is EXACTLY the
+    // query — real products always carry brand/pack/variant words.
+    if (platformId === "blinkit" && !isPDP && candidates.length > 1) {
+      const firstTitle = String(candidates[0].title || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+      const qNorm = String(searchQuery || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+      if (qNorm && firstTitle === qNorm) {
+        candidates.shift();
+      }
     }
 
     if (candidates.length === 0) return { best: null, candidates: [] };
 
     // Rank by query relevance so banners/sponsored fragments near a price
     // never outrank real matches for the searched term.
-    const ranked = candidates.map((c) => Object.assign({}, c, {
-      _score: scoreRelevance(c.title, searchQuery, c.quantity || "") - (c.sponsored ? 60 : 0)
-    }));
-    // Amazon Tez pins its sponsored/ad slot at position #1 of the listing.
-    // Badge detection there is unreliable, so apply a flat demotion to the
-    // first-listed candidate regardless.
-    if (platformId === "amazon_tez" && ranked.length > 0) ranked[0]._score -= 30;
+    // Word-level relevance: the word is the minimum matching unit (no
+    // character substrings). Score counts how many query words appear in the
+    // title; ties keep the store's own display order (stable sort).
+    const qWords = String(searchQuery || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
+    const stem = (w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w);
+    const ranked = candidates.map((c) => {
+      // Split glued letter/digit boundaries ("Potato1 kg" -> "potato","kg"):
+      // Tez glues title+packSize into one string, and without this the token
+      // "potato1" never matches the query word "potato".
+      const tSet = new Set(
+        String(c.title || "").replace(/\([^)]*\)/g, " ")
+          .replace(/(?<=[a-z])(?=\d)/gi, " ").replace(/(?<=\d)(?=[a-z])/gi, " ")
+          .toLowerCase().replace(/[^a-z0-9\s]/g, " ")
+          .split(/\s+/).filter(Boolean).map(stem)
+      );
+      let _score = 0;
+      for (const w of qWords) if (tSet.has(stem(w))) _score += 1;
+      return Object.assign({}, c, { _score });
+    });
     ranked.sort((a, b) => b._score - a._score);
-    const qualified = ranked.filter((c) => c._score >= 20);
+    const qualified = ranked.filter((c) => c._score > 0);
     // No/blank query (popup auto-detect): preserve document order untouched.
     const pool = (searchQuery && searchQuery.trim() && qualified.length > 0) ? qualified : ranked;
     const best = pool[0] || candidates[0];
@@ -685,7 +758,9 @@
         // belong to the current query. A stale page will not self-correct, so
         // fail fast instead of waiting.
         const token = message.expectedUrlToken;
-        if (token && !String(window.location.href || "").toLowerCase().includes(String(token).toLowerCase())) {
+        let hrefLc = String(window.location.href || "").toLowerCase();
+        try { hrefLc += " " + decodeURIComponent(hrefLc); } catch (e) {}
+        if (token && !hrefLc.includes(String(token).toLowerCase())) {
           sendResponse({ success: false, data: null, reason: "url_mismatch" });
           return true;
         }
