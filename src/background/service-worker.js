@@ -640,8 +640,12 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
       title,
       price,
       // Sponsored placements must be visible to the ranker so it can
-      // demote them behind organic results for the same query.
-      sponsored: /(?:^|\s)sponsored(?:\s|$)/i.test(spacedCardText),
+      // demote them behind organic results for the same query. Stores mark
+      // them either with a "Sponsored" text or an "Ad" label near the image
+      // (Instamart / Zepto / Blinkit), sometimes in the img alt/title.
+      sponsored: /(?:^|\s)(?:sponsored|ad|ads|promoted|featured)(?:\s|$)/i.test(
+        spacedCardText + " " + ((imgEl && (imgEl.alt || "") + " " + (imgEl.title || "")) || "")
+      ),
       mrp: Math.max(mrp, price),
       brand,
       quantity,
@@ -847,11 +851,28 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
       }
       return true;
     });
+    // Sponsored badges often sit OUTSIDE the innermost product node (a strip
+    // above the image), so the per-card text check misses them. Collect badge
+    // positions once, then attribute them to the nearest enclosing card group.
+    const sponsoredRoots = [];
+    try {
+      const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let tn;
+      while ((tn = tw.nextNode())) {
+        if (/^sponsored$/i.test((tn.nodeValue || "").trim()) && tn.parentElement) {
+          sponsoredRoots.push(tn.parentElement);
+        }
+      }
+    } catch (e) {}
+
     let scannedCards = 0;
+    const cardItems = [];
     for (const card of cards) {
       if (++scannedCards > 150) break;
       const item = extractFromCard(card, platformId);
       if (item && item.price > 0 && !isDuplicateCandidate(candidates, item)) {
+        item.__el = card;
+        cardItems.push(item);
         candidates.push(item);
         if (candidates.length >= 20) break;
       }
@@ -881,6 +902,7 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
             while (parent && depth < 6 && parent !== document.body) {
               const item = extractFromCard(parent, platformId);
               if (item && item.price > 0 && !isDuplicateCandidate(candidates, item)) {
+                item.__el = parent;
                 candidates.push(item);
                 break;
               }
@@ -897,6 +919,30 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
     // is just the query while its container also exposes another item's price.
     // Drop that leading listing before ranking so the next displayed product is
     // used consistently for both the title and price.
+    // Attribute each Sponsored badge to the product card BELOW it using
+    // geometry (badge rect vs card rects). DOM-structure attribution fails
+    // here because dedup keeps whichever element was extracted first, and
+    // that element may not share the badge's subtree. Horizontal overlap +
+    // vertical proximity is what the visual layout actually guarantees.
+    const allItems = candidates.filter((c) => c.__el);
+    try {
+      const itemRects = allItems.map((ci) => ({ ci, r: ci.__el.getBoundingClientRect() }));
+      for (const root of sponsoredRoots) {
+        const b = root.getBoundingClientRect();
+        let best = null;
+        for (const ir of itemRects) {
+          // must sit below the badge and overlap its horizontal span
+          const vGap = ir.r.top - b.bottom;
+          if (vGap < -24 || vGap > 220) continue;
+          const overlap = Math.min(ir.r.right, b.right) - Math.max(ir.r.left, b.left);
+          if (overlap < Math.min(ir.r.width, b.width) * 0.4) continue;
+          if (!best || vGap < best.vGap) best = { ci: ir.ci, vGap };
+        }
+        if (best) best.ci.sponsored = true;
+      }
+    } catch (e) {}
+    // DOM nodes cannot cross the extension messaging boundary.
+    allItems.forEach((ci) => { delete ci.__el; });
     if (platformId === "blinkit" && !isPDP && candidates.length > 0) {
       candidates.shift();
     }
@@ -921,8 +967,12 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
   // Rank by query relevance so banners/sponsored fragments that happen to
   // sit near a price never outrank real matches for the searched term.
   const ranked = candidates.map((c) => Object.assign({}, c, {
-    _score: scoreCandidate(c.title, searchQuery, c.quantity || "")
+    _score: scoreCandidate(c.title, searchQuery, c.quantity || "") - (c.sponsored ? 60 : 0)
   }));
+  // Amazon Tez pins its sponsored/ad slot at position #1 of the listing.
+  // Badge detection there is unreliable, so apply a flat demotion to the
+  // first-listed candidate regardless.
+  if (platformId === "amazon_tez" && ranked.length > 0) ranked[0]._score -= 30;
   ranked.sort((a, b) => b._score - a._score);
   const qualified = ranked.filter((c) => c._score >= 20);
   // No/blank query (popup auto-detect): preserve document order untouched.
