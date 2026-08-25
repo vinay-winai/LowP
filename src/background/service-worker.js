@@ -386,10 +386,37 @@ class BaseProvider {
 }
 
 async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
+  function titleKey(str) {
+    return String(str || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  }
+
+  // Same physical product scraped twice (outer grid cell + inner card) must
+  // not yield two candidates. Compare normalized titles at equal prices.
+  function isDuplicateCandidate(list, item) {
+    const key = titleKey(item.title);
+    // Titles scraped from different ancestor depths differ by a glued pack
+    // size ("Amul Taaza Milk" vs "Amul Taaza Milk500 ml"), so exact equality
+    // is not enough: treat equal-priced containment as the same product.
+    return list.some((c) => {
+      if (c.price !== item.price) return false;
+      const k = titleKey(c.title);
+      return k === key ||
+        (key.length >= 8 && k.includes(key)) ||
+        (k.length >= 8 && key.includes(k));
+    });
+  }
+
   function isBadTitle(str) {
     if (!str || typeof str !== "string") return true;
     const s = str.trim().toLowerCase();
     if (s.length < 2 || s.length > 150) return true;
+
+    // Reject numeric / unit fragments ("/100 ml", "466", "% off") that the
+    // generic text fallback sometimes grabs instead of a real product name.
+    if ((s.match(/[a-z]/g) || []).length < 3) return true;
+
+    // Reject UI glyph names picked up as text ("down-chevron-icon", svg ids).
+    if (/(^|[\s-])(icon|chevron|arrow|sprite|svg)([\s-]|$)|-icon$/.test(s)) return true;
 
     const bannedPatterns = [
       /^(home|cart|search|login|help|offers|new|corporate|swiggy|zepto|amazon|menu|account|profile|orders|notifications)$/i,
@@ -668,7 +695,7 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
             const rawMrp = o.mrp || rawPrice;
             const mrp = typeof rawMrp === 'number' ? (rawMrp > 1000 ? rawMrp / 100 : rawMrp) : parseFloat(rawMrp);
             if (cleanT && price > 0 && !isBadTitle(cleanT)) {
-              if (!candidates.some(c => c.title === cleanT && c.price === price)) {
+              if (!isDuplicateCandidate(candidates, { title: cleanT, price })) {
                 candidates.push({
                   title: cleanT,
                   price,
@@ -780,10 +807,24 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
       'div[data-asin]'
     ];
 
-    const cards = document.querySelectorAll(cardSelectors.join(', '));
+    const allMatched = Array.from(document.querySelectorAll(cardSelectors.join(', ')));
+    // Amazon wraps every product in BOTH an outer grid cell (sg-col / data-asin)
+    // and an inner card container. Both match the broad selector list, so the
+    // same product is scraped twice with wrapper-level junk text. Keep only
+    // innermost matches: drop any card that contains another matched card.
+    // Pairwise contains(): an outer wrapper "contains" its inner card, so
+    // wrappers drop out. n^2 native checks beat walking every descendant.
+    const cards = allMatched.filter((card, i) => {
+      for (let j = 0; j < allMatched.length; j++) {
+        if (j !== i && allMatched[j].contains(card)) return false;
+      }
+      return true;
+    });
+    let scannedCards = 0;
     for (const card of cards) {
+      if (++scannedCards > 150) break;
       const item = extractFromCard(card, platformId);
-      if (item && item.price > 0 && !candidates.some(c => c.title === item.title && c.price === item.price)) {
+      if (item && item.price > 0 && !isDuplicateCandidate(candidates, item)) {
         candidates.push(item);
         if (candidates.length >= 20) break;
       }
@@ -812,7 +853,7 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
             let depth = 0;
             while (parent && depth < 6 && parent !== document.body) {
               const item = extractFromCard(parent, platformId);
-              if (item && item.price > 0 && !candidates.some(c => c.title === item.title && c.price === item.price)) {
+              if (item && item.price > 0 && !isDuplicateCandidate(candidates, item)) {
                 candidates.push(item);
                 break;
               }
@@ -1357,7 +1398,14 @@ async function waitForPooledTabNavigation(tabId, expectedUrl, budgetMs) {
 // 19789fb baseline: a fresh minimized window per store query plus patient
 // 500ms polling. A brand-new renderer hydrates reliably for all four stores,
 // and repeated polling gives slow client-side SPAs all the time they need.
-async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 8000) {
+// Serial numbers for ephemeral scraper windows so concurrent opens do not
+// share one position (see the stagger comment inside fetchViaEphemeralTab).
+let ephemeralWindowSeq = 0;
+
+// 15s: cold SPA loads (notably Blinkit after an extension reload wipes the
+// warm tab pool) regularly exceed the previous 8s budget before rendering
+// their product grid, even though warm loads land in 3-4s.
+async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 15000) {
   if (typeof chrome === "undefined" || (!chrome.tabs && !chrome.windows)) {
     return null;
   }
@@ -1366,15 +1414,34 @@ async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 8000) {
   try {
     logDebug("EphemeralTab", `Opening background window for ${url}`);
 
-    // Create a detached minimized window so the extension popup never loses focus
+    // Create a detached window so the extension popup never loses focus.
+    // It must NOT be minimized: minimized (or fully occluded) windows report
+    // visibilityState "hidden", and several store SPAs (Zepto, Blinkit) refuse
+    // to render their product grid while hidden, yielding empty extractions.
+    // A small unfocused window stays "visible"; we then hand focus straight
+    // back to the user's previous window so the scraper sits BEHIND it.
     if (chrome.windows && chrome.windows.create) {
       try {
+        const prevWindowId = await new Promise((res) => {
+          try { chrome.windows.getLastFocused((w) => res(w ? w.id : null)); } catch (e) { res(null); }
+        });
+        // Stagger concurrent scraper windows: identical positions stack them
+        // perfectly, and a fully-covered window reports visibilityState
+        // "hidden" on Windows, which stops SPA rendering (Zepto/Blinkit).
+        const seq = ephemeralWindowSeq++;
         const win = await chrome.windows.create({
           url,
           type: "popup",
           focused: false,
-          state: "minimized"
+          width: 480,
+          height: 640,
+          top: 60 + (seq % 4) * 110,
+          left: 60 + (seq % 4) * 170
         });
+        // Push the scraper behind the user's active window again.
+        if (prevWindowId && win && win.id !== prevWindowId) {
+          try { chrome.windows.update(prevWindowId, { focused: true }); } catch (e) {}
+        }
         winId = win.id;
         tabId = win.tabs && win.tabs[0] ? win.tabs[0].id : null;
         // Chrome does not guarantee that windows.create returns populated
@@ -1830,8 +1897,8 @@ const PROVIDERS = [
   new ZeptoProvider(),
   new BlinkitProvider()
 ];
-const PROVIDER_TIMEOUT_MS = 11000;
-const SEARCH_TIMEOUT_MS = 12000;
+const PROVIDER_TIMEOUT_MS = 16000;
+const SEARCH_TIMEOUT_MS = 18000;
 
 // ==========================================
 // 5b. SHORT-TTL SEARCH RESULT CACHE

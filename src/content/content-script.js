@@ -6,10 +6,37 @@
 (function () {
   if (typeof window === "undefined" || typeof document === "undefined") return;
 
+  function titleKey(str) {
+    return String(str || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  }
+
+  // Same physical product scraped twice (outer grid cell + inner card) must
+  // not yield two candidates. Compare normalized titles at equal prices.
+  function isDuplicateCandidate(list, item) {
+    const key = titleKey(item.title);
+    // Titles scraped from different ancestor depths differ by a glued pack
+    // size ("Amul Taaza Milk" vs "Amul Taaza Milk500 ml"), so exact equality
+    // is not enough: treat equal-priced containment as the same product.
+    return list.some((c) => {
+      if (c.price !== item.price) return false;
+      const k = titleKey(c.title);
+      return k === key ||
+        (key.length >= 8 && k.includes(key)) ||
+        (k.length >= 8 && key.includes(k));
+    });
+  }
+
   function isBadTitle(str) {
     if (!str || typeof str !== "string") return true;
     const s = str.trim().toLowerCase();
     if (s.length < 2 || s.length > 150) return true;
+
+    // Reject numeric / unit fragments ("/100 ml", "466", "% off") that the
+    // generic text fallback sometimes grabs instead of a real product name.
+    if ((s.match(/[a-z]/g) || []).length < 3) return true;
+
+    // Reject UI glyph names picked up as text ("down-chevron-icon", svg ids).
+    if (/(^|[\s-])(icon|chevron|arrow|sprite|svg)([\s-]|$)|-icon$/.test(s)) return true;
 
     const bannedPatterns = [
       /^(home|cart|search|login|help|offers|new|corporate|swiggy|zepto|amazon|menu|account|profile|orders|notifications)$/i,
@@ -286,7 +313,7 @@
             const rawMrp = o.mrp || rawPrice;
             const mrp = typeof rawMrp === 'number' ? (rawMrp > 1000 ? rawMrp / 100 : rawMrp) : parseFloat(rawMrp);
             if (cleanT && price > 0 && !isBadTitle(cleanT)) {
-              if (!candidates.some(c => c.title === cleanT && c.price === price)) {
+              if (!isDuplicateCandidate(candidates, { title: cleanT, price })) {
                 candidates.push({
                   title: cleanT,
                   price,
@@ -384,10 +411,24 @@
       'div[data-asin]'
     ];
 
-    const cards = document.querySelectorAll(cardSelectors.join(', '));
+    const allMatched = Array.from(document.querySelectorAll(cardSelectors.join(', ')));
+    // Amazon wraps every product in BOTH an outer grid cell (sg-col / data-asin)
+    // and an inner card container. Both match the broad selector list, so the
+    // same product is scraped twice with wrapper-level junk text. Keep only
+    // innermost matches: drop any card that contains another matched card.
+    // Pairwise contains(): an outer wrapper "contains" its inner card, so
+    // wrappers drop out. n^2 native checks beat walking every descendant.
+    const cards = allMatched.filter((card, i) => {
+      for (let j = 0; j < allMatched.length; j++) {
+        if (j !== i && allMatched[j].contains(card)) return false;
+      }
+      return true;
+    });
+    let scannedCards = 0;
     for (const card of cards) {
+      if (++scannedCards > 150) break;
       const item = extractFromCard(card, platformId);
-      if (item && item.price > 0 && !candidates.some(c => c.title === item.title && c.price === item.price)) {
+      if (item && item.price > 0 && !isDuplicateCandidate(candidates, item)) {
         candidates.push(item);
         if (candidates.length >= 20) break;
       }
