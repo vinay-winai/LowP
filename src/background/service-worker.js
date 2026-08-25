@@ -418,6 +418,11 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
     // Reject UI glyph names picked up as text ("down-chevron-icon", svg ids).
     if (/(^|[\s-])(icon|chevron|arrow|sprite|svg)([\s-]|$)|-icon$/.test(s)) return true;
 
+    // Reject shelf/category labels and badges scraped instead of a name.
+    if (/previously bought|earlier bought|already bought/.test(s)) return true;
+    if (/^(fresh|plain)?\s*(toned|full cream|slim|cow|buffalo)?\s*milk( pouch)?$/.test(s)) return true;
+    if (/^fresh \w+ pouch$/.test(s)) return true;
+
     const bannedPatterns = [
       /^(home|cart|search|login|help|offers|new|corporate|swiggy|zepto|amazon|menu|account|profile|orders|notifications)$/i,
       /^(delivery in\s*\d+\s*(?:mins?|minutes?)|\d+\s*(?:mins?|minutes?|hours?|sec|seconds?)|\d+\s*-\s*\d+\s*(?:mins?|minutes?))$/i,
@@ -451,6 +456,11 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
       .replace(/\b(?:delivery in\s*)?\d+(?:\s*-\s*\d+)?\s*(?:mins?|minutes?|hours?|sec|seconds?)\b/gi, "")
       .replace(/\b(?:fastest delivery|standard delivery|instant delivery|express delivery|free delivery|delivery)\b/gi, "")
       .replace(/\b(?:mrp|add|buy|added|in stock|out of stock|off|\d+%\s*off|save)\b/gi, "")
+      .replace(/\b(?:previously bought|earlier bought)\b/gi, "")
+      // Stray UI glyph letters glued to the end ("... Cow MilkR" from an
+      // R-badge text node). Only strip a lone capital appended to a word;
+      // never touch mid-title letters ("Vitamin D" stays intact).
+      .replace(/(?<=[a-z])[A-Z](?=\s|$)/g, "")
       .replace(/\s+/g, " ")
       .trim();
   }
@@ -474,6 +484,20 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
       else if (!token.endsWith('s') && fullText.includes(token + 's')) score += 25;
     });
     if (tokens.length > 0 && fullText.includes(tokens[0])) score += 25;
+
+    // Pack-size awareness: reward items matching an explicit unit request
+    // ("milk 1l") and penalize clear mismatches (a 500 ml carton for "1l").
+    const qtyMatch = query.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)\b/i);
+    if (qtyMatch) {
+      const qNum = parseFloat(qtyMatch[1]);
+      const qUnit = qtyMatch[2].toLowerCase().replace(/^litres?$/, "l").replace(/^kgs?$/, "kg").replace(/^gms?$/, "g");
+      const target = new RegExp(qNum + "\\s*" + qUnit + "\\b", "i");
+      if (target.test(fullText)) score += 40;
+      else {
+        const candQty = fullText.match(/(\d+(?:\.\d+)?)\s*(l|kg|g|ml)\b/i);
+        if (candQty && parseFloat(candQty[1]) !== qNum) score -= 40;
+      }
+    }
     return score;
   }
 
@@ -615,6 +639,9 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
     return {
       title,
       price,
+      // Sponsored placements must be visible to the ranker so it can
+      // demote them behind organic results for the same query.
+      sponsored: /(?:^|\s)sponsored(?:\s|$)/i.test(spacedCardText),
       mrp: Math.max(mrp, price),
       brand,
       quantity,

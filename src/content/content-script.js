@@ -38,6 +38,11 @@
     // Reject UI glyph names picked up as text ("down-chevron-icon", svg ids).
     if (/(^|[\s-])(icon|chevron|arrow|sprite|svg)([\s-]|$)|-icon$/.test(s)) return true;
 
+    // Reject shelf/category labels and badges scraped instead of a name.
+    if (/previously bought|earlier bought|already bought/.test(s)) return true;
+    if (/^(fresh|plain)?\s*(toned|full cream|slim|cow|buffalo)?\s*milk( pouch)?$/.test(s)) return true;
+    if (/^fresh \w+ pouch$/.test(s)) return true;
+
     const bannedPatterns = [
       /^(home|cart|search|login|help|offers|new|corporate|swiggy|zepto|amazon|menu|account|profile|orders|notifications)$/i,
       /^(delivery in\s*\d+\s*(?:mins?|minutes?)|\d+\s*(?:mins?|minutes?|hours?|sec|seconds?)|\d+\s*-\s*\d+\s*(?:mins?|minutes?))$/i,
@@ -73,6 +78,11 @@
       .replace(/\b\d+(?:\.\d+)?\s*(?:lac|lakh)\b/gi, "")
       .replace(/\b(?:fastest delivery|standard delivery|instant delivery|express delivery|free delivery|delivery)\b/gi, "")
       .replace(/\b(?:mrp|add|buy|added|in stock|out of stock|off|\d+%\s*off|save)\b/gi, "")
+      .replace(/\b(?:previously bought|earlier bought)\b/gi, "")
+      // Stray UI glyph letters glued to the end ("... Cow MilkR" from an
+      // R-badge text node). Only strip a lone capital appended to a word;
+      // never touch mid-title letters ("Vitamin D" stays intact).
+      .replace(/(?<=[a-z])[A-Z](?=\s|$)/g, "")
       .replace(/\s+/g, " ")
       .trim();
   }
@@ -268,6 +278,9 @@
     return {
       title,
       price,
+      // Sponsored placements must be visible to the ranker so it can
+      // demote them behind organic results for the same query.
+      sponsored: /(?:^|\s)sponsored(?:\s|$)/i.test(spacedCardText),
       mrp: Math.max(mrp, price),
       brand,
       quantity,
@@ -481,7 +494,7 @@
     // Rank by query relevance so banners/sponsored fragments near a price
     // never outrank real matches for the searched term.
     const ranked = candidates.map((c) => Object.assign({}, c, {
-      _score: scoreRelevance(c.title, searchQuery, c.quantity || "")
+      _score: scoreRelevance(c.title, searchQuery, c.quantity || "") - (c.sponsored ? 60 : 0)
     }));
     ranked.sort((a, b) => b._score - a._score);
     const qualified = ranked.filter((c) => c._score >= 20);
