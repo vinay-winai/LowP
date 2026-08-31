@@ -16,8 +16,8 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
   function titleKey(str) {
     // Drop parenthetical alt names so "Potato (Aalugadda)" and "Potato"
     // dedupe as the same product at the same price.
-    return String(str || "").replace(/\([^)]*\)/g, " ")
-      .replace(/(?<=[a-z])(?=\d)/gi, " ").replace(/(?<=\d)(?=[a-z])/gi, " ")
+    return String(str || "").replace(/\\([^)]*\\)/g, " ")
+      .replace(/(?<=[a-z])(?=\\d)/gi, " ").replace(/(?<=\\d)(?=[a-z])/gi, " ")
       .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   }
 
@@ -46,10 +46,12 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     if ((s.match(/[a-z]/g) || []).length < 3) return true;
 
     // Reject UI glyph names picked up as text ("down-chevron-icon", svg ids).
-    if (/(^|[\s-])(icon|chevron|arrow|sprite|svg)([\s-]|$)|-icon$/.test(s)) return true;
+    if (/(^|[\\s-])(icon|chevron|arrow|sprite|svg)([\\s-]|$)|-icon$/.test(s)) return true;
 
     // Reject shelf/category labels and badges scraped instead of a name.
     if (/previously bought|earlier bought|already bought/.test(s)) return true;
+    if (/^(fresh|plain)?\\s*(toned|full cream|slim|cow|buffalo)?\\s*milk( pouch)?$/.test(s)) return true;
+    if (/^fresh \\w+ pouch$/.test(s)) return true;
 
     const bannedPatterns = [
       /^(home|cart|search|login|help|offers|new|corporate|swiggy|zepto|amazon|blinkit|menu|account|profile|orders|notifications)$/i,
@@ -82,12 +84,19 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       .replace(/^\\s*\\d+(?:\\.\\d+)?\\s*%\\s*off\\s*/i, "")
       .replace(/(?:₹|Rs\\.?|INR)\\s*[0-9,]+(?:\\.[0-9]+)?/gi, "")
       .replace(/\\b(?:delivery in\\s*)?\\d+(?:\\s*-\\s*\\d+)?\\s*(?:mins?|minutes?|hours?|sec|seconds?)\\b/gi, "")
+      .replace(/\\b(?:add|options?)\\s*\\d*\\b/gi, "")
+      .replace(/\\b\\d+(?:\\.\\d+)?\\s*(?:lac|lakh)\\b/gi, "")
       .replace(/\\b(?:fastest delivery|standard delivery|instant delivery|express delivery|free delivery|delivery)\\b/gi, "")
       .replace(/\\b(?:mrp|add|buy|added|in stock|out of stock|off|\\d+%\\s*off|save)\\b/gi, "")
       // Split glued boundaries FIRST so welded button text separates
-      // ("Potato1 kgAdd" -> "Potato kg Add"), then strip UI verbs.
+      // ("Potato1 kgAdd" -> "Potato1 kg Add"), then strip UI verbs.
       .replace(/(?<=[a-z])(?=[A-Z])/g, " ")
       .replace(/\\badd\\b/gi, "")
+      .replace(/\\b(?:previously bought|earlier bought)\\b/gi, "")
+      // Stray UI glyph letters glued to the end ("... Cow MilkR" from an
+      // R-badge text node). Only strip a lone capital appended to a word;
+      // never touch mid-title letters ("Vitamin D" stays intact).
+      .replace(/(?<=[a-z])[A-Z](?=\\s|$)/g, "")
       .replace(/\\s+/g, " ")
       .trim();
   }
@@ -99,7 +108,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     // alt names removed ("Potato (Aalugadda)" -> "Potato") keeps ranking
     // focused, while the untouched title still lets users find items by
     // their alternate name ("searching aalugadda"). The better score wins.
-    const fullText = normalize(String(itemTitle).replace(/\([^)]*\)/g, " ") + " " + (packSize || ""));
+    const fullText = normalize(String(itemTitle).replace(/\\([^)]*\\)/g, " ") + " " + (packSize || ""));
     const fullTextAlt = normalize(itemTitle + " " + (packSize || ""));
     const q = normalize(query);
     const queryTokens = q.split(/\\s+/).filter(Boolean);
@@ -122,7 +131,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     // Exact-name preference: a product whose PRIMARY name (parentheticals
     // removed) starts with the query ("Onion (...)" for "onion") outranks
     // products that merely contain the word ("Sambar Onion (...)").
-    const strippedTitle = normalize(String(itemTitle).replace(/\([^)]*\)/g, " "));
+    const strippedTitle = normalize(String(itemTitle).replace(/\\([^)]*\\)/g, " "));
     if (q && strippedTitle.startsWith(q)) score += 20;
 
     // Variety modifiers denote DIFFERENT products ("spring onion",
@@ -130,7 +139,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     // below plain matches instead of letting them tie on relevance.
     const VARIETY_MODIFIERS = ["spring", "sambar", "green", "bunch", "shallot"];
     if (q) {
-      const varietyRx = new RegExp("\\b(" + VARIETY_MODIFIERS.join("|") + ")\\s+" + q + "\\b");
+      const varietyRx = new RegExp("\\\\b(" + VARIETY_MODIFIERS.join("|") + ")\\\\s+" + q + "\\\\b");
       if (varietyRx.test(strippedTitle)) score -= 15;
     }
 
@@ -222,7 +231,10 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       }
     }
 
-    if (!price || price <= 0 || price > 500000) return null;
+    if (!price || price <= 0 || price > 500000) {
+      (window.__lowpFailLog = window.__lowpFailLog || []).push({ f: "price", txt: (cardNode.textContent || "").replace(/\\s+/g, " ").slice(0, 60) });
+      return null;
+    }
 
     const imgEl = cardNode.querySelector ? cardNode.querySelector('img') : null;
     const image = imgEl ? (imgEl.src || "assets/icon48.png") : "assets/icon48.png";
@@ -254,7 +266,10 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       }
     }
 
-    if (!title || isBadTitle(title)) return null;
+    if (!title || isBadTitle(title)) {
+      (window.__lowpFailLog = window.__lowpFailLog || []).push({ f: "title", txt: (title || cardNode.textContent || "").slice(0, 60) });
+      return null;
+    }
 
     const qtyEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="PackSize"], [data-testid*="quantity"], [data-testid*="weight"], [data-testid*="item_quantity"], [class*="PackSize"], [class*="weight"], [class*="quantity"], span[class*="pack"], span[class*="unit"]') : null;
     const quantity = qtyEl ? qtyEl.textContent.trim() : "1 unit";
@@ -271,6 +286,9 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     return {
       title,
       price,
+      sponsored: /(?:^|[\\s])(?:sponsored|ad|ads|promoted|featured)(?:[\\s]|$)/i.test(
+        spacedCardText + " " + ((imgEl && (imgEl.alt || "") + " " + (imgEl.title || "")) || "")
+      ),
       mrp: Math.max(mrp, price),
       brand,
       quantity,
@@ -366,7 +384,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     // image insertion and drops real cards during early passes.
     let cards = allMatched.filter((c) => {
       const t = c.textContent || "";
-      if (/(?:₹|Rs\.?|INR)\s*[0-9,]{1,6}/i.test(t)) return true;
+      if (/(?:₹|Rs\\.?|INR)\\s*[0-9,]{1,6}/i.test(t)) return true;
       for (const el of c.querySelectorAll("div, span, p")) {
         if (el.children && el.children.length > 0) continue;
         if (/^[0-9]{1,6}$/.test((el.textContent || "").trim())) return true;
@@ -471,8 +489,8 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     // with another item's price). Only strip when the title is EXACTLY the
     // query — real products always carry brand/pack/variant words.
     if (targetPlatformId === "blinkit" && candidates.length > 1) {
-      const firstTitle = String(candidates[0].title || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
-      const qNorm = String(searchQuery || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+      const firstTitle = String(candidates[0].title || "").toLowerCase().replace(/[^a-z0-9\\s]/g, " ").replace(/\\s+/g, " ").trim();
+      const qNorm = String(searchQuery || "").toLowerCase().replace(/[^a-z0-9\\s]/g, " ").replace(/\\s+/g, " ").trim();
       if (qNorm && firstTitle === qNorm) {
         candidates.shift();
       }
@@ -492,20 +510,22 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     // Word-level relevance: the word is the minimum matching unit (no
     // character substrings). Score counts how many query words appear in the
     // title; ties keep the store's own display order (stable sort).
-    const qWords = String(searchQuery || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
+    const qWords = String(searchQuery || "").toLowerCase().replace(/[^a-z0-9\\s]/g, " ").split(/\\s+/).filter(Boolean);
     const stem = (w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w);
     const ranked = candidates.map((c) => {
       // Split glued letter/digit boundaries ("Potato1 kg" -> "potato","kg"):
       // Tez glues title+packSize into one string, and without this the token
       // "potato1" never matches the query word "potato".
       const tSet = new Set(
-        String(c.title || "").replace(/\([^)]*\)/g, " ")
-          .replace(/(?<=[a-z])(?=\d)/gi, " ").replace(/(?<=\d)(?=[a-z])/gi, " ")
-          .toLowerCase().replace(/[^a-z0-9\s]/g, " ")
-          .split(/\s+/).filter(Boolean).map(stem)
+        String(c.title || "").replace(/\\([^)]*\\)/g, " ")
+          .replace(/(?<=[a-z])(?=\\d)/gi, " ").replace(/(?<=\d)(?=[a-z])/gi, " ")
+          .toLowerCase().replace(/[^a-z0-9\\s]/g, " ")
+          .split(/\\s+/).filter(Boolean).map(stem)
       );
       let _score = 0;
       for (const w of qWords) if (tSet.has(stem(w))) _score += 1;
+      // Ads sink below organic ties but stay visible if nothing else matches.
+      if (c.sponsored) _score -= 1;
       return Object.assign({}, c, { _score });
     });
     ranked.sort((a, b) => b._score - a._score);
@@ -517,14 +537,22 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
   }
 
   // Stale-page guard: a reused WebView mid-navigation must never answer with
-  // the previous query's products. Results are only accepted when the live
-  // document URL contains the current search term.
-  const wantedRaw = searchQuery.toLowerCase().trim();
+  // the previous query's products. Results are accepted when the live
+  // document URL contains any significant search token.
+  const queryTokens = String(searchQuery || "").toLowerCase().replace(/[^a-z0-9\\s]/g, " ").split(/\\s+/).filter((t) => t.length >= 2);
   const hrefOk = () => {
     try {
-      return decodeURIComponent(window.location.href || "").toLowerCase().includes(wantedRaw);
+      let href = (window.location.href || "").toLowerCase();
+      try { href += " " + decodeURIComponent(href).replace(/\\+/g, " "); } catch (e) {}
+      if (href.includes("/dp/") || href.includes("/product/") || href.includes("/pn/") || href.includes("/item/") || href.includes("/prid/")) {
+        return true;
+      }
+      if (queryTokens.length > 0) {
+        return queryTokens.some((t) => href.includes(t));
+      }
+      return true;
     } catch (e) {
-      return false;
+      return true;
     }
   };
 
@@ -669,6 +697,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
           debug: {
             url: window.location.href,
             title: document.title,
+            failures: (window.__lowpFailLog || []).slice(0, 12),
             attempts: attempts,
             domNodes: document.getElementsByTagName ? document.getElementsByTagName("*").length : 0
           }

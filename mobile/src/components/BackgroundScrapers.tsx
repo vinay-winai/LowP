@@ -47,6 +47,7 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
   searchId,
   onStoreResult
 }) => {
+  const webViewRefs = useRef<{ [key: string]: WebView | null }>({});
   const resolvedStores = useRef<Set<PlatformId>>(new Set());
   const activeSearchId = useRef<number>(searchId);
   const startTimeRef = useRef<number>(0);
@@ -83,7 +84,10 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
           resolvedStores.current.add(platformId);
           const elapsed = Date.now() - startTimeRef.current;
           if (payload.success && payload.data) {
-            console.log(`[LowP Mobile] ${platformId} SUCCESS: "${payload.data.title}" at ₹${payload.data.price} (${elapsed}ms) [Candidates: ${payload.candidates?.length || 1}]`);
+            console.log(`[LowP Mobile] ${platformId} SUCCESS: "${payload.data.title}" at ₹${payload.data.price} (${elapsed}ms) [Candidates: ${(payload.candidates || []).map((c: any) => (c.title || "").slice(0, 28)).join(" | ")}]`);
+            if (payload.debug && payload.debug.failures && payload.debug.failures.length) {
+              console.log(`[LowP Mobile] ${platformId} extraction failures:`, payload.debug.failures);
+            }
             onStoreResult(platformId, payload.data, elapsed, payload.candidates);
           } else {
             console.log(`[LowP Mobile] ${platformId} returned 0 candidates (${elapsed}ms)`, payload.debug || {});
@@ -108,6 +112,9 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
         return (
           <WebView
             key={key}
+            ref={(ref) => {
+              webViewRefs.current[store.platformId] = ref;
+            }}
             source={{ uri: targetUrl }}
             userAgent={DESKTOP_USER_AGENT}
             style={styles.hiddenWebView}
@@ -116,6 +123,9 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
             sharedCookiesEnabled={true}
             thirdPartyCookiesEnabled={true}
             injectedJavaScript={scraperJs}
+            onLoadEnd={() => {
+              webViewRefs.current[store.platformId]?.injectJavaScript(scraperJs);
+            }}
             onMessage={(e) => handleMessage(store.platformId, e)}
             onError={(err) => {
               console.log(`[LowP Mobile] ${store.platformId} WebView error:`, err.nativeEvent);

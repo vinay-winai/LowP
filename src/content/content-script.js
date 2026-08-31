@@ -631,6 +631,8 @@
       );
       let _score = 0;
       for (const w of qWords) if (tSet.has(stem(w))) _score += 1;
+      // Ads sink below organic ties but stay visible if nothing else matches.
+      if (c.sponsored) _score -= 1;
       return Object.assign({}, c, { _score });
     });
     ranked.sort((a, b) => b._score - a._score);

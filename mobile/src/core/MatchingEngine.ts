@@ -40,21 +40,45 @@ export class MatchingEngine {
         .replace(/\s+/g, ' ')
         .trim();
 
-    const fullText = normalize(`${itemTitle} ${packSize}`);
+    // Rank on BOTH views of the title: the primary name with parenthetical
+    // alt names removed ("Potato (Aalugadda)" -> "Potato") keeps ranking
+    // focused, while the untouched title still lets users find items by
+    // their alternate name ("searching aalugadda"). The better score wins.
+    const fullText = normalize(String(itemTitle).replace(/\([^)]*\)/g, ' ') + ' ' + packSize);
+    const fullTextAlt = normalize(`${itemTitle} ${packSize}`);
     const q = normalize(query);
     const queryTokens = q.split(/\s+/).filter((t) => t.length > 0);
 
     let score = 0;
+    let altScore = 0;
+
+    const matchToken = (text: string, token: string) => {
+      if (text.includes(token)) return 30;
+      if (token.endsWith('s') && token.length > 3 && text.includes(token.slice(0, -1))) return 25;
+      if (!token.endsWith('s') && text.includes(token + 's')) return 25;
+      return 0;
+    };
 
     queryTokens.forEach((token) => {
-      if (fullText.includes(token)) {
-        score += 30;
-      } else if (token.endsWith('s') && token.length > 3 && fullText.includes(token.slice(0, -1))) {
-        score += 25;
-      } else if (!token.endsWith('s') && fullText.includes(token + 's')) {
-        score += 25;
-      }
+      score += matchToken(fullText, token);
+      altScore += matchToken(fullTextAlt, token);
     });
+    score = Math.max(score, altScore);
+
+    // Exact-name preference: a product whose PRIMARY name (parentheticals
+    // removed) starts with the query ("Onion (...)" for "onion") outranks
+    // products that merely contain the word ("Sambar Onion (...)").
+    const strippedTitle = normalize(String(itemTitle).replace(/\([^)]*\)/g, ' '));
+    if (q && strippedTitle.startsWith(q)) score += 20;
+
+    // Variety modifiers denote DIFFERENT products ("spring onion",
+    // "sambar onion", "green onion" are not generic onions) — rank them
+    // below plain matches instead of letting them tie on relevance.
+    const VARIETY_MODIFIERS = ['spring', 'sambar', 'green', 'bunch', 'shallot'];
+    if (q) {
+      const varietyRx = new RegExp('\\b(' + VARIETY_MODIFIERS.join('|') + ')\\s+' + q + '\\b');
+      if (varietyRx.test(strippedTitle)) score -= 15;
+    }
 
     const qtyMatch = query.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
     if (qtyMatch) {
@@ -69,7 +93,8 @@ export class MatchingEngine {
         const candQtyMatch = fullText.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)/i);
         if (candQtyMatch) {
           const cNum = parseFloat(candQtyMatch[1]);
-          if (cNum !== qNum) score -= 40;
+          const cUnit = candQtyMatch[2].toLowerCase().replace(/litre|litres/, 'l').replace(/kgs?/, 'kg').replace(/gms?/, 'g');
+          if (cNum !== qNum || cUnit !== qUnit) score -= 40;
         }
       }
     }
