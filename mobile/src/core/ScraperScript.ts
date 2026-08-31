@@ -588,17 +588,67 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     }
   }
 
-  // Execute and poll up to 16 attempts (8 seconds). Mirror the desktop
-  // settle rule: a confident top score over a grid-sized candidate set is
-  // accepted almost immediately, weaker/partial states must hold stable for
-  // a short window so early-hydration fragments never win.
+  // Execute reactively and poll up to 9 seconds.
+  // 1. Run immediately on evaluation (t = 0).
+  // 2. Observe DOM mutations with a lightweight 80ms debounce so React/Next.js
+  //    hydration triggers extraction immediately.
+  // 3. Fast adaptive polling (150ms) ensures background/timer throttled
+  //    WebViews still settle within ~1.5s instead of paying 500ms dead waits.
   let attempts = 0;
   let bestRes = null;
   let lastSig = null;
   let lastChangeAt = Date.now();
+  let finalized = false;
+  let pollInterval = null;
+  let mutationObserver = null;
+  let debounceTimer = null;
+  let lastAttemptTime = 0;
+
   const sigOf = (res) => ((res && res.candidates) || []).map((c) => c.title + "@" + c.price).join("|");
-  const pollInterval = setInterval(() => {
+
+  function sendResult(success, data, candidates, debug) {
+    if (finalized) return;
+    finalized = true;
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+    if (window.__lowpScraperTimer) {
+      clearInterval(window.__lowpScraperTimer);
+      window.__lowpScraperTimer = null;
+    }
+    if (mutationObserver) {
+      try { mutationObserver.disconnect(); } catch (e) {}
+      mutationObserver = null;
+    }
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
+    if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'SCRAPE_RESULT',
+        platformId: targetPlatformId,
+        success,
+        data: data || null,
+        candidates: candidates || [],
+        debug: Object.assign({
+          url: window.location.href,
+          title: document.title,
+          attempts: attempts,
+          domNodes: document.getElementsByTagName ? document.getElementsByTagName("*").length : 0
+        }, debug || {})
+      }));
+    }
+  }
+
+  function attemptExtraction() {
+    if (finalized) return;
+    const now = Date.now();
+    if (now - lastAttemptTime < 80) return;
+    lastAttemptTime = now;
     attempts++;
+
     let res = runExtraction();
     if (res.best && !hrefOk()) {
       res = { best: null, candidates: [], found: 0 };
@@ -606,64 +656,20 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
 
     // Empty-state early exit: when the site itself says nothing matched
     // ("couldn't find", "no results", ...), stop polling immediately instead
-    // of burning the full 8s budget. Guarded hard against false positives:
-    // only visible text (scripts/styles excluded), only after the document
-    // finished loading, and never before attempt 4 — bare SPA shells must
-    // not be mistaken for genuine empty states.
-    if (!res.best && attempts >= 4 && document.readyState === "complete") {
+    // of burning the full budget.
+    if (!res.best && attempts >= 3 && (document.readyState === "complete" || document.readyState === "interactive")) {
       try {
         const bodyText = visibleBodyText();
-        // couldn.t / didn.t cover straight, curly, and missing apostrophes.
         if (/no results|couldn.t find|could not find|didn.t find|nothing here|did not match any|didn.t match|no matching|no items found|0 results|no products|nothing matched|unable to find|not available in/.test(bodyText)) {
-          clearInterval(pollInterval);
-          if (window.__lowpScraperTimer === pollInterval) {
-            window.__lowpScraperTimer = null;
-          }
-          if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-            window.ReactNativeWebView.postMessage(JSON.stringify({
-              type: 'SCRAPE_RESULT',
-              platformId: targetPlatformId,
-              success: false,
-              data: null,
-              candidates: [],
-              debug: {
-                url: window.location.href,
-                title: document.title,
-                reason: 'empty_state',
-                attempts: attempts,
-                domNodes: document.getElementsByTagName ? document.getElementsByTagName("*").length : 0
-              }
-            }));
-          }
+          sendResult(false, null, [], { reason: 'empty_state' });
           return;
         }
       } catch (e) {}
     }
 
-    // Second-tier give-up: page fully loaded, ten attempts, still zero
-    // candidates and none of the known empty-state phrases — treat as no
-    // results instead of stretching to attempt 16 (~9-10s with walk time).
-    if (!res.best && attempts >= 10 && document.readyState === "complete") {
-      clearInterval(pollInterval);
-      if (window.__lowpScraperTimer === pollInterval) {
-        window.__lowpScraperTimer = null;
-      }
-      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'SCRAPE_RESULT',
-          platformId: targetPlatformId,
-          success: false,
-          data: null,
-          candidates: [],
-          debug: {
-            url: window.location.href,
-            title: document.title,
-            reason: 'no_results_timeout',
-            attempts: attempts,
-            domNodes: document.getElementsByTagName ? document.getElementsByTagName("*").length : 0
-          }
-        }));
-      }
+    // Second-tier give-up: page fully loaded, 15+ attempts (~2.5s+), still zero candidates
+    if (!res.best && attempts >= 18 && document.readyState === "complete") {
+      sendResult(false, null, [], { reason: 'no_results_timeout' });
       return;
     }
 
@@ -671,40 +677,65 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       const sig = sigOf(res);
       if (sig !== lastSig) {
         lastSig = sig;
-        lastChangeAt = Date.now();
+        lastChangeAt = now;
         bestRes = res;
       }
-    }
-    const settledFor = (() => {
-      if (!bestRes) return 0;
+
       const topScore = (bestRes.best && bestRes.best._score) || 0;
       const found = bestRes.found || 0;
-      return (topScore >= 60 && found >= 5) ? 100 : 500;
-    })();
-    const stable = !!bestRes && (Date.now() - lastChangeAt >= settledFor);
-    if (stable || attempts >= 16) {
-      clearInterval(pollInterval);
-      if (window.__lowpScraperTimer === pollInterval) {
-        window.__lowpScraperTimer = null;
+      const candCount = (bestRes.candidates || []).length;
+      const isDocReady = document.readyState === "complete" || document.readyState === "interactive";
+
+      // FAST-PATH SETTLEMENT:
+      // If we have a confident full listing (>= 3 candidates with valid score) or
+      // a complete document with multiple valid candidates, settle immediately!
+      if ((candCount >= 3 && topScore >= 30) || (found >= 4 && isDocReady && topScore >= 20) || (topScore >= 55 && candCount >= 2)) {
+        sendResult(true, bestRes.best, bestRes.candidates, { failures: (window.__lowpFailLog || []).slice(0, 8), fastSettled: true });
+        return;
       }
-      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: 'SCRAPE_RESULT',
-          platformId: targetPlatformId,
-          success: !!(bestRes && bestRes.best),
-          data: (bestRes && bestRes.best) || null,
-          candidates: (bestRes && bestRes.candidates) || [],
-          debug: {
-            url: window.location.href,
-            title: document.title,
-            failures: (window.__lowpFailLog || []).slice(0, 12),
-            attempts: attempts,
-            domNodes: document.getElementsByTagName ? document.getElementsByTagName("*").length : 0
-          }
-        }));
+
+      // SHORT-WINDOW SETTLEMENT for partial/single candidate matches:
+      const settledFor = (topScore >= 40 && found >= 3) ? 80 : 250;
+      if (now - lastChangeAt >= settledFor) {
+        sendResult(true, bestRes.best, bestRes.candidates, { failures: (window.__lowpFailLog || []).slice(0, 8) });
+        return;
       }
     }
-  }, 500);
+
+    if (attempts >= 40) { // ~6-7s limit
+      sendResult(!!(bestRes && bestRes.best), (bestRes && bestRes.best) || null, (bestRes && bestRes.candidates) || [], {
+        failures: (window.__lowpFailLog || []).slice(0, 12),
+        reason: 'max_attempts'
+      });
+    }
+  }
+
+  // 1. Immediate execution
+  attemptExtraction();
+
+  // 2. Reactive MutationObserver
+  try {
+    const rootNode = document.body || document.documentElement;
+    if (rootNode && typeof MutationObserver !== "undefined") {
+      mutationObserver = new MutationObserver(() => {
+        if (finalized) return;
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          attemptExtraction();
+        }, 60);
+      });
+      mutationObserver.observe(rootNode, { childList: true, subtree: true });
+    }
+  } catch (e) {}
+
+  // 3. Document Lifecycle hooks
+  if (document.readyState !== "complete") {
+    document.addEventListener("DOMContentLoaded", attemptExtraction, { once: true });
+    document.addEventListener("readystatechange", attemptExtraction);
+  }
+
+  // 4. Fast adaptive polling interval (150ms)
+  pollInterval = setInterval(attemptExtraction, 150);
   window.__lowpScraperTimer = pollInterval;
 })();
 true;

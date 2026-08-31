@@ -124,6 +124,16 @@ export const HomeScreen: React.FC = () => {
 
   useEffect(() => {
     LocationService.getActiveLocation().then(setActiveLocation);
+    // Pre-warm DNS and TLS connections to store domains on app mount
+    const origins = [
+      'https://www.amazon.in/',
+      'https://www.swiggy.com/',
+      'https://www.zepto.com/',
+      'https://blinkit.com/'
+    ];
+    origins.forEach((url) => {
+      fetch(url, { method: 'HEAD', mode: 'no-cors' }).catch(() => {});
+    });
   }, []);
 
   const handleTriggerSearch = (query: string) => {

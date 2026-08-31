@@ -120,8 +120,17 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
             style={styles.hiddenWebView}
             javaScriptEnabled={true}
             domStorageEnabled={true}
+            cacheEnabled={true}
             sharedCookiesEnabled={true}
             thirdPartyCookiesEnabled={true}
+            androidHardwareAccelerationDisabled={false}
+            androidLayerType="hardware"
+            mediaPlaybackRequiresUserAction={true}
+            allowsInlineMediaPlayback={false}
+            javaScriptCanOpenWindowsAutomatically={false}
+            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
+            overScrollMode="never"
             injectedJavaScript={scraperJs}
             onLoadEnd={() => {
               webViewRefs.current[store.platformId]?.injectJavaScript(scraperJs);
@@ -147,13 +156,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -9999,
     left: -9999,
-    width: 1,
-    height: 1,
-    opacity: 0,
+    width: 480,
+    height: 640,
+    opacity: 0.01,
     overflow: 'hidden'
   },
   hiddenWebView: {
-    width: 1,
-    height: 1
+    width: 480,
+    height: 640
   }
 });
