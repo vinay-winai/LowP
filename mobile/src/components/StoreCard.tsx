@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { StoreResult } from '../types';
-import { ExternalLink, CheckCircle2, XCircle, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ExternalLink, CheckCircle2, XCircle, Sparkles, ChevronLeft, ChevronRight, Search } from 'lucide-react-native';
 
 interface StoreCardProps {
   store: StoreResult;
@@ -18,9 +18,19 @@ export const StoreCard: React.FC<StoreCardProps> = ({ store, isLoading, onCycleC
   const currentIdx = store.selectedIndex || 0;
   const hasMultipleMatches = candidatesCount > 1;
 
-  const handleOpenStore = () => {
-    if (store.productUrl && store.productUrl !== '#') {
-      Linking.openURL(store.productUrl).catch(() => {});
+  const productUrl = store.productUrl || store.globalUrl || store.searchUrl;
+  const globalUrl = store.globalUrl || store.searchUrl || store.productUrl;
+  const hasDistinctGlobal = globalUrl && productUrl && globalUrl !== productUrl;
+
+  const handleOpenProduct = () => {
+    if (productUrl && productUrl !== '#') {
+      Linking.openURL(productUrl).catch(() => {});
+    }
+  };
+
+  const handleOpenSearch = () => {
+    if (globalUrl && globalUrl !== '#') {
+      Linking.openURL(globalUrl).catch(() => {});
     }
   };
 
@@ -138,10 +148,18 @@ export const StoreCard: React.FC<StoreCardProps> = ({ store, isLoading, onCycleC
               <Text style={styles.priceValue}>{store.priceBreakdown!.finalPayable}</Text>
             </View>
 
-            <TouchableOpacity style={styles.openButton} onPress={handleOpenStore}>
-              <ExternalLink size={14} color="#38BDF8" />
-              <Text style={styles.openButtonText}>View</Text>
-            </TouchableOpacity>
+            <View style={styles.actionButtonsRow}>
+              {hasDistinctGlobal && (
+                <TouchableOpacity style={styles.searchButton} onPress={handleOpenSearch}>
+                  <Search size={12} color="#94A3B8" />
+                  <Text style={styles.searchButtonText}>Search</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.openButton} onPress={handleOpenProduct}>
+                <ExternalLink size={13} color="#38BDF8" />
+                <Text style={styles.openButtonText}>View</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       ) : (
@@ -149,6 +167,12 @@ export const StoreCard: React.FC<StoreCardProps> = ({ store, isLoading, onCycleC
           <Text style={styles.emptyText}>
             {isLoading ? 'Fetching live store price...' : 'No matching items found in this store zone'}
           </Text>
+          {!isLoading && globalUrl && globalUrl !== '#' && (
+            <TouchableOpacity style={styles.emptySearchButton} onPress={handleOpenSearch}>
+              <Search size={12} color="#38BDF8" />
+              <Text style={styles.emptySearchButtonText}>Search on {store.platformName}</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
     </View>
@@ -339,6 +363,27 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800'
   },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  searchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)'
+  },
+  searchButtonText: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '600'
+  },
   openButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -363,5 +408,22 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 13,
     textAlign: 'center'
+  },
+  emptySearchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 8,
+    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.2)'
+  },
+  emptySearchButtonText: {
+    color: '#38BDF8',
+    fontSize: 11,
+    fontWeight: '600'
   }
 });

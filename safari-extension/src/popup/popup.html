@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LowP - Hyperlocal Price Comparator</title>
   <link rel="stylesheet" href="popup.css">
 </head>
@@ -18,7 +18,7 @@
         </div>
       </div>
       <div class="header-actions">
-        <button id="clearCacheBtn" class="clear-cache-btn" title="Clear search cache">🗑️ Clear</button>
+        <button id="openMatrixBtn" class="clear-cache-btn" title="View Strategy Matrix (Basket Optimizer)">📊 Matrix (<span id="matrixCount">0</span>)</button>
         <div class="location-pill" id="locationPill" title="Change location">
           <span class="loc-icon">📍</span>
           <span class="loc-text" id="activeLocationText">Hyderabad (500085)</span>
@@ -26,13 +26,21 @@
       </div>
     </header>
 
+    <!-- Store Collections Tab Bar -->
+    <div class="collections-bar" id="collectionsBar">
+      <div class="collections-scroll" id="collectionsList">
+        <!-- Rendered dynamically: ⚡ 10 min pack, 📦 Big Online Pack, 🛒 All Stores, custom packs -->
+      </div>
+      <button id="addCollectionBtn" class="add-collection-btn" title="Create or manage store collections">＋ Pack</button>
+    </div>
+
     <!-- Search Section -->
     <section class="search-section">
       <div class="search-box">
         <input 
           type="text" 
           id="searchInput" 
-          placeholder="Search products (e.g. paneer 200g, butter 500g)..." 
+          placeholder="Search products (e.g. Milky Mist high protein paneer 200g)..." 
           autocomplete="off"
         />
         <button id="searchBtn" class="search-btn" title="Search">
@@ -42,25 +50,92 @@
           </svg>
         </button>
       </div>
+
+      <!-- Strategy Matrix Action Bar -->
+      <div class="cart-action-bar" id="cartActionBar">
+        <button id="addToMatrixBtn" class="add-to-matrix-btn" disabled>
+          <span class="cart-btn-icon">🛒</span>
+          <span id="addToMatrixText">+ Add to Strategy Matrix</span>
+        </button>
+        <button id="viewMatrixBtn" class="view-matrix-btn">
+          <span>📊 View Matrix</span>
+        </button>
+      </div>
     </section>
+
+    <!-- Collection Builder Modal -->
+    <div class="modal-backdrop" id="collectionModalBackdrop" style="display: none;">
+      <div class="modal-content collection-modal">
+        <div class="modal-header">
+          <div class="matrix-modal-title-box">
+            <span class="matrix-modal-icon">📦</span>
+            <div>
+              <h3 class="matrix-modal-title" id="collectionModalTitle">Store Collection</h3>
+              <span class="matrix-modal-sub">Pick and choose stores to compare</span>
+            </div>
+          </div>
+          <button id="closeCollectionModalBtn" class="close-modal-btn">✕</button>
+        </div>
+        <div class="modal-body collection-modal-body">
+          <div class="form-group">
+            <label class="form-label" for="collectionNameInput">Collection Name</label>
+            <input type="text" id="collectionNameInput" class="form-input" placeholder="e.g. My Grocery Pack, Fast 3..." />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Select Stores to Include</label>
+            <div class="store-checkbox-grid" id="storeCheckboxGrid">
+              <!-- Checkboxes for all 6 stores -->
+            </div>
+          </div>
+          <div class="collection-modal-footer">
+            <button id="deleteCollectionBtn" class="delete-collection-btn" style="display: none;">Delete</button>
+            <div style="flex: 1;"></div>
+            <button id="saveCollectionBtn" class="save-collection-btn">Save Collection</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Strategy Matrix Modal -->
+    <div class="modal-backdrop" id="matrixModalBackdrop" style="display: none;">
+      <div class="modal-content matrix-modal">
+        <div class="modal-header">
+          <div class="matrix-modal-title-box">
+            <span class="matrix-modal-icon">🛒</span>
+            <div>
+              <h3 class="matrix-modal-title">Strategy Matrix</h3>
+              <span class="matrix-modal-sub" id="matrixItemCountText">0 Items in Basket • Multi-Store Arbitrage</span>
+            </div>
+          </div>
+          <div class="matrix-modal-actions">
+            <button id="clearMatrixBtn" class="clear-matrix-btn">Clear All</button>
+            <button id="closeMatrixBtn" class="close-modal-btn">✕</button>
+          </div>
+        </div>
+        <div class="modal-body matrix-modal-body" id="matrixModalBody">
+          <!-- Injected dynamically -->
+        </div>
+      </div>
+    </div>
 
     <!-- Results Section -->
     <main class="results-section" id="resultsSection">
       <div class="loading-state" id="loadingState" style="display: none;">
         <div class="spinner"></div>
-        <p class="loading-text">Comparing live prices across Amazon Tez, Instamart, Zepto & Blinkit...</p>
+        <p class="loading-text">Comparing live prices across Amazon, Instamart & Zepto...</p>
       </div>
 
       <div class="cards-grid" id="cardsGrid">
         <!-- Injected dynamically -->
       </div>
+      <div id="resultMeta" style="display:none;text-align:center;font-size:11px;color:#94A3B8;padding:4px 0 8px;"></div>
     </main>
 
     <!-- Footer & Debug Inspector -->
     <footer class="footer">
       <div class="footer-links">
         <button id="toggleDebugBtn" class="debug-toggle-btn">🛠️ Debug Inspector</button>
-        <button id="copyDebugBtn" class="copy-debug-btn" style="display: none;">📋 Copy Log</button>
+        <button id="copyDebugBtn" class="copy-debug-btn" style="display: none;">📋 Copy Debug Log</button>
       </div>
 
       <div id="debugDrawer" class="debug-drawer" style="display: none;">

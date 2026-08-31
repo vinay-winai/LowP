@@ -32,6 +32,7 @@
     "*://*.zepto.com/*",
     "*://*.zeptonow.com/*",
     "*://*.blinkit.com/*",
+    "*://*.flipkart.com/*",
     "*://*.nominatim.openstreetmap.org/*"
   ],
   "background": {
@@ -44,7 +45,8 @@
         "*://*.swiggy.com/*",
         "*://*.zepto.com/*",
         "*://*.zeptonow.com/*",
-        "*://*.blinkit.com/*"
+        "*://*.blinkit.com/*",
+        "*://*.flipkart.com/*"
       ],
       "js": ["src/content/content-script.js"],
       "run_at": "document_idle"

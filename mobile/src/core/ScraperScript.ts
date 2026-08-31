@@ -80,63 +80,68 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
   function cleanTitle(str) {
     if (!str || typeof str !== "string") return "";
     return str
-      .replace(/^sponsored\\s*/i, "")
-      .replace(/^\\s*\\d+(?:\\.\\d+)?\\s*%\\s*off\\s*/i, "")
-      .replace(/(?:₹|Rs\\.?|INR)\\s*[0-9,]+(?:\\.[0-9]+)?/gi, "")
-      .replace(/\\b(?:delivery in\\s*)?\\d+(?:\\s*-\\s*\\d+)?\\s*(?:mins?|minutes?|hours?|sec|seconds?)\\b/gi, "")
-      .replace(/\\b(?:add|options?)\\s*\\d*\\b/gi, "")
-      .replace(/\\b\\d+(?:\\.\\d+)?\\s*(?:lac|lakh)\\b/gi, "")
-      .replace(/\\b(?:fastest delivery|standard delivery|instant delivery|express delivery|free delivery|delivery)\\b/gi, "")
-      .replace(/\\b(?:mrp|add|buy|added|in stock|out of stock|off|\\d+%\\s*off|save)\\b/gi, "")
-      // Split glued boundaries FIRST so welded button text separates
-      // ("Potato1 kgAdd" -> "Potato1 kg Add"), then strip UI verbs.
+      .replace(/^sponsored\s*/i, "")
+      .replace(/\b(?:sponsored\s+ad|sponsored|ad)\s*[-–:]\s*/gi, "")
+      .replace(/^\s*\d+(?:\.\d+)?\s*%\s*off\s*/i, "")
+      .replace(/(?:₹|Rs\.?|INR)\s*[0-9,]+(?:\.[0-9]+)?/gi, "")
+      .replace(/\b(?:delivery in\s*)?\d+(?:\s*-\s*\d+)?\s*(?:mins?|minutes?|hours?|sec|seconds?)\b/gi, "")
+      .replace(/\b(?:add|options?)\s*\d*\b/gi, "")
+      .replace(/\b\d+(?:\.\d+)?\s*(?:lac|lakh)\b/gi, "")
+      .replace(/\b(?:fastest delivery|standard delivery|instant delivery|express delivery|free delivery|delivery)\b/gi, "")
+      .replace(/\b(?:mrp|add|buy|added|in stock|out of stock|off|\d+%\s*off|save)\b/gi, "")
       .replace(/(?<=[a-z])(?=[A-Z])/g, " ")
-      .replace(/\\badd\\b/gi, "")
-      .replace(/\\b(?:previously bought|earlier bought)\\b/gi, "")
-      // Stray UI glyph letters glued to the end ("... Cow MilkR" from an
-      // R-badge text node). Only strip a lone capital appended to a word;
-      // never touch mid-title letters ("Vitamin D" stays intact).
-      .replace(/(?<=[a-z])[A-Z](?=\\s|$)/g, "")
-      .replace(/\\s+/g, " ")
+      .replace(/\badd\b/gi, "")
+      .replace(/\b(?:previously bought|earlier bought)\b/gi, "")
+      .replace(/(?<=[a-z])[A-Z](?=\s|$)/g, "")
+      .replace(/&amp;/g, "&")
+      .replace(/&#x27;/g, "'")
+      .replace(/&#39;/g, "'")
+      .replace(/\s+/g, " ")
       .trim();
   }
 
   function scoreRelevance(itemTitle, query, packSize) {
     if (!itemTitle || !query || !query.trim()) return 0;
     const normalize = (str) => (str || "").toLowerCase().replace(/['’\`"]/g, "").replace(/[^a-z0-9\\s]/g, " ").replace(/\\s+/g, " ").trim();
-    // Rank on BOTH views of the title: the primary name with parenthetical
-    // alt names removed ("Potato (Aalugadda)" -> "Potato") keeps ranking
-    // focused, while the untouched title still lets users find items by
-    // their alternate name ("searching aalugadda"). The better score wins.
     const fullText = normalize(String(itemTitle).replace(/\\([^)]*\\)/g, " ") + " " + (packSize || ""));
     const fullTextAlt = normalize(itemTitle + " " + (packSize || ""));
     const q = normalize(query);
     const queryTokens = q.split(/\\s+/).filter(Boolean);
+    if (queryTokens.length === 0) return 0;
 
     let score = 0;
-    let altScore = 0;
+    let matchedTokens = 0;
 
     const matchToken = (text, token) => {
-      if (text.includes(token)) return 30;
-      if (token.endsWith('s') && token.length > 3 && text.includes(token.slice(0, -1))) return 25;
-      if (!token.endsWith('s') && text.includes(token + 's')) return 25;
+      const wordBoundary = new RegExp("(^|\\s)" + token + "(\\s|$)");
+      if (wordBoundary.test(text)) return 35;
+      if (text.includes(token)) return 20;
+      if (token.endsWith('s') && token.length > 3 && text.includes(token.slice(0, -1))) return 18;
+      if (!token.endsWith('s') && text.includes(token + 's')) return 18;
       return 0;
     };
 
     queryTokens.forEach(token => {
-      score += matchToken(fullText, token);
-      altScore += matchToken(fullTextAlt, token);
+      const pts = Math.max(matchToken(fullText, token), matchToken(fullTextAlt, token));
+      if (pts > 0) {
+        score += pts;
+        matchedTokens++;
+      }
     });
-    score = Math.max(score, altScore);
-    // Exact-name preference: a product whose PRIMARY name (parentheticals
-    // removed) starts with the query ("Onion (...)" for "onion") outranks
-    // products that merely contain the word ("Sambar Onion (...)").
+
+    if (queryTokens[0].length >= 2) {
+      const firstWordRx = new RegExp("(^|\\s)" + queryTokens[0] + "(\\s|$)");
+      const hasFirstWord = firstWordRx.test(fullText) || firstWordRx.test(fullTextAlt);
+      if (!hasFirstWord && !fullText.includes(queryTokens[0])) {
+        score -= 50;
+      } else {
+        score += 25;
+      }
+    }
+
     const strippedTitle = normalize(String(itemTitle).replace(/\\([^)]*\\)/g, " "));
     if (q && strippedTitle.startsWith(q)) score += 20;
 
-    // Variety modifiers denote DIFFERENT products ("spring onion",
-    // "sambar onion", "green onion" are not generic onions) — rank them
-    // below plain matches instead of letting them tie on relevance.
     const VARIETY_MODIFIERS = ["spring", "sambar", "green", "bunch", "shallot"];
     if (q) {
       const varietyRx = new RegExp("\\\\b(" + VARIETY_MODIFIERS.join("|") + ")\\\\s+" + q + "\\\\b");
@@ -160,8 +165,10 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       }
     }
 
-    if (queryTokens.length > 0 && fullText.includes(queryTokens[0])) score += 25;
-    return score;
+    const coverage = matchedTokens / queryTokens.length;
+    score = Math.round(score * (0.5 + 0.5 * coverage));
+
+    return Math.max(0, score);
   }
 
   function getSpacedText(node) {
@@ -198,12 +205,12 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     
     // 1. Price extraction
     let price = null;
-    const priceEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="EdlpPrice"], [data-testid*="price"], [data-testid*="item_price"], [data-testid*="offer-price"], [class*="_2jn41"], [class*="_1yW90"], [class*="_3-M84"]') : null;
+    const priceEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="EdlpPrice"], [data-testid*="price"], [data-testid*="item_price"], [data-testid*="offer-price"], span.a-price span.a-offscreen, span.a-price .a-price-whole, span.a-price, span.a-color-price, [class*="a-price"], div.hZ3P6w, div.Nx9bqj, div._30jeq3, div._1vC4OE, [class*="hZ3P6w"], [class*="Nx9bqj"], [class*="_30jeq3"], [class*="_2jn41"], [class*="_1yW90"], [class*="_3-M84"]') : null;
     if (priceEl) {
       const pTxt = getSpacedText(priceEl).trim();
-      const m = pTxt.match(/([0-9,]+(?:\\.[0-9]+)?)/);
+      const m = pTxt.replace(/,/g, "").match(/([0-9]+(?:\\.[0-9]+)?)/);
       if (m) {
-        const val = parseFloat(m[1].replace(/,/g, ""));
+        const val = parseFloat(m[1]);
         if (val >= 5 && val <= 500000) price = val;
       }
     }
@@ -236,20 +243,42 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       return null;
     }
 
-    const imgEl = cardNode.querySelector ? cardNode.querySelector('img') : null;
-    const image = imgEl ? (imgEl.src || "assets/icon48.png") : "assets/icon48.png";
+    const imgEl = cardNode.querySelector ? cardNode.querySelector('img.s-image, img.UCc1lI, img._396cs4, img.DByuf4, img[src*="media-amazon.com"], img[src*="rukminim"], img') : null;
+    const image = imgEl ? (imgEl.src || (imgEl.getAttribute && imgEl.getAttribute('src')) || "assets/icon48.png") : "assets/icon48.png";
 
     let title = "";
-    const titleEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="ProductName"], [data-testid*="name"], [data-testid*="title"], [data-testid*="item_name"], [data-testid*="item-title"], [data-slot-id*="title"], [class*="ProductName"], [class*="ItemName"], [class*="product_name"], [class*="styled__ItemName"], [class*="ItemTitle"], [class*="Product__UpdatedTitle"], [class*="tw-text-base-black"], [class*="tw-line-clamp-2"], [class*="_2T1-K"], [class*="nov9b"], [class*="_1W_4e"], [class*="_1b1-N"], h1, h2, h3, h4, h5') : null;
-    if (titleEl) {
-      const txt = cleanTitle(titleEl.textContent);
-      if (txt && txt.length >= 3 && !isBadTitle(txt)) {
-        title = txt;
+
+    // 2. Title extraction:
+    // 2a. Full aria-label on h2 (Amazon full product title)
+    const ariaHeading = cardNode.querySelector ? cardNode.querySelector('h2[aria-label]') : null;
+    if (ariaHeading && ariaHeading.getAttribute('aria-label')) {
+      const cleanAria = cleanTitle(ariaHeading.getAttribute('aria-label'));
+      if (cleanAria && cleanAria.length >= 6 && !isBadTitle(cleanAria)) {
+        title = cleanAria;
       }
     }
 
-    if (!title && imgEl && imgEl.alt && imgEl.alt.length > 5) {
-      const altTxt = cleanTitle(imgEl.alt);
+    // 2b. Priority product title selectors
+    if (!title) {
+      const titleEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="ProductName"], [data-testid*="name"], [data-testid*="title"], [data-testid*="item_name"], [data-testid*="item-title"], [data-slot-id*="title"], [data-cy="title-recipe"] h2, h2.a-color-base, a.a-text-normal[href*="/dp/"] span, h2 a span, h2.a-size-medium, h2.a-size-base-plus, a[title], div.KzDlHZ, a.pIpigb, a.wjcEIp, a.s1Q9rs, div._4rR01T, div.YBLCv4, a.WKTcLC, [class*="ProductName"], [class*="ItemName"], [class*="product_name"], [class*="styled__ItemName"], [class*="ItemTitle"], [class*="Product__UpdatedTitle"], [class*="tw-text-base-black"], [class*="tw-line-clamp-2"], [class*="_2T1-K"], [class*="nov9b"], [class*="_1W_4e"], [class*="_1b1-N"], h1, h3, h4, h5') : null;
+      if (titleEl) {
+        const rawTxt = (titleEl.getAttribute && titleEl.getAttribute('title')) || titleEl.textContent;
+        const txt = cleanTitle(rawTxt);
+        if (txt && txt.length >= 3 && !isBadTitle(txt)) {
+          title = txt;
+        }
+      }
+    }
+
+    // 2c. Check for separate brand tag on Amazon/Flipkart and prepend if not already in title
+    const brandEl = cardNode.querySelector ? cardNode.querySelector('h2.a-size-mini span, span.a-size-medium.a-color-base') : null;
+    const brandTxt = brandEl ? cleanTitle(brandEl.textContent) : "";
+    if (brandTxt && brandTxt.length >= 2 && brandTxt.length <= 25 && title && !title.toLowerCase().startsWith(brandTxt.toLowerCase())) {
+      title = brandTxt + " " + title;
+    }
+
+    if (!title && imgEl && (imgEl.alt || (imgEl.getAttribute && imgEl.getAttribute('alt')))) {
+      const altTxt = cleanTitle(imgEl.alt || imgEl.getAttribute('alt'));
       if (altTxt && altTxt.length >= 3 && !isBadTitle(altTxt)) {
         title = altTxt;
       }
@@ -275,13 +304,32 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     const quantity = qtyEl ? qtyEl.textContent.trim() : "1 unit";
 
     let mrp = price;
-    const mrpMatch = spacedCardText.match(/(?:MRP|M\\.R\\.P|Strike)\\s*(?:₹|Rs\\.?|INR)?\\s*([0-9,]+(?:\\.[0-9]+)?)/i);
-    if (mrpMatch) {
-      const val = parseFloat(mrpMatch[1].replace(/,/g, ""));
-      if (val >= price) mrp = val;
+    const mrpEl = cardNode.querySelector ? cardNode.querySelector('span.a-price.a-text-price span.a-offscreen, span[data-a-strike="true"], span.a-text-price, div.kRYCnD, div.yRaY8j, div._3I9_wc, [class*="kRYCnD"], [class*="yRaY8j"], [class*="_3I9_wc"], s, del, strike, [class*="strike"], [class*="slashed"]') : null;
+    if (mrpEl) {
+      const mMatch = mrpEl.textContent.replace(/,/g, "").match(/([0-9]+(?:\\.[0-9]+)?)/);
+      if (mMatch) {
+        const val = parseFloat(mMatch[1]);
+        if (val >= price) mrp = val;
+      }
+    } else {
+      const mrpMatch = spacedCardText.match(/(?:MRP|M\\.R\\.P|Strike)\\s*(?:₹|Rs\\.?|INR)?\\s*([0-9,]+(?:\\.[0-9]+)?)/i);
+      if (mrpMatch) {
+        const val = parseFloat(mrpMatch[1].replace(/,/g, ""));
+        if (val >= price) mrp = val;
+      }
     }
 
-    const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : (platformId === "blinkit" ? "Blinkit" : "Quick Store")));
+    const linkEl = cardNode.querySelector ? cardNode.querySelector('a[href*="/dp/"], a[href*="/p/"], a.a-link-normal[href*="/gp/product/"], a.a-link-normal[href*="/dp/"], a.GnxRXv, a.pIpigb, a.fb4uj3, h2 a, a[href]') : null;
+    let productUrl = window.location.href;
+    if (linkEl && linkEl.href) {
+      productUrl = linkEl.href;
+    } else if (linkEl && linkEl.getAttribute && linkEl.getAttribute('href')) {
+      const hrefAttr = linkEl.getAttribute('href');
+      if (hrefAttr.startsWith('http')) productUrl = hrefAttr;
+      else if (hrefAttr.startsWith('/')) productUrl = window.location.origin + hrefAttr;
+    }
+
+    const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : (platformId === "blinkit" ? "Blinkit" : (platformId === "amazon_main" ? "Amazon.in" : (platformId === "flipkart" ? "Flipkart" : "Store")))));
 
     return {
       title,
@@ -293,7 +341,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       brand,
       quantity,
       image,
-      productUrl: window.location.href,
+      productUrl,
       platformId
     };
   }
@@ -321,7 +369,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
                   title: cleanT,
                   price,
                   mrp: Math.max(mrp, price),
-                  brand: targetPlatformId === "instamart" ? "Swiggy Instamart" : (targetPlatformId === "zepto" ? "Zepto" : (targetPlatformId === "blinkit" ? "Blinkit" : "Amazon Now (Tez)")),
+                  brand: targetPlatformId === "instamart" ? "Swiggy Instamart" : (targetPlatformId === "zepto" ? "Zepto" : (targetPlatformId === "blinkit" ? "Blinkit" : (targetPlatformId === "amazon_main" ? "Amazon.in" : (targetPlatformId === "flipkart" ? "Flipkart" : "Amazon Now (Tez)")))),
                   quantity: o.quantity || o.pack_size || o.weight || "1 unit",
                   image: o.image || o.imageUrl || (o.imageId ? "https://media-assets.swiggy.com/swiggy/image/upload/fl_lossy,f_auto,q_auto,w_252,h_252/" + o.imageId : "assets/icon48.png"),
                   productUrl: window.location.href,
@@ -356,15 +404,15 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       'div[class*="card"]',
       'div[class*="Product__"]',
       'div[class*="tw-relative"]',
-      'a[href*="/pn/"]',
-      'a[href*="/product/"]',
-      'a[href*="/item/"]',
-      'a[href*="/dp/"]',
-      'a[href*="/prid/"]',
-      'a[href*="/p/"]',
       'div[data-component-type="s-search-result"]',
       'div[class*="s-result-item"]',
-      'div[data-asin]'
+      'div[data-asin]:not([data-asin=""])',
+      'div[data-id]',
+      'div[class*="_1AtVbE"]',
+      'div[class*="_75nlfW"]',
+      'div[class*="slAVV4"]',
+      'div[class*="cPHDOP"]',
+      'div[class*="RGLWAk"]'
     ];
 
     const allMatched = Array.from(document.querySelectorAll(cardSelectors.join(', ')));
@@ -513,25 +561,22 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     const qWords = String(searchQuery || "").toLowerCase().replace(/[^a-z0-9\\s]/g, " ").split(/\\s+/).filter(Boolean);
     const stem = (w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w);
     const ranked = candidates.map((c) => {
-      // Split glued letter/digit boundaries ("Potato1 kg" -> "potato","kg"):
-      // Tez glues title+packSize into one string, and without this the token
-      // "potato1" never matches the query word "potato".
-      const tSet = new Set(
-        String(c.title || "").replace(/\\([^)]*\\)/g, " ")
-          .replace(/(?<=[a-z])(?=\\d)/gi, " ").replace(/(?<=\d)(?=[a-z])/gi, " ")
-          .toLowerCase().replace(/[^a-z0-9\\s]/g, " ")
-          .split(/\\s+/).filter(Boolean).map(stem)
-      );
-      let _score = 0;
-      for (const w of qWords) if (tSet.has(stem(w))) _score += 1;
-      // Ads sink below organic ties but stay visible if nothing else matches.
-      if (c.sponsored) _score -= 1;
-      return Object.assign({}, c, { _score });
+      let _score = scoreRelevance(c.title, searchQuery, c.quantity);
+      const isSponsored = !!c.sponsored || /\b(?:sponsored\s+ad|sponsored|ad)\b/i.test(c.rawTitle || c.title || "");
+      if (isSponsored) _score -= 15;
+      return Object.assign({}, c, { _score, isSponsored });
     });
-    ranked.sort((a, b) => b._score - a._score);
-    const qualified = ranked.filter((c) => c._score > 0);
+
+    // If candidate has "Sponsored" or "Ad" and score is lower than 25, discard it
+    const filtered = ranked.filter((c) => {
+      if (c.isSponsored && c._score < 25) return false;
+      return true;
+    });
+
+    filtered.sort((a, b) => b._score - a._score);
+    const qualified = filtered.filter((c) => c._score > 0);
     // No/blank query: preserve document order untouched.
-    const pool = (searchQuery && searchQuery.trim() && qualified.length > 0) ? qualified : ranked;
+    const pool = (searchQuery && searchQuery.trim() && qualified.length > 0) ? qualified : filtered;
     const topCandidates = pool.slice(0, 3);
     return { best: topCandidates[0] || null, candidates: topCandidates, found: candidates.length };
   }

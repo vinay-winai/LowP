@@ -242,39 +242,48 @@ class MatchingEngine {
       .replace(/\s+/g, " ")
       .trim();
 
-    // Rank on BOTH views of the title: the primary name with parenthetical
-    // alt names removed ("Potato (Aalugadda)" -> "Potato") keeps ranking
-    // focused, while the untouched title still lets users find items by
-    // their alternate name ("searching aalugadda"). The better score wins.
     const fullText = normalize(String(itemTitle).replace(/\([^)]*\)/g, " ") + " " + packSize);
     const fullTextAlt = normalize(`${itemTitle} ${packSize}`);
     const q = normalize(query);
     const queryTokens = q.split(/\s+/).filter(t => t.length > 0);
+    if (queryTokens.length === 0) return 0;
 
     let score = 0;
-    let altScore = 0;
+    let matchedTokens = 0;
 
     const matchToken = (text, token) => {
-      if (text.includes(token)) return 30;
-      if (token.endsWith('s') && token.length > 3 && text.includes(token.slice(0, -1))) return 25;
-      if (!token.endsWith('s') && text.includes(token + 's')) return 25;
+      const wordBoundary = new RegExp(`(^|\\s)${token}(\\s|$)`);
+      if (wordBoundary.test(text)) return 35;
+      if (text.includes(token)) return 20;
+      if (token.endsWith('s') && token.length > 3 && text.includes(token.slice(0, -1))) return 18;
+      if (!token.endsWith('s') && text.includes(token + 's')) return 18;
       return 0;
     };
 
     queryTokens.forEach(token => {
-      score += matchToken(fullText, token);
-      altScore += matchToken(fullTextAlt, token);
+      const pts = Math.max(matchToken(fullText, token), matchToken(fullTextAlt, token));
+      if (pts > 0) {
+        score += pts;
+        matchedTokens++;
+      }
     });
-    score = Math.max(score, altScore);
-    // Exact-name preference: a product whose PRIMARY name (parentheticals
-    // removed) starts with the query ("Onion (...)" for "onion") outranks
-    // products that merely contain the word ("Sambar Onion (...)").
+
+    // If query specifies a brand/primary keyword as first token, penalize if candidate completely misses it
+    if (queryTokens[0].length >= 2) {
+      const firstWordRx = new RegExp(`(^|\\s)${queryTokens[0]}(\\s|$)`);
+      const hasFirstWord = firstWordRx.test(fullText) || firstWordRx.test(fullTextAlt);
+      if (!hasFirstWord && !fullText.includes(queryTokens[0])) {
+        score -= 50;
+      } else {
+        score += 25;
+      }
+    }
+
+    // Exact-name preference
     const strippedTitle = normalize(String(itemTitle).replace(/\([^)]*\)/g, " "));
     if (q && strippedTitle.startsWith(q)) score += 20;
 
-    // Variety modifiers denote DIFFERENT products ("spring onion",
-    // "sambar onion", "green onion" are not generic onions) — rank them
-    // below plain matches instead of letting them tie on relevance.
+    // Variety modifiers
     const VARIETY_MODIFIERS = ["spring", "sambar", "green", "bunch", "shallot"];
     if (q) {
       const varietyRx = new RegExp("\\b(" + VARIETY_MODIFIERS.join("|") + ")\\s+" + q + "\\b");
@@ -300,11 +309,10 @@ class MatchingEngine {
       }
     }
 
-    if (queryTokens.length > 0 && fullText.includes(queryTokens[0])) {
-      score += 25;
-    }
+    const coverage = matchedTokens / queryTokens.length;
+    score = Math.round(score * (0.5 + 0.5 * coverage));
 
-    return score;
+    return Math.max(0, score);
   }
 
   static annotateBestOffers(results) {
@@ -351,6 +359,8 @@ class BaseProvider {
         item: null,
         priceBreakdown: null,
         productUrl: this.getSearchUrl(fallbackQuery),
+        globalUrl: this.getSearchUrl(fallbackQuery),
+        searchUrl: this.getSearchUrl(fallbackQuery),
         isLowestPrice: false,
         candidates: [],
         selectedIndex: 0
@@ -362,6 +372,8 @@ class BaseProvider {
     // real in-stock result.
     const numericPrice = Number(item.price);
     const isAvailable = Number.isFinite(numericPrice) && numericPrice > 0;
+    const globalUrl = this.getSearchUrl(fallbackQuery || (item && item.title) || "");
+    const productUrl = (item && item.productUrl) || globalUrl;
     const candidateItems = Array.isArray(item.candidates) ? item.candidates : [];
     const normalizedCandidates = candidateItems
       .filter((candidate) => candidate && Number(candidate.price) > 0)
@@ -375,6 +387,8 @@ class BaseProvider {
         price: Number(candidate.price),
         image: candidate.image || "assets/icon48.png",
         productUrl: candidate.productUrl || this.getSearchUrl(candidate.title || fallbackQuery),
+        globalUrl: this.getSearchUrl(fallbackQuery || candidate.title || ""),
+        searchUrl: this.getSearchUrl(fallbackQuery || candidate.title || "")
       }));
     const selectedIndex = isAvailable
       ? Math.min(Math.max(Number.isInteger(item.selectedIndex) ? item.selectedIndex : 0, 0), Math.max(0, normalizedCandidates.length - 1))
@@ -393,10 +407,15 @@ class BaseProvider {
         quantity: item.quantity || "1 unit",
         mrp: item.mrp || item.price,
         price: item.price,
-        image: item.image || "assets/icon48.png"
+        image: item.image || "assets/icon48.png",
+        productUrl,
+        globalUrl,
+        searchUrl: globalUrl
       } : null,
       priceBreakdown: isAvailable ? priceBreakdown : null,
-      productUrl: item.productUrl || this.getSearchUrl(item.title || fallbackQuery),
+      productUrl,
+      globalUrl,
+      searchUrl: globalUrl,
       isLowestPrice: false,
       candidates: normalizedCandidates,
       selectedIndex
@@ -478,20 +497,21 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
     if (!str || typeof str !== "string") return "";
     return str
       .replace(/^sponsored\s*/i, "")
+      .replace(/\b(?:sponsored\s+ad|sponsored|ad)\s*[-–:]\s*/gi, "")
       .replace(/^\s*\d+(?:\.\d+)?\s*%\s*off\s*/i, "")
       .replace(/(?:₹|Rs\.?|INR)\s*[0-9,]+(?:\.[0-9]+)?/gi, "")
       .replace(/\b(?:delivery in\s*)?\d+(?:\s*-\s*\d+)?\s*(?:mins?|minutes?|hours?|sec|seconds?)\b/gi, "")
+      .replace(/\b(?:add|options?)\s*\d*\b/gi, "")
+      .replace(/\b\d+(?:\.\d+)?\s*(?:lac|lakh)\b/gi, "")
       .replace(/\b(?:fastest delivery|standard delivery|instant delivery|express delivery|free delivery|delivery)\b/gi, "")
       .replace(/\b(?:mrp|add|buy|added|in stock|out of stock|off|\d+%\s*off|save)\b/gi, "")
-      // Split glued boundaries FIRST so welded button text separates
-      // ("Potato1 kgAdd" -> "Potato1 kg Add"), then strip UI verbs.
       .replace(/(?<=[a-z])(?=[A-Z])/g, " ")
       .replace(/\badd\b/gi, "")
       .replace(/\b(?:previously bought|earlier bought)\b/gi, "")
-      // Stray UI glyph letters glued to the end ("... Cow MilkR" from an
-      // R-badge text node). Only strip a lone capital appended to a word;
-      // never touch mid-title letters ("Vitamin D" stays intact).
       .replace(/(?<=[a-z])[A-Z](?=\s|$)/g, "")
+      .replace(/&amp;/g, "&")
+      .replace(/&#x27;/g, "'")
+      .replace(/&#39;/g, "'")
       .replace(/\s+/g, " ")
       .trim();
   }
@@ -505,24 +525,45 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
       .replace(/[^a-z0-9\s]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
-    // Rank on BOTH views of the title: the primary name with parenthetical
-    // alt names removed ("Potato (Aalugadda)" -> "Potato") keeps ranking
-    // focused, while the untouched title still lets users find items by
-    // their alternate name ("searching aalugadda"). The better score wins.
     const fullText = normalize(String(itemTitle).replace(/\([^)]*\)/g, " ") + " " + packSize);
     const fullTextAlt = normalize(`${itemTitle} ${packSize}`);
     const q = normalize(query);
     const tokens = q.split(/\s+/).filter(Boolean);
-    let score = 0;
-    tokens.forEach((token) => {
-      if (fullText.includes(token)) score += 30;
-      else if (token.endsWith('s') && token.length > 3 && fullText.includes(token.slice(0, -1))) score += 25;
-      else if (!token.endsWith('s') && fullText.includes(token + 's')) score += 25;
-    });
-    if (tokens.length > 0 && fullText.includes(tokens[0])) score += 25;
+    if (tokens.length === 0) return 0;
 
-    // Pack-size awareness: reward items matching an explicit unit request
-    // ("milk 1l") and penalize clear mismatches (a 500 ml carton for "1l").
+    let score = 0;
+    let matchedTokens = 0;
+
+    const matchToken = (text, token) => {
+      const wordBoundary = new RegExp(`(^|\\s)${token}(\\s|$)`);
+      if (wordBoundary.test(text)) return 35;
+      if (text.includes(token)) return 20;
+      if (token.endsWith('s') && token.length > 3 && text.includes(token.slice(0, -1))) return 18;
+      if (!token.endsWith('s') && text.includes(token + 's')) return 18;
+      return 0;
+    };
+
+    tokens.forEach((token) => {
+      const pts = Math.max(matchToken(fullText, token), matchToken(fullTextAlt, token));
+      if (pts > 0) {
+        score += pts;
+        matchedTokens++;
+      }
+    });
+
+    if (tokens[0].length >= 2) {
+      const firstWordRx = new RegExp(`(^|\\s)${tokens[0]}(\\s|$)`);
+      const hasFirstWord = firstWordRx.test(fullText) || firstWordRx.test(fullTextAlt);
+      if (!hasFirstWord && !fullText.includes(tokens[0])) {
+        score -= 50;
+      } else {
+        score += 25;
+      }
+    }
+
+    const strippedTitle = normalize(String(itemTitle).replace(/\([^)]*\)/g, " "));
+    if (q && strippedTitle.startsWith(q)) score += 20;
+
     const qtyMatch = query.match(/(\d+(?:\.\d+)?)\s*(l|litre|litres|kg|kgs|g|gm|gms|ml)\b/i);
     if (qtyMatch) {
       const qNum = parseFloat(qtyMatch[1]);
@@ -534,7 +575,11 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
         if (candQty && parseFloat(candQty[1]) !== qNum) score -= 40;
       }
     }
-    return score;
+
+    const coverage = matchedTokens / tokens.length;
+    score = Math.round(score * (0.5 + 0.5 * coverage));
+
+    return Math.max(0, score);
   }
 
   function getSpacedText(node) {
@@ -573,12 +618,12 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
     // 1. Price extraction (Priority: specific price element -> spaced currency match -> leaf numeric fallback)
     let price = null;
 
-    const priceEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="EdlpPrice"], [data-testid*="price"], [data-testid*="item_price"], [data-testid*="offer-price"], [class*="_2jn41"], [class*="_1yW90"], [class*="_3-M84"]') : null;
+    const priceEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="EdlpPrice"], [data-testid*="price"], [data-testid*="item_price"], [data-testid*="offer-price"], span.a-price span.a-offscreen, span.a-price .a-price-whole, span.a-price, span.a-color-price, [class*="a-price"], div.hZ3P6w, div.Nx9bqj, div._30jeq3, div._1vC4OE, [class*="hZ3P6w"], [class*="Nx9bqj"], [class*="_30jeq3"], [class*="_2jn41"], [class*="_1yW90"], [class*="_3-M84"]') : null;
     if (priceEl) {
       const pTxt = getSpacedText(priceEl).trim();
-      const m = pTxt.match(/([0-9,]+(?:\.[0-9]+)?)/);
+      const m = pTxt.replace(/,/g, "").match(/([0-9]+(?:\.[0-9]+)?)/);
       if (m) {
-        const val = parseFloat(m[1].replace(/,/g, ""));
+        const val = parseFloat(m[1]);
         if (val >= 5 && val <= 500000) price = val;
       }
     }
@@ -608,22 +653,42 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
 
     if (!price || price <= 0 || price > 500000) return null;
 
-    const imgEl = cardNode.querySelector ? cardNode.querySelector('img') : null;
-    const image = imgEl ? (imgEl.src || "assets/icon48.png") : "assets/icon48.png";
+    const imgEl = cardNode.querySelector ? cardNode.querySelector('img.s-image, img.UCc1lI, img._396cs4, img.DByuf4, img[src*="media-amazon.com"], img[src*="rukminim"], img') : null;
+    const image = imgEl ? (imgEl.src || imgEl.getAttribute('src') || "assets/icon48.png") : "assets/icon48.png";
 
     let title = "";
 
-    // 2. Title extraction (Priority: specific slot/testid -> img alt -> h1-h5 -> generic)
-    const titleEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="ProductName"], [data-testid*="name"], [data-testid*="title"], [data-testid*="item_name"], [data-testid*="item-title"], [data-slot-id*="title"], [class*="ProductName"], [class*="ItemName"], [class*="product_name"], [class*="styled__ItemName"], [class*="ItemTitle"], [class*="Product__UpdatedTitle"], [class*="tw-text-base-black"], [class*="tw-line-clamp-2"], [class*="tAxDx"], [class*="sh-np__product-title"], [class*="_2T1-K"], [class*="nov9b"], [class*="_1W_4e"], [class*="_1b1-N"], h1, h2, h3, h4, h5') : null;
-    if (titleEl) {
-      const txt = cleanTitle(titleEl.textContent);
-      if (txt && txt.length >= 3 && !isBadTitle(txt)) {
-        title = txt;
+    // 2. Title extraction:
+    // 2a. Check for full aria-label on h2 (Amazon full product title)
+    const ariaHeading = cardNode.querySelector ? cardNode.querySelector('h2[aria-label]') : null;
+    if (ariaHeading && ariaHeading.getAttribute('aria-label')) {
+      const cleanAria = cleanTitle(ariaHeading.getAttribute('aria-label'));
+      if (cleanAria && cleanAria.length >= 6 && !isBadTitle(cleanAria)) {
+        title = cleanAria;
       }
     }
 
-    if (!title && imgEl && imgEl.alt && imgEl.alt.length > 5) {
-      const altTxt = cleanTitle(imgEl.alt);
+    // 2b. Priority product title selectors
+    if (!title) {
+      const titleEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="ProductName"], [data-testid*="name"], [data-testid*="title"], [data-testid*="item_name"], [data-testid*="item-title"], [data-slot-id*="title"], [data-cy="title-recipe"] h2, h2.a-color-base, a.a-text-normal[href*="/dp/"] span, h2 a span, h2.a-size-medium, h2.a-size-base-plus, a[title], div.KzDlHZ, a.pIpigb, a.wjcEIp, a.s1Q9rs, div._4rR01T, div.YBLCv4, a.WKTcLC, [class*="ProductName"], [class*="ItemName"], [class*="product_name"], [class*="styled__ItemName"], [class*="ItemTitle"], [class*="Product__UpdatedTitle"], [class*="tw-text-base-black"], [class*="tw-line-clamp-2"], [class*="tAxDx"], [class*="sh-np__product-title"], [class*="_2T1-K"], [class*="nov9b"], [class*="_1W_4e"], [class*="_1b1-N"], h1, h3, h4, h5') : null;
+      if (titleEl) {
+        const rawTxt = (titleEl.getAttribute && titleEl.getAttribute('title')) || titleEl.textContent;
+        const txt = cleanTitle(rawTxt);
+        if (txt && txt.length >= 3 && !isBadTitle(txt)) {
+          title = txt;
+        }
+      }
+    }
+
+    // 2c. Check for separate brand tag on Amazon/Flipkart and prepend if not already in title
+    const brandEl = cardNode.querySelector ? cardNode.querySelector('h2.a-size-mini span, span.a-size-medium.a-color-base') : null;
+    const brandTxt = brandEl ? cleanTitle(brandEl.textContent) : "";
+    if (brandTxt && brandTxt.length >= 2 && brandTxt.length <= 25 && title && !title.toLowerCase().startsWith(brandTxt.toLowerCase())) {
+      title = `${brandTxt} ${title}`;
+    }
+
+    if (!title && imgEl && (imgEl.alt || (imgEl.getAttribute && imgEl.getAttribute('alt')))) {
+      const altTxt = cleanTitle(imgEl.alt || imgEl.getAttribute('alt'));
       if (altTxt && altTxt.length >= 3 && !isBadTitle(altTxt)) {
         title = altTxt;
       }
@@ -655,30 +720,35 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
     const quantity = qtyEl ? qtyEl.textContent.trim() : "1 unit";
 
     // 5. MRP (Check slashed / strikethrough elements)
-    const mrpEl = cardNode.querySelector ? cardNode.querySelector('s, del, strike, [class*="strike"], [class*="slashed"], [class*="_3eAjW"], [class*="cx3iWL"], [style*="line-through"], [data-slot-id*="mrp"], [class*="mrp"]') : null;
+    const mrpEl = cardNode.querySelector ? cardNode.querySelector('span.a-price.a-text-price span.a-offscreen, span[data-a-strike="true"], span.a-text-price, div.kRYCnD, div.yRaY8j, div._3I9_wc, [class*="kRYCnD"], [class*="yRaY8j"], [class*="_3I9_wc"], s, del, strike, [class*="strike"], [class*="slashed"], [class*="_3eAjW"], [class*="cx3iWL"], [style*="line-through"], [data-slot-id*="mrp"], [class*="mrp"]') : null;
     let mrp = null;
     if (mrpEl) {
-      const mMatch = mrpEl.textContent.match(/([0-9,]+(?:\.[0-9]+)?)/);
+      const mMatch = mrpEl.textContent.replace(/,/g, "").match(/([0-9]+(?:\.[0-9]+)?)/);
       if (mMatch) {
-        const val = parseFloat(mMatch[1].replace(/,/g, ""));
+        const val = parseFloat(mMatch[1]);
         if (val >= price) mrp = val;
       }
     }
     if (!mrp || mrp < price) {
-      // Do not invent an MRP: a synthetic value produces a misleading
-      // crossed-out price and discount badge.
       mrp = price;
     }
 
-    const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : (platformId === "blinkit" ? "Blinkit" : (platformId === "google_shopping" ? "Google Shopping" : "Quick Store"))));
+    // 6. Product Link
+    const linkEl = cardNode.querySelector ? cardNode.querySelector('a[href*="/dp/"], a[href*="/p/"], a.a-link-normal[href*="/gp/product/"], a.a-link-normal[href*="/dp/"], a.GnxRXv, a.pIpigb, a.fb4uj3, h2 a, a[href]') : null;
+    let productUrl = window.location.href;
+    if (linkEl && linkEl.href) {
+      productUrl = linkEl.href;
+    } else if (linkEl && linkEl.getAttribute && linkEl.getAttribute('href')) {
+      const hrefAttr = linkEl.getAttribute('href');
+      if (hrefAttr.startsWith('http')) productUrl = hrefAttr;
+      else if (hrefAttr.startsWith('/')) productUrl = window.location.origin + hrefAttr;
+    }
+
+    const brand = platformId === "amazon_tez" ? "Amazon Now (Tez)" : (platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : (platformId === "blinkit" ? "Blinkit" : (platformId === "amazon_main" ? "Amazon.in" : (platformId === "flipkart" ? "Flipkart" : (platformId === "google_shopping" ? "Google Shopping" : "Quick Store"))))));
 
     return {
       title,
       price,
-      // Sponsored placements must be visible to the ranker so it can
-      // demote them behind organic results for the same query. Stores mark
-      // them either with a "Sponsored" text or an "Ad" label near the image
-      // (Instamart / Zepto / Blinkit), sometimes in the img alt/title.
       sponsored: /(?:^|\s)(?:sponsored|ad|ads|promoted|featured)(?:\s|$)/i.test(
         spacedCardText + " " + ((imgEl && (imgEl.alt || "") + " " + (imgEl.title || "")) || "")
       ),
@@ -686,7 +756,7 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
       brand,
       quantity,
       image,
-      productUrl: window.location.href,
+      productUrl,
       platformId
     };
   }
@@ -736,13 +806,15 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
 
     let platformId = "unknown";
     if (host.includes("amazon") || href.includes("amazon")) {
-      platformId = "amazon_tez";
+      platformId = href.includes("/tez/") ? "amazon_tez" : "amazon_main";
     } else if (host.includes("swiggy") || href.includes("swiggy")) {
       platformId = "instamart";
     } else if (host.includes("zepto") || href.includes("zepto")) {
       platformId = "zepto";
     } else if (host.includes("blinkit") || href.includes("blinkit")) {
       platformId = "blinkit";
+    } else if (host.includes("flipkart") || href.includes("flipkart")) {
+      platformId = "flipkart";
     }
 
     const candidates = [];
@@ -767,7 +839,7 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
                   title: cleanT,
                   price,
                   mrp: Math.max(mrp, price),
-                  brand: platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : "Amazon"),
+                  brand: platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : (platformId === "amazon_main" ? "Amazon.in" : (platformId === "flipkart" ? "Flipkart" : "Amazon"))),
                   quantity: o.quantity || o.pack_size || o.weight || "1 unit",
                   image: o.image || o.imageUrl || (o.imageId ? `https://media-assets.swiggy.com/swiggy/image/upload/fl_lossy,f_auto,q_auto,w_252,h_252/${o.imageId}` : "assets/icon48.png"),
                   productUrl: window.location.href,
@@ -787,7 +859,7 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
     // 2. PDP Handling
     if (isPDP) {
       const pdpTitle = document.querySelector('h1[data-testid*="name"], h1[data-testid*="title"], h1#title span, h1');
-      const pdpPrice = document.querySelector('[data-testid*="price"], span.a-price-whole, span.a-offscreen, h4, div[class*="price"]');
+      const pdpPrice = document.querySelector('[data-testid*="price"], span.a-price-whole, span.a-offscreen, h4, div[class*="price"], div.hZ3P6w, div.Nx9bqj');
       if (pdpTitle && pdpPrice) {
         const title = pdpTitle.textContent?.trim();
         const pMatch = pdpPrice.textContent?.match(/([0-9,]+(?:\.[0-9]+)?)/);
@@ -799,7 +871,7 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
               title,
               price,
               mrp: price,
-              brand: platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : "Amazon"),
+              brand: platformId === "instamart" ? "Swiggy Instamart" : (platformId === "zepto" ? "Zepto" : (platformId === "amazon_main" ? "Amazon.in" : (platformId === "flipkart" ? "Flipkart" : "Amazon"))),
               quantity: "1 unit",
               image: imgEl?.src || "assets/icon48.png",
               productUrl: window.location.href,
@@ -835,10 +907,6 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
       '[data-testid*="product"]',
       '[data-testid*="item"]',
       '[data-testid*="default_container"]',
-      'a[href*="/pn/"]',
-      'a[href*="/product/"]',
-      'a[href*="/item/"]',
-      'a[href*="/instamart/item/"]',
       'div[class*="ProductCard"]',
       'div[class*="product-card"]',
       'div[class*="itemCard"]',
@@ -854,13 +922,10 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
       'div[class*="nov9b"]',
       'div[class*="_1W_4e"]',
       'div[class*="_1lbNR"]',
-      'a[href*="/prid/"]',
       'div[data-test-id*="plp-product"]',
       'div[class*="Product__Updated"]',
       'div[class*="ProductCard"]',
       'div[class*="product"]',
-      'a[href*="/p/"]',
-      'a[href*="/dp/"]',
       'div[class*="sh-dgr__grid-result"]',
       'div[class*="sh-dgr__content"]',
       'div[class*="KZmu8e"]',
@@ -871,7 +936,13 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
       'div[data-docid]',
       'div[data-component-type="s-search-result"]',
       'div[class*="s-result-item"]',
-      'div[data-asin]'
+      'div[data-asin]:not([data-asin=""])',
+      'div[data-id]',
+      'div[class*="_1AtVbE"]',
+      'div[class*="_75nlfW"]',
+      'div[class*="slAVV4"]',
+      'div[class*="cPHDOP"]',
+      'div[class*="RGLWAk"]'
     ];
 
     const allMatched = Array.from(document.querySelectorAll(cardSelectors.join(', ')));
@@ -1049,29 +1120,23 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
   // Word-level relevance: the word is the minimum matching unit (no
   // character substrings). Score counts how many query words appear in the
   // title; ties keep the store's own display order (stable sort).
-  const qWords = String(searchQuery || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
-  const stem = (w) => (w.length > 3 && w.endsWith("s") ? w.slice(0, -1) : w);
   const ranked = candidates.map((c) => {
-    // Split glued letter/digit boundaries ("Potato1 kg" -> "potato","kg"):
-    // Tez glues title+packSize into one string, and without this the token
-    // "potato1" never matches the query word "potato".
-    const tSet = new Set(
-      String(c.title || "").replace(/\([^)]*\)/g, " ")
-        .replace(/(?<=[a-z])(?=\d)/gi, " ").replace(/(?<=\d)(?=[a-z])/gi, " ")
-        .toLowerCase().replace(/[^a-z0-9\s]/g, " ")
-        .split(/\s+/).filter(Boolean).map(stem)
-    );
-    let _score = 0;
-    for (const w of qWords) if (tSet.has(stem(w))) _score += 1;
-    // Ads sink below organic ties but stay visible if nothing else matches.
-    if (c.sponsored) _score -= 1;
-    return Object.assign({}, c, { _score });
+    let _score = scoreCandidate(c.title, searchQuery, c.quantity);
+    const isSponsored = !!c.sponsored || /\b(?:sponsored\s+ad|sponsored|ad)\b/i.test(c.rawTitle || c.title || "");
+    if (isSponsored) _score -= 15;
+    return Object.assign({}, c, { _score, isSponsored });
   });
-  ranked.sort((a, b) => b._score - a._score);
-  const qualified = ranked.filter((c) => c._score > 0);
-  // No/blank query (popup auto-detect): preserve document order untouched.
-  const pool = (searchQuery && searchQuery.trim() && qualified.length > 0) ? qualified : ranked;
-  const best = pool[0] || candidates[0];
+
+  // If candidate has "Sponsored" or "Ad" and score is lower than 25, discard it
+  const filtered = ranked.filter((c) => {
+    if (c.isSponsored && c._score < 25) return false;
+    return true;
+  });
+
+  filtered.sort((a, b) => b._score - a._score);
+  const qualified = filtered.filter((c) => c._score > 0);
+  const pool = (searchQuery && searchQuery.trim() && qualified.length > 0) ? qualified : filtered;
+  const best = pool[0] || filtered[0] || candidates[0];
 
   return {
     success: true,
@@ -1108,11 +1173,18 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
   const startedAt = Date.now();
   const wantedToken = expectedUrlToken ? String(expectedUrlToken).toLowerCase() : null;
   const hrefMatches = () => {
-      if (!wantedToken) return true;
-      let href = String(window.location.href || "").toLowerCase();
-      try { href += " " + (decodeURIComponent(href)); } catch (e) {}
-      return href.includes(wantedToken);
-    };
+    if (!wantedToken) return true;
+    let href = String(window.location.href || "").toLowerCase();
+    try {
+      href += " " + decodeURIComponent(href) + " " + decodeURIComponent(href.replace(/\+/g, " "));
+    } catch (e) {
+      href += " " + href.replace(/\+/g, " ");
+    }
+    if (href.includes(wantedToken)) return true;
+    const tokens = wantedToken.split(/\s+/).filter((t) => t.length >= 2);
+    if (tokens.length > 0 && tokens.every((t) => href.includes(t))) return true;
+    return false;
+  };
   const isValidResult = (res) => !!res && res.success === true && hrefMatches();
   // Never let a deadline convert a URL-mismatched (stale page) success into a
   // usable result: downgrade it to an explicit failure instead.
@@ -1351,15 +1423,17 @@ const WarmTabPool = {
   platformMatches(platformId, url) {
     if (!url || !platformId) return false;
     const u = url.toLowerCase();
-    if (platformId === "amazon_tez") return u.includes("amazon.in");
+    if (platformId === "amazon_tez") return u.includes("amazon.in") && (u.includes("/tez/") || u.includes("searchkeyword"));
+    if (platformId === "amazon_main") return u.includes("amazon.in") && !u.includes("/tez/");
     if (platformId === "instamart") return u.includes("swiggy.com");
     if (platformId === "zepto") return u.includes("zepto.com") || u.includes("zeptonow.com");
     if (platformId === "blinkit") return u.includes("blinkit.com");
+    if (platformId === "flipkart") return u.includes("flipkart.com");
     return false;
   },
 
   detectPlatformId(url) {
-    for (const id of ["amazon_tez", "instamart", "zepto", "blinkit"]) {
+    for (const id of ["amazon_tez", "instamart", "zepto", "blinkit", "amazon_main", "flipkart"]) {
       if (this.platformMatches(id, url)) return id;
     }
     return null;
@@ -2094,6 +2168,317 @@ class BlinkitProvider extends BaseProvider {
   }
 }
 
+class AmazonMainProvider extends BaseProvider {
+  constructor() {
+    super("amazon_main", "Amazon.in", "#FF9900");
+  }
+
+  getSearchUrl(query) {
+    return `https://www.amazon.in/s?k=${encodeURIComponent(query)}`;
+  }
+
+  async search(query, location) {
+    const cleanQ = MatchingEngine.cleanSearchTerm(query);
+    const targetUrl = this.getSearchUrl(cleanQ);
+    logDebug("AmazonMain", `Searching Amazon.in for "${cleanQ}" (Live Direct Search)`);
+
+    // 1. Direct active/open tab search
+    if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
+      try {
+        const allTabs = await chrome.tabs.query({});
+        const poolTabIds = await WarmTabPool.managedTabIdSet();
+        const amzTabs = allTabs.filter(
+          (t) => !poolTabIds.has(t.id) && t.url && t.url.includes("amazon.in") && !t.url.includes("/tez/") && isOpenTabMatchingQuery(t.url, cleanQ)
+        );
+        logDebug("AmazonMain", `Found ${amzTabs.length} open matching Amazon tab(s)`);
+
+        for (const t of amzTabs) {
+          try {
+            logDebug("AmazonMain", `Querying open Amazon tab (${t.id}): ${t.url}`);
+            const data = await extractDataFromTab(t.id, cleanQ, 0, cleanQ);
+            if (data && data.price > 0) {
+              logDebug("AmazonMain", `Retrieved first price from open Amazon tab: ${data.title} at ₹${data.price}`, data);
+              return this.formatResult(data, location, cleanQ);
+            }
+          } catch (e) {
+            logDebug("AmazonMain", `Amazon tab (${t.id}) query error: ${e.message}`);
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 2. Direct HTTP search with server-rendered HTML parser
+    try {
+      const searchRes = await fetchWithTimeout(targetUrl, {
+        headers: {
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9"
+        }
+      }, 3000);
+
+      if (searchRes && searchRes.ok) {
+        const html = await searchRes.text();
+        const cardBlocks = html.split(/data-component-type="s-search-result"|class="[^"]*s-result-item[^"]*"/);
+        const candidates = [];
+
+        for (let i = 1; i < cardBlocks.length; i++) {
+          const block = cardBlocks[i];
+          const asinMatch = block.match(/data-asin="([A-Z0-9]{10})"/i);
+          const asin = asinMatch ? asinMatch[1] : null;
+
+          let title = '';
+          const h2AriaMatch = block.match(/<h2[^>]*aria-label="([^"]+)"[^>]*>/i);
+          if (h2AriaMatch && h2AriaMatch[1].length > 5) {
+            title = h2AriaMatch[1].trim();
+          }
+
+          if (!title) {
+            const dpLinkMatch = block.match(/<a[^>]*class="[^"]*(?:s-link-style|a-text-normal)[^"]*"[^>]*href="[^"]*\/dp\/[^"]*"[^>]*>([\s\S]*?)<\/a>/i);
+            if (dpLinkMatch) {
+              const text = dpLinkMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+              if (text.length > 5 && !text.startsWith('₹')) {
+                title = text;
+              }
+            }
+          }
+
+          if (!title) {
+            const h2Match = block.match(/<h2[^>]*><a[^>]*><span[^>]*>([\s\S]*?)<\/span><\/a><\/h2>/i) ||
+                            block.match(/<h2[^>]*><span[^>]*>([\s\S]*?)<\/span><\/h2>/i);
+            if (h2Match) {
+              title = h2Match[1].replace(/<[^>]+>/g, '').trim();
+            }
+          }
+
+          const brandMatch = block.match(/<h2 class="a-size-mini[^"]*"[^>]*><span[^>]*>([^<]+)<\/span><\/h2>/i) ||
+                             block.match(/<span class="a-size-medium a-color-base">([^<]+)<\/span>/i);
+          const brand = brandMatch ? brandMatch[1].trim() : 'Amazon.in';
+
+          if (brand && brand !== 'Amazon.in' && title && !title.toLowerCase().startsWith(brand.toLowerCase())) {
+            title = `${brand} ${title}`;
+          }
+
+          const priceMatch = block.match(/class="a-price-whole">([0-9,]+)/i) ||
+                             block.match(/class="a-offscreen">₹?([0-9,]+(?:\.[0-9]+)?)/i) ||
+                             block.match(/(?:₹|Rs\.?|INR)\s*([0-9,]+(?:\.[0-9]+)?)/i);
+          const mrpMatch = block.match(/class="a-price a-text-price"[^>]*><span class="a-offscreen">₹?([0-9,]+(?:\.[0-9]+)?)/i) ||
+                           block.match(/data-a-strike="true"[^>]*>₹?([0-9,]+(?:\.[0-9]+)?)/i);
+          const imgMatch = block.match(/class="s-image"[^>]*src="([^"]+)"/i) || block.match(/src="(https:\/\/[^"]*media-amazon\.com\/images\/[^"]+)"/i);
+
+          if (title && title.length >= 3 && priceMatch) {
+            title = title.replace(/^Sponsored Ad\s*[-–:]\s*/i, "").replace(/^Sponsored\s*[-–:]\s*/i, "").replace(/&amp;/g, '&').trim();
+            const price = parseFloat(priceMatch[1].replace(/,/g, ""));
+            const mrp = mrpMatch ? parseFloat(mrpMatch[1].replace(/,/g, "")) : price;
+
+            if (price >= 5 && price <= 500000) {
+              candidates.push({
+                id: asin || `amz_main_${Date.now()}_${i}`,
+                title,
+                brand,
+                quantity: "1 unit",
+                mrp: Math.max(mrp, price),
+                price,
+                image: imgMatch ? imgMatch[1] : "assets/icon48.png",
+                productUrl: asin ? `https://www.amazon.in/dp/${asin}` : targetUrl,
+                platformId: "amazon_main",
+                _score: MatchingEngine.scoreRelevance(title, cleanQ)
+              });
+              if (candidates.length >= 6) break;
+            }
+          }
+        }
+
+        if (candidates.length > 0) {
+          const validCandidates = candidates.filter((c) => {
+            const isAd = c.isSponsored || c.sponsored || /\b(?:sponsored\s+ad|sponsored|ad)\b/i.test(c.title || "");
+            if (isAd && (c._score || 0) < 25) return false;
+            return true;
+          });
+
+          if (validCandidates.length > 0) {
+            validCandidates.sort((a, b) => b._score - a._score);
+            const best = validCandidates[0];
+            best.candidates = validCandidates.slice(0, 3);
+            logDebug("AmazonMain", `Direct HTML search found best match: "${best.title}" at ₹${best.price} (Score: ${best._score})`);
+            return this.formatResult(best, location, cleanQ);
+          }
+        }
+      }
+    } catch (err) {
+      logDebug("AmazonMain", `Direct HTML search error: ${err.message}`);
+    }
+
+    // 3. Automated Ephemeral Background Tab Extractor
+    try {
+      logDebug("AmazonMain", `Attempting automated ephemeral background tab extraction for "${cleanQ}"`);
+      const ephemeralData = await fetchViaEphemeralTab(targetUrl, cleanQ);
+      if (ephemeralData && ephemeralData.price > 0) {
+        logDebug("AmazonMain", `Retrieved live price via ephemeral background tab: ${ephemeralData.title} at ₹${ephemeralData.price}`, ephemeralData);
+        return this.formatResult(ephemeralData, location, cleanQ);
+      }
+    } catch (e) {
+      logDebug("AmazonMain", `Ephemeral tab extraction failed: ${e.message}`);
+    }
+
+    // 4. Fallback: Direct search link
+    return this.formatResult({
+      id: `amazon_main_${Date.now()}`,
+      title: cleanQ,
+      brand: "Amazon.in",
+      quantity: "1 unit",
+      mrp: 0,
+      price: 0,
+      image: "assets/icon48.png",
+      productUrl: targetUrl
+    }, location, cleanQ);
+  }
+}
+
+class FlipkartProvider extends BaseProvider {
+  constructor() {
+    super("flipkart", "Flipkart", "#2874F0");
+  }
+
+  getSearchUrl(query) {
+    return `https://www.flipkart.com/search?q=${encodeURIComponent(query)}`;
+  }
+
+  async search(query, location) {
+    const cleanQ = MatchingEngine.cleanSearchTerm(query);
+    const targetUrl = this.getSearchUrl(cleanQ);
+    logDebug("Flipkart", `Searching Flipkart for "${cleanQ}" (Live Direct Search)`);
+
+    // 1. Direct active/open tab search
+    if (typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.query) {
+      try {
+        const allTabs = await chrome.tabs.query({});
+        const poolTabIds = await WarmTabPool.managedTabIdSet();
+        const flipkartTabs = allTabs.filter(
+          (t) => !poolTabIds.has(t.id) && t.url && t.url.includes("flipkart.com") && isOpenTabMatchingQuery(t.url, cleanQ)
+        );
+        logDebug("Flipkart", `Found ${flipkartTabs.length} open matching Flipkart tab(s)`);
+
+        for (const t of flipkartTabs) {
+          try {
+            logDebug("Flipkart", `Querying open Flipkart tab (${t.id}): ${t.url}`);
+            const data = await extractDataFromTab(t.id, cleanQ, 0, cleanQ);
+            if (data && data.price > 0) {
+              logDebug("Flipkart", `Retrieved first price from open Flipkart tab: ${data.title} at ₹${data.price}`, data);
+              return this.formatResult(data, location, cleanQ);
+            }
+          } catch (e) {
+            logDebug("Flipkart", `Flipkart tab (${t.id}) query error: ${e.message}`);
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 2. Direct HTTP search with server-rendered HTML parser
+    try {
+      const searchRes = await fetchWithTimeout(targetUrl, {
+        headers: {
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9"
+        }
+      }, 3000);
+
+      if (searchRes && searchRes.ok) {
+        const html = await searchRes.text();
+        const cardBlocks = html.split(/data-id="([A-Z0-9]+)"/i);
+        const candidates = [];
+
+        for (let i = 1; i < cardBlocks.length; i += 2) {
+          const dataId = cardBlocks[i];
+          const block = cardBlocks[i + 1] || "";
+
+          const titleMatch = block.match(/title="([^"]+)"/i) ||
+                             block.match(/alt="([^"]+)"/i) ||
+                             block.match(/class="[^"]*KzDlHZ[^"]*">([^<]+)</i) ||
+                             block.match(/class="[^"]*_4rR01T[^"]*">([^<]+)</i);
+          const priceMatch = block.match(/class="[^"]*hZ3P6w[^"]*">₹?([0-9,]+)/i) ||
+                             block.match(/class="[^"]*Nx9bqj[^"]*">₹?([0-9,]+)/i) ||
+                             block.match(/class="[^"]*_30jeq3[^"]*">₹?([0-9,]+)/i) ||
+                             block.match(/(?:₹|Rs\.?|INR)\s*([0-9,]+(?:\.[0-9]+)?)/i);
+          const mrpMatch = block.match(/class="[^"]*kRYCnD[^"]*">₹?<!-- -->([0-9,]+)/i) ||
+                           block.match(/class="[^"]*yRaY8j[^"]*">₹?([0-9,]+)/i) ||
+                           block.match(/class="[^"]*_3I9_wc[^"]*">₹?([0-9,]+)/i);
+          const imgMatch = block.match(/src="([^"]+rukminim[^"]+)"/i) || block.match(/src="([^"]+)"/i);
+          const linkMatch = block.match(/href="(\/[^"]+\/p\/[^"]+)"/i);
+
+          if (titleMatch && priceMatch) {
+            let rawTitle = titleMatch[1].trim();
+            const isSponsored = /^Sponsored\b/i.test(rawTitle);
+            const title = rawTitle.replace(/^Sponsored\s*[-–:]\s*/i, "").trim();
+            const price = parseFloat(priceMatch[1].replace(/,/g, ""));
+            const mrp = mrpMatch ? parseFloat(mrpMatch[1].replace(/,/g, "")) : price;
+            const productUrl = linkMatch ? `https://www.flipkart.com${linkMatch[1]}` : targetUrl;
+
+            if (price >= 5 && price <= 500000 && title.length >= 3) {
+              const _score = MatchingEngine.scoreRelevance(title, cleanQ);
+              candidates.push({
+                id: dataId || `fk_${Date.now()}_${i}`,
+                title,
+                brand: "Flipkart",
+                quantity: "1 unit",
+                mrp: Math.max(mrp, price),
+                price,
+                image: imgMatch ? imgMatch[1] : "assets/icon48.png",
+                productUrl,
+                platformId: "flipkart",
+                isSponsored,
+                _score
+              });
+              if (candidates.length >= 6) break;
+            }
+          }
+        }
+
+        if (candidates.length > 0) {
+          const validCandidates = candidates.filter((c) => {
+            const isAd = c.isSponsored || c.sponsored || /\b(?:sponsored\s+ad|sponsored|ad)\b/i.test(c.title || "");
+            if (isAd && (c._score || 0) < 25) return false;
+            return true;
+          });
+
+          if (validCandidates.length > 0) {
+            validCandidates.sort((a, b) => b._score - a._score);
+            const best = validCandidates[0];
+            best.candidates = validCandidates.slice(0, 3);
+            logDebug("Flipkart", `Direct HTML search found best match: "${best.title}" at ₹${best.price} (Score: ${best._score})`);
+            return this.formatResult(best, location, cleanQ);
+          }
+        }
+      }
+    } catch (err) {
+      logDebug("Flipkart", `Direct HTML search error: ${err.message}`);
+    }
+
+    // 3. Automated Ephemeral Background Tab Extractor
+    try {
+      logDebug("Flipkart", `Attempting automated ephemeral background tab extraction for "${cleanQ}"`);
+      const ephemeralData = await fetchViaEphemeralTab(targetUrl, cleanQ);
+      if (ephemeralData && ephemeralData.price > 0) {
+        logDebug("Flipkart", `Retrieved live price via ephemeral background tab: ${ephemeralData.title} at ₹${ephemeralData.price}`, ephemeralData);
+        return this.formatResult(ephemeralData, location, cleanQ);
+      }
+    } catch (e) {
+      logDebug("Flipkart", `Ephemeral tab extraction failed: ${e.message}`);
+    }
+
+    // 4. Fallback: Direct search link
+    return this.formatResult({
+      id: `flipkart_${Date.now()}`,
+      title: cleanQ,
+      brand: "Flipkart",
+      quantity: "1 unit",
+      mrp: 0,
+      price: 0,
+      image: "assets/icon48.png",
+      productUrl: targetUrl
+    }, location, cleanQ);
+  }
+}
+
 // ==========================================
 // 5. ORCHESTRATOR & SEARCH HANDLER
 // ==========================================
@@ -2101,7 +2486,9 @@ const PROVIDERS = [
   new AmazonTezProvider(),
   new InstamartProvider(),
   new ZeptoProvider(),
-  new BlinkitProvider()
+  new BlinkitProvider(),
+  new AmazonMainProvider(),
+  new FlipkartProvider()
 ];
 const PROVIDER_TIMEOUT_MS = 9000;
 const SEARCH_TIMEOUT_MS = 10000;
@@ -2236,7 +2623,75 @@ function getWindowBlockReason() {
   });
 }
 
-async function streamSearchResults(query, locationId = null, onResult = () => {}) {
+const COLLECTIONS_KEY = "lowp_collections_v1";
+const ACTIVE_COLLECTION_KEY = "lowp_active_collection_v1";
+
+const DEFAULT_COLLECTIONS = [
+  {
+    id: "10_min_pack",
+    name: "10 min pack",
+    emoji: "⚡",
+    storeIds: ["amazon_tez", "instamart", "zepto", "blinkit"]
+  },
+  {
+    id: "big_online_pack",
+    name: "Big Online Pack",
+    emoji: "📦",
+    storeIds: ["amazon_main", "flipkart"]
+  },
+  {
+    id: "all_stores",
+    name: "All Stores",
+    emoji: "🛒",
+    storeIds: ["amazon_tez", "instamart", "zepto", "blinkit", "amazon_main", "flipkart"]
+  }
+];
+
+class CollectionService {
+  static async getCollections() {
+    try {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+        const res = await new Promise((resolve) => chrome.storage.sync.get([COLLECTIONS_KEY], resolve));
+        if (res && Array.isArray(res[COLLECTIONS_KEY]) && res[COLLECTIONS_KEY].length > 0) {
+          return res[COLLECTIONS_KEY];
+        }
+      }
+    } catch (e) {}
+    return DEFAULT_COLLECTIONS;
+  }
+
+  static async saveCollections(collections) {
+    try {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+        await new Promise((resolve) => chrome.storage.sync.set({ [COLLECTIONS_KEY]: collections }, resolve));
+      }
+    } catch (e) {}
+    return collections;
+  }
+
+  static async getActiveCollectionId() {
+    try {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+        const res = await new Promise((resolve) => chrome.storage.sync.get([ACTIVE_COLLECTION_KEY], resolve));
+        if (res && res[ACTIVE_COLLECTION_KEY]) {
+          return res[ACTIVE_COLLECTION_KEY];
+        }
+      }
+    } catch (e) {}
+    return "10_min_pack";
+  }
+
+  static async setActiveCollectionId(id) {
+    try {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
+        await new Promise((resolve) => chrome.storage.sync.set({ [ACTIVE_COLLECTION_KEY]: id }, resolve));
+      }
+    } catch (e) {}
+    return id;
+  }
+}
+
+async function streamSearchResults(query, locationId = null, onResult = () => {}, storeIds = null) {
   if (!query || !query.trim()) return [];
 
   const windowBlock = await getWindowBlockReason();
@@ -2248,15 +2703,18 @@ async function streamSearchResults(query, locationId = null, onResult = () => {}
 
   const { userSettings, cleanQuery } = await resolveSearchContext(query, locationId);
   const startTime = Date.now();
-  logDebug("Search", `Executing search for "${cleanQuery}" in ${userSettings.name} (Pincode: ${userSettings.pincode})`);
 
-  // Cache identity is the RAW search term exactly as typed (only case and
-  // surrounding whitespace normalized). It must never be derived from
-  // cleanSearchTerm output or scored/fuzzed: "milk" and "milk 1l" are
-  // different searches and must never share an entry.
+  const activeProviders = (Array.isArray(storeIds) && storeIds.length > 0)
+    ? PROVIDERS.filter((p) => storeIds.includes(p.platformId))
+    : PROVIDERS;
+
+  logDebug("Search", `Executing search for "${cleanQuery}" in ${userSettings.name} (Pincode: ${userSettings.pincode}) across ${activeProviders.length} store(s)`);
+
   const cacheTerm = String(query || "").toLowerCase().trim();
+  const storeSig = activeProviders.map((p) => p.platformId).sort().join(",");
+  const cacheKey = `${cacheTerm}#${storeSig}`;
 
-  const cached = await SearchCache.get(userSettings.pincode, cacheTerm);
+  const cached = await SearchCache.get(userSettings.pincode, cacheKey);
   if (cached) {
     logDebug("Search", `Cache hit for "${cleanQuery}" (age ${Date.now() - cached.ts}ms)`);
     const cachedResults = cached.results.map((result) => ({ ...result, cachedAt: cached.ts }));
@@ -2272,7 +2730,7 @@ async function streamSearchResults(query, locationId = null, onResult = () => {}
   const collected = [];
   const hasResultFor = (platformId) => collected.some((r) => r.platformId === platformId);
 
-  const providerPromises = PROVIDERS.map((provider) =>
+  const providerPromises = activeProviders.map((provider) =>
     withTimeout(
       Promise.resolve().then(() => provider.search(cleanQuery, userSettings)),
       PROVIDER_TIMEOUT_MS,
@@ -2282,8 +2740,6 @@ async function streamSearchResults(query, locationId = null, onResult = () => {}
       return unavailableResult(provider, err.message.includes("timed out") ? "timed out" : null);
     }).then((result) => {
       if (!hasResultFor(result.platformId)) {
-        // Per-store settle time (like mobile's responseTimeMs): how long this
-        // store took from query start until its result was ready.
         result.durationMs = Date.now() - startTime;
         collected.push(result);
         emit(result);
@@ -2295,7 +2751,7 @@ async function streamSearchResults(query, locationId = null, onResult = () => {}
   const globalTimeout = new Promise((resolve) => {
     globalTimer = setTimeout(() => {
       logDebug("Search", `Global search timeout reached after ${SEARCH_TIMEOUT_MS}ms`);
-      PROVIDERS.forEach((provider) => {
+      activeProviders.forEach((provider) => {
         if (!hasResultFor(provider.platformId)) {
           const fill = unavailableResult(provider, "cancelled by global timeout");
           collected.push(fill);
@@ -2310,18 +2766,18 @@ async function streamSearchResults(query, locationId = null, onResult = () => {}
 
   const annotatedResults = MatchingEngine.annotateBestOffers(collected);
   annotatedResults.sort((a, b) =>
-    PROVIDERS.findIndex((p) => p.platformId === a.platformId) -
-    PROVIDERS.findIndex((p) => p.platformId === b.platformId)
+    activeProviders.findIndex((p) => p.platformId === a.platformId) -
+    activeProviders.findIndex((p) => p.platformId === b.platformId)
   );
-  await SearchCache.set(userSettings.pincode, cacheTerm, annotatedResults);
+  await SearchCache.set(userSettings.pincode, cacheKey, annotatedResults);
   const durationMs = Date.now() - startTime;
 
   logDebug("Search", `Completed search in ${durationMs}ms (${(durationMs / 1000).toFixed(2)}s). Available stores: ${annotatedResults.filter(r => r.isAvailable && r.priceBreakdown?.finalPayable > 0).length}`);
   return annotatedResults;
 }
 
-async function handleSearchQuery(query, locationId = null) {
-  return streamSearchResults(query, locationId);
+async function handleSearchQuery(query, locationId = null, storeIds = null) {
+  return streamSearchResults(query, locationId, () => {}, storeIds);
 }
 
 // ==========================================
@@ -2344,7 +2800,7 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage)
 
     if (action === "SEARCH_QUERY") {
       preWarmConnections();
-      handleSearchQuery(payload.query, payload.locationId)
+      handleSearchQuery(payload.query, payload.locationId, payload.storeIds)
         .then((results) => sendResponse({ success: true, data: results }))
         .catch((err) => sendResponse({ success: false, error: err.message }));
       return true;
@@ -2378,6 +2834,27 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage)
       return true;
     }
 
+    if (action === "GET_COLLECTIONS") {
+      Promise.all([CollectionService.getCollections(), CollectionService.getActiveCollectionId()])
+        .then(([collections, activeId]) => sendResponse({ success: true, collections, activeId }))
+        .catch((err) => sendResponse({ success: false, error: err.message }));
+      return true;
+    }
+
+    if (action === "SAVE_COLLECTIONS") {
+      CollectionService.saveCollections(payload.collections)
+        .then((collections) => sendResponse({ success: true, collections }))
+        .catch((err) => sendResponse({ success: false, error: err.message }));
+      return true;
+    }
+
+    if (action === "SET_ACTIVE_COLLECTION") {
+      CollectionService.setActiveCollectionId(payload.collectionId)
+        .then((id) => sendResponse({ success: true, activeId: id }))
+        .catch((err) => sendResponse({ success: false, error: err.message }));
+      return true;
+    }
+
     if (action === "STORE_PRICE_SYNC") {
       const { data } = payload || {};
       if (data && data.platformId && data.price > 0) {
@@ -2399,7 +2876,6 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage)
       sendResponse({ success: true });
       return true;
     }
-
   });
 }
 
@@ -2416,7 +2892,7 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onConnect)
       const startedAt = Date.now();
       streamSearchResults(payload.query, payload.locationId, (store) => {
         try { port.postMessage({ type: "RESULT", store }); } catch (e) {}
-      })
+      }, payload.storeIds)
         .then((results) => {
           try {
             port.postMessage({ type: "DONE", durationMs: Date.now() - startedAt, count: results.length });
@@ -2447,6 +2923,8 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     DEFAULT_LOCATION,
     DEFAULT_PROFILES,
+    DEFAULT_COLLECTIONS,
+    CollectionService,
     LocationService,
     MatchingEngine,
     BaseProvider,
@@ -2454,6 +2932,8 @@ if (typeof module !== "undefined" && module.exports) {
     InstamartProvider,
     ZeptoProvider,
     BlinkitProvider,
+    AmazonMainProvider,
+    FlipkartProvider,
     PROVIDERS,
     handleSearchQuery,
     streamSearchResults,

@@ -24,12 +24,17 @@ global.chrome = {
 
 const {
   DEFAULT_LOCATION,
+  DEFAULT_PROFILES,
+  DEFAULT_COLLECTIONS,
+  CollectionService,
   LocationService,
   MatchingEngine,
   AmazonTezProvider,
   InstamartProvider,
   ZeptoProvider,
   BlinkitProvider,
+  AmazonMainProvider,
+  FlipkartProvider,
   handleSearchQuery,
   streamSearchResults,
   SearchCache,
@@ -183,13 +188,24 @@ test('Providers - preserves up to three ranked candidates and selected index', (
   assert.strictEqual(result.candidates[1].price, 115);
 });
 
-test('handleSearchQuery - executes parallel search and returns 4 quick commerce store results', async () => {
-  const results = await handleSearchQuery('paneer');
-  assert.strictEqual(results.length, 4);
-  assert.ok(results.some(r => r.platformId === 'amazon_tez'));
-  assert.ok(results.some(r => r.platformId === 'instamart'));
-  assert.ok(results.some(r => r.platformId === 'zepto'));
-  assert.ok(results.some(r => r.platformId === 'blinkit'));
+test('handleSearchQuery - executes parallel search across all 6 stores or filtered collection', async () => {
+  const allResults = await handleSearchQuery('paneer');
+  assert.strictEqual(allResults.length, 6);
+  assert.ok(allResults.some(r => r.platformId === 'amazon_tez'));
+  assert.ok(allResults.some(r => r.platformId === 'instamart'));
+  assert.ok(allResults.some(r => r.platformId === 'zepto'));
+  assert.ok(allResults.some(r => r.platformId === 'blinkit'));
+  assert.ok(allResults.some(r => r.platformId === 'amazon_main'));
+  assert.ok(allResults.some(r => r.platformId === 'flipkart'));
+
+  // 10 min pack filter
+  const tenMinResults = await handleSearchQuery('paneer', null, ['amazon_tez', 'instamart', 'zepto', 'blinkit']);
+  assert.strictEqual(tenMinResults.length, 4);
+
+  // Big online pack filter
+  const bigOnlineResults = await handleSearchQuery('iphone', null, ['amazon_main', 'flipkart']);
+  assert.strictEqual(bigOnlineResults.length, 2);
+  assert.deepStrictEqual(bigOnlineResults.map(r => r.platformId), ['amazon_main', 'flipkart']);
 });
 
 test('firstPositive - resolves with the first truthy result', async () => {
@@ -248,11 +264,11 @@ test('streamSearchResults - emits each provider result as it settles then resolv
   const emitted = [];
   const results = await streamSearchResults('emission probe', null, (store) => emitted.push(store.platformId));
 
-  assert.strictEqual(emitted.length, 4);
-  assert.strictEqual(results.length, 4);
+  assert.strictEqual(emitted.length, 6);
+  assert.strictEqual(results.length, 6);
   assert.deepStrictEqual(
     results.map((r) => r.platformId).sort(),
-    ['amazon_tez', 'blinkit', 'instamart', 'zepto']
+    ['amazon_main', 'amazon_tez', 'blinkit', 'flipkart', 'instamart', 'zepto']
   );
 });
 
@@ -260,18 +276,21 @@ test('handleSearchQuery - serves repeat queries from the short-TTL cache without
   SearchCache.resetForTests();
   const seedTs = Date.now();
   const seededResults = [
-    { platformId: 'amazon_tez', isAvailable: true, priceBreakdown: { finalPayable: 99 }, isLowestPrice: true },
-    { platformId: 'instamart', isAvailable: false, priceBreakdown: null, isLowestPrice: false }
+    { platformId: 'amazon_main', isAvailable: true, priceBreakdown: { finalPayable: 99 }, isLowestPrice: true },
+    { platformId: 'flipkart', isAvailable: false, priceBreakdown: null, isLowestPrice: false }
   ];
-  await SearchCache.set(DEFAULT_LOCATION.pincode, 'cache hit probe', seededResults, seedTs);
+  const storeIds = ['amazon_main', 'flipkart'];
+  const storeSig = storeIds.sort().join(',');
+  const cacheKey = `cache hit probe#${storeSig}`;
+  await SearchCache.set(DEFAULT_LOCATION.pincode, cacheKey, seededResults, seedTs);
 
-  const results = await handleSearchQuery('cache hit probe');
+  const results = await handleSearchQuery('cache hit probe', null, storeIds);
 
   assert.strictEqual(results.length, 2);
   assert.ok(results.every((r) => typeof r.cachedAt === 'number' && r.cachedAt >= seedTs));
   assert.deepStrictEqual(
     results.map((r) => r.platformId),
-    ['amazon_tez', 'instamart']
+    ['amazon_main', 'flipkart']
   );
 });
 
@@ -315,3 +334,98 @@ test('MatchingEngine - cleanTitle-style rules strip glued discount and sponsored
     .replace(/^\s*\d+(?:\.\d+)?\s*%\s*off\s*/i, "");
   assert.strictEqual(cleaned, 'Fresh Milk Pouch');
 });
+
+test('AmazonMainProvider & FlipkartProvider - construct valid search URLs and formatted results', () => {
+  const amz = new AmazonMainProvider();
+  assert.strictEqual(amz.platformId, 'amazon_main');
+  assert.strictEqual(amz.getSearchUrl('macbook air'), 'https://www.amazon.in/s?k=macbook%20air');
+
+  const flipkart = new FlipkartProvider();
+  assert.strictEqual(flipkart.platformId, 'flipkart');
+  assert.strictEqual(flipkart.getSearchUrl('iphone 15'), 'https://www.flipkart.com/search?q=iphone%2015');
+
+  const formatted = amz.formatResult({
+    title: 'Apple MacBook Air M2',
+    price: 89900,
+    mrp: 99900,
+    brand: 'Apple',
+    quantity: '1 unit',
+    productUrl: 'https://www.amazon.in/dp/B0B3C572LT'
+  }, DEFAULT_LOCATION, 'macbook air');
+
+  assert.strictEqual(formatted.platformId, 'amazon_main');
+  assert.strictEqual(formatted.isAvailable, true);
+  assert.strictEqual(formatted.priceBreakdown.finalPayable, 89900);
+  assert.strictEqual(formatted.productUrl, 'https://www.amazon.in/dp/B0B3C572LT');
+  assert.strictEqual(formatted.globalUrl, 'https://www.amazon.in/s?k=macbook%20air');
+});
+
+test('CollectionService - returns default collections and allows custom collection management', async () => {
+  const collections = await CollectionService.getCollections();
+  assert.ok(Array.isArray(collections));
+  assert.strictEqual(collections.length, 3);
+  assert.strictEqual(collections[0].id, '10_min_pack');
+  assert.strictEqual(collections[1].id, 'big_online_pack');
+  assert.strictEqual(collections[2].id, 'all_stores');
+
+  const customList = [
+    ...collections,
+    { id: 'custom_1', name: 'My Grocery', emoji: '🥗', storeIds: ['zepto', 'blinkit'], isCustom: true }
+  ];
+  await CollectionService.saveCollections(customList);
+  const reloaded = await CollectionService.getCollections();
+  assert.strictEqual(reloaded.length, 4);
+  assert.ok(reloaded.some(c => c.id === 'custom_1'));
+
+  await CollectionService.setActiveCollectionId('custom_1');
+  const activeId = await CollectionService.getActiveCollectionId();
+  assert.strictEqual(activeId, 'custom_1');
+});
+
+test('Amazon.in & Flipkart card extraction logic parses titles and prices accurately', () => {
+  // Amazon price parsing simulation
+  const amzPriceText = '₹89,900';
+  const amzMatch = amzPriceText.replace(/,/g, '').match(/([0-9]+(?:\.[0-9]+)?)/);
+  assert.ok(amzMatch);
+  assert.strictEqual(parseFloat(amzMatch[1]), 89900);
+
+  // Flipkart price parsing simulation
+  const fkPriceText = '₹151';
+  const fkMatch = fkPriceText.replace(/,/g, '').match(/([0-9]+(?:\.[0-9]+)?)/);
+  assert.ok(fkMatch);
+  assert.strictEqual(parseFloat(fkMatch[1]), 151);
+
+  // Flipkart MRP parsing
+  const fkMrpText = '₹499';
+  const fkMrpMatch = fkMrpText.replace(/,/g, '').match(/([0-9]+(?:\.[0-9]+)?)/);
+  assert.ok(fkMrpMatch);
+  assert.strictEqual(parseFloat(fkMrpMatch[1]), 499);
+});
+
+test('MatchingEngine & candidate filtering discards sponsored ads when score < 25', () => {
+  const query = 'lg sound bar';
+  const boatSponsored = 'boAt Sponsored Ad - Aavante Prime 5.1 5000D, Cinematic Dolby Audio, 500W Signature Sound';
+  const score = MatchingEngine.scoreRelevance(boatSponsored, query);
+  
+  // boAt misses the 'lg' brand so score is reduced/low
+  const isAd = /\b(?:sponsored\s+ad|sponsored|ad)\b/i.test(boatSponsored);
+  assert.strictEqual(isAd, true);
+  assert.ok(score < 25, `Expected score < 25 for competitor ad, got ${score}`);
+
+  // Test candidate filtering discard
+  const candidates = [
+    { title: boatSponsored, isSponsored: true, _score: score, price: 9999 },
+    { title: 'LG S65TR 600W 5.1 Channel Dolby Digital Soundbar', isSponsored: false, _score: 115, price: 14990 }
+  ];
+
+  const valid = candidates.filter(c => {
+    const ad = c.isSponsored || /\b(?:sponsored\s+ad|sponsored|ad)\b/i.test(c.title);
+    if (ad && c._score < 25) return false;
+    return true;
+  });
+
+  assert.strictEqual(valid.length, 1);
+  assert.strictEqual(valid[0].title, 'LG S65TR 600W 5.1 Channel Dolby Digital Soundbar');
+});
+
+

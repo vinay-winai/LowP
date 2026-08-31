@@ -1,4 +1,12 @@
-export type PlatformId = 'amazon_tez' | 'instamart' | 'zepto' | 'blinkit';
+export type PlatformId = 'amazon_tez' | 'instamart' | 'zepto' | 'blinkit' | 'amazon_main' | 'flipkart';
+
+export interface StoreCollection {
+  id: string;
+  name: string;
+  emoji?: string;
+  storeIds: PlatformId[];
+  isCustom?: boolean;
+}
 
 export interface LocationProfile {
   id: string;
@@ -19,6 +27,8 @@ export interface ProductItem {
   price: number;
   image: string;
   productUrl?: string;
+  globalUrl?: string;
+  searchUrl?: string;
   _score?: number;
   arrivedSeq?: number;
 }
@@ -41,6 +51,8 @@ export interface StoreResult {
   selectedIndex?: number;
   priceBreakdown: PriceBreakdown | null;
   productUrl: string;
+  globalUrl?: string;
+  searchUrl?: string;
   isLowestPrice: boolean;
   responseTimeMs?: number;
   _score?: number;

@@ -19,6 +19,7 @@ import { MatchingEngine } from '../core/MatchingEngine';
 import { LocationService, DEFAULT_LOCATION } from '../core/LocationService';
 import {
   PlatformId,
+  StoreCollection,
   LocationProfile,
   ProductItem,
   StoreResult,
@@ -35,11 +36,15 @@ import {
   Clock,
   ShoppingCart,
   Table,
-  Check
+  Check,
+  Plus,
+  Edit2,
+  Trash2,
+  Layers
 } from 'lucide-react-native';
 
-const INITIAL_STORES: StoreResult[] = [
-  {
+export const ALL_STORE_TEMPLATES: Record<PlatformId, StoreResult> = {
+  amazon_tez: {
     platformId: 'amazon_tez',
     platformName: 'Amazon Now (Tez)',
     logoColor: '#FF9900',
@@ -50,7 +55,7 @@ const INITIAL_STORES: StoreResult[] = [
     productUrl: '#',
     isLowestPrice: false
   },
-  {
+  instamart: {
     platformId: 'instamart',
     platformName: 'Swiggy Instamart',
     logoColor: '#FC8019',
@@ -61,7 +66,7 @@ const INITIAL_STORES: StoreResult[] = [
     productUrl: '#',
     isLowestPrice: false
   },
-  {
+  zepto: {
     platformId: 'zepto',
     platformName: 'Zepto',
     logoColor: '#7C3AED',
@@ -72,7 +77,7 @@ const INITIAL_STORES: StoreResult[] = [
     productUrl: '#',
     isLowestPrice: false
   },
-  {
+  blinkit: {
     platformId: 'blinkit',
     platformName: 'Blinkit',
     logoColor: '#F8CB46',
@@ -82,6 +87,49 @@ const INITIAL_STORES: StoreResult[] = [
     priceBreakdown: null,
     productUrl: '#',
     isLowestPrice: false
+  },
+  amazon_main: {
+    platformId: 'amazon_main',
+    platformName: 'Amazon.in',
+    logoColor: '#FF9900',
+    isAvailable: false,
+    statusMessage: 'Ready to search',
+    item: null,
+    priceBreakdown: null,
+    productUrl: '#',
+    isLowestPrice: false
+  },
+  flipkart: {
+    platformId: 'flipkart',
+    platformName: 'Flipkart',
+    logoColor: '#2874F0',
+    isAvailable: false,
+    statusMessage: 'Ready to search',
+    item: null,
+    priceBreakdown: null,
+    productUrl: '#',
+    isLowestPrice: false
+  }
+};
+
+export const DEFAULT_COLLECTIONS: StoreCollection[] = [
+  {
+    id: '10_min_pack',
+    name: '10 min pack',
+    emoji: '⚡',
+    storeIds: ['amazon_tez', 'instamart', 'zepto', 'blinkit']
+  },
+  {
+    id: 'big_online_pack',
+    name: 'Big Online Pack',
+    emoji: '📦',
+    storeIds: ['amazon_main', 'flipkart']
+  },
+  {
+    id: 'all_stores',
+    name: 'All Stores',
+    emoji: '🛒',
+    storeIds: ['amazon_tez', 'instamart', 'zepto', 'blinkit', 'amazon_main', 'flipkart']
   }
 ];
 
@@ -102,7 +150,17 @@ export const HomeScreen: React.FC = () => {
   const [activeSearch, setActiveSearch] = useState('');
   const [searchId, setSearchId] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [stores, setStores] = useState<StoreResult[]>(INITIAL_STORES);
+  const [collections, setCollections] = useState<StoreCollection[]>(DEFAULT_COLLECTIONS);
+  const [activeCollectionId, setActiveCollectionId] = useState<string>('10_min_pack');
+  const [collectionModalVisible, setCollectionModalVisible] = useState(false);
+  const [editingCollection, setEditingCollection] = useState<StoreCollection | null>(null);
+  const [customNameInput, setCustomNameInput] = useState('');
+  const [selectedStoreIds, setSelectedStoreIds] = useState<PlatformId[]>(['amazon_tez', 'instamart', 'zepto', 'blinkit']);
+
+  const currentCollection = collections.find((c) => c.id === activeCollectionId) || DEFAULT_COLLECTIONS[0];
+  const [stores, setStores] = useState<StoreResult[]>(() =>
+    currentCollection.storeIds.map((id) => ({ ...ALL_STORE_TEMPLATES[id] }))
+  );
   const [searchDuration, setSearchDuration] = useState<number | null>(null);
   const [locationModalVisible, setLocationModalVisible] = useState(false);
   const [loginModalVisible, setLoginModalVisible] = useState(false);
@@ -129,25 +187,78 @@ export const HomeScreen: React.FC = () => {
       'https://www.amazon.in/',
       'https://www.swiggy.com/',
       'https://www.zepto.com/',
-      'https://blinkit.com/'
+      'https://blinkit.com/',
+      'https://www.flipkart.com/'
     ];
     origins.forEach((url) => {
       fetch(url, { method: 'HEAD', mode: 'no-cors' }).catch(() => {});
     });
   }, []);
 
-  const handleTriggerSearch = (query: string) => {
+  const handleSelectCollection = (colId: string) => {
+    setActiveCollectionId(colId);
+    const targetCol = collections.find((c) => c.id === colId) || DEFAULT_COLLECTIONS[0];
+    setStores(targetCol.storeIds.map((id) => ({ ...ALL_STORE_TEMPLATES[id] })));
+    if (activeSearch) {
+      handleTriggerSearch(activeSearch, targetCol.storeIds);
+    }
+  };
+
+  const handleOpenCollectionModal = (col: StoreCollection | null = null) => {
+    setEditingCollection(col);
+    setCustomNameInput(col ? col.name : '');
+    setSelectedStoreIds(col ? col.storeIds : ['amazon_tez', 'instamart', 'zepto', 'blinkit']);
+    setCollectionModalVisible(true);
+  };
+
+  const handleSaveCollection = () => {
+    const name = customNameInput.trim();
+    if (!name || selectedStoreIds.length === 0) return;
+
+    if (editingCollection) {
+      setCollections((prev) =>
+        prev.map((c) => (c.id === editingCollection.id ? { ...c, name, storeIds: selectedStoreIds } : c))
+      );
+    } else {
+      const newCol: StoreCollection = {
+        id: `custom_${Date.now()}`,
+        name,
+        emoji: '📁',
+        storeIds: selectedStoreIds,
+        isCustom: true
+      };
+      setCollections((prev) => [...prev, newCol]);
+      setActiveCollectionId(newCol.id);
+      setStores(newCol.storeIds.map((id) => ({ ...ALL_STORE_TEMPLATES[id] })));
+    }
+    setCollectionModalVisible(false);
+    if (activeSearch) {
+      handleTriggerSearch(activeSearch, selectedStoreIds);
+    }
+  };
+
+  const handleDeleteCollection = (colId: string) => {
+    setCollections((prev) => prev.filter((c) => c.id !== colId));
+    if (activeCollectionId === colId) {
+      setActiveCollectionId('10_min_pack');
+      setStores(DEFAULT_COLLECTIONS[0].storeIds.map((id) => ({ ...ALL_STORE_TEMPLATES[id] })));
+    }
+    setCollectionModalVisible(false);
+  };
+
+  const handleTriggerSearch = (query: string, storeOverride?: PlatformId[]) => {
     const clean = MatchingEngine.cleanSearchTerm(query);
     if (!clean) return;
 
+    const colStoreIds = storeOverride || currentCollection.storeIds;
     const cacheTerm = query.trim().toLowerCase();
-    const cacheKey = `${activeLocation.pincode}|${cacheTerm}`;
+    const cacheKey = `${activeLocation.pincode}|${cacheTerm}#${colStoreIds.slice().sort().join(',')}`;
     activeCacheKeyRef.current = cacheKey;
     searchStartTime.current = Date.now();
 
     const hit = searchCacheRef.current.get(cacheKey);
     if (hit && Date.now() - hit.ts <= SEARCH_CACHE_TTL_MS) {
-      // Cache hit: restore the snapshot without remounting any WebView.
+      // Cache hit: restore snapshot without remounting WebViews
       setActiveSearch(clean);
       setIsLoading(false);
       setSearchDuration(Date.now() - searchStartTime.current);
@@ -162,11 +273,11 @@ export const HomeScreen: React.FC = () => {
     setSearchDuration(null);
     arrivalSeqRef.current = 0;
 
-    pendingStores.current = new Set(['amazon_tez', 'instamart', 'zepto', 'blinkit']);
+    pendingStores.current = new Set(colStoreIds);
 
     setStores(
-      INITIAL_STORES.map((s) => ({
-        ...s,
+      colStoreIds.map((id) => ({
+        ...ALL_STORE_TEMPLATES[id],
         statusMessage: 'Searching...',
         isAvailable: false,
         item: null,
@@ -433,23 +544,63 @@ export const HomeScreen: React.FC = () => {
         </View>
       </View>
 
+      {/* Store Collections Tab Bar */}
+      <View style={styles.collectionsSection}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.collectionsRow}>
+          {collections.map((col) => {
+            const isActive = col.id === activeCollectionId;
+            return (
+              <TouchableOpacity
+                key={col.id}
+                style={[styles.collectionPill, isActive && styles.collectionPillActive]}
+                onPress={() => handleSelectCollection(col.id)}
+              >
+                <Text style={styles.collectionEmoji}>{col.emoji || '📁'}</Text>
+                <Text style={[styles.collectionPillText, isActive && styles.collectionPillTextActive]}>
+                  {col.name}
+                </Text>
+                {col.isCustom && (
+                  <TouchableOpacity
+                    onPress={() => handleOpenCollectionModal(col)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={{ marginLeft: 4 }}
+                  >
+                    <Edit2 size={11} color={isActive ? '#10B981' : '#94A3B8'} />
+                  </TouchableOpacity>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+          <TouchableOpacity
+            style={styles.addCollectionBtn}
+            onPress={() => handleOpenCollectionModal(null)}
+          >
+            <Plus size={13} color="#10B981" />
+            <Text style={styles.addCollectionBtnText}>Pack</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+
       {/* Connected Stores Bar */}
       <View style={styles.connectedStoresSection}>
         <Text style={styles.connectedStoresLabel}>Stores (Tap to Login/Sync):</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storesRow}>
-          {INITIAL_STORES.map((s) => (
-            <TouchableOpacity
-              key={s.platformId}
-              style={[styles.storePill, { borderColor: s.logoColor }]}
-              onPress={() => {
-                setSelectedLoginStore(s.platformId);
-                setLoginModalVisible(true);
-              }}
-            >
-              <View style={[styles.storeDot, { backgroundColor: s.logoColor }]} />
-              <Text style={styles.storePillText}>{s.platformName}</Text>
-            </TouchableOpacity>
-          ))}
+          {Object.keys(ALL_STORE_TEMPLATES).map((key) => {
+            const s = ALL_STORE_TEMPLATES[key as PlatformId];
+            return (
+              <TouchableOpacity
+                key={s.platformId}
+                style={[styles.storePill, { borderColor: s.logoColor }]}
+                onPress={() => {
+                  setSelectedLoginStore(s.platformId);
+                  setLoginModalVisible(true);
+                }}
+              >
+                <View style={[styles.storeDot, { backgroundColor: s.logoColor }]} />
+                <Text style={styles.storePillText}>{s.platformName}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       </View>
 
@@ -556,26 +707,24 @@ export const HomeScreen: React.FC = () => {
         contentContainerStyle={styles.resultsContainer}
         showsVerticalScrollIndicator={false}
       >
-        {activeSearch !== '' && (
+        {activeSearch ? (
           <View style={styles.searchMetaRow}>
             <Text style={styles.searchMetaText}>
-              Results for "<Text style={styles.searchMetaQuery}>{activeSearch}</Text>"
+              Results for <Text style={styles.searchMetaQuery}>"{activeSearch}"</Text>
             </Text>
             {isLoading ? (
               <View style={styles.timeBadgeLoading}>
-                <ActivityIndicator size="small" color="#38BDF8" style={{ marginRight: 6 }} />
-                <Text style={styles.timeBadgeLoadingText}>Searching stores...</Text>
+                <ActivityIndicator size="small" color="#38BDF8" style={{ marginRight: 4 }} />
+                <Text style={styles.timeBadgeLoadingText}>Comparing live...</Text>
               </View>
-            ) : searchDuration !== null ? (
+            ) : searchDuration ? (
               <View style={styles.timeBadgeSuccess}>
                 <Clock size={12} color="#10B981" />
-                <Text style={styles.timeBadgeSuccessText}>
-                  All results in {(searchDuration / 1000).toFixed(2)}s ({searchDuration}ms)
-                </Text>
+                <Text style={styles.timeBadgeSuccessText}>{(searchDuration / 1000).toFixed(2)}s</Text>
               </View>
             ) : null}
           </View>
-        )}
+        ) : null}
 
         {lowestStore && (
           <View style={styles.savingsBanner}>
@@ -609,6 +758,7 @@ export const HomeScreen: React.FC = () => {
       <BackgroundScrapers
         searchQuery={activeSearch}
         searchId={searchId}
+        activeStoreIds={currentCollection.storeIds}
         onStoreResult={handleStoreResult}
       />
 
@@ -632,6 +782,94 @@ export const HomeScreen: React.FC = () => {
           if (activeSearch) handleTriggerSearch(activeSearch);
         }}
       />
+
+      {/* Custom Collection Builder Modal */}
+      <Modal
+        visible={collectionModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCollectionModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.collectionModalCard}>
+            <View style={styles.collectionModalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Layers size={18} color="#10B981" />
+                <Text style={styles.collectionModalTitle}>
+                  {editingCollection ? 'Edit Collection' : 'Create Store Collection'}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setCollectionModalVisible(false)}>
+                <X size={18} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.collectionModalBody}>
+              <Text style={styles.inputLabel}>Collection Name</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="e.g. Quick Groceries, Gadget Pack..."
+                placeholderTextColor="#64748B"
+                value={customNameInput}
+                onChangeText={setCustomNameInput}
+              />
+
+              <Text style={[styles.inputLabel, { marginTop: 14 }]}>Select Stores</Text>
+              <View style={styles.storeSelectionGrid}>
+                {Object.keys(ALL_STORE_TEMPLATES).map((key) => {
+                  const s = ALL_STORE_TEMPLATES[key as PlatformId];
+                  const isSelected = selectedStoreIds.includes(s.platformId);
+                  return (
+                    <TouchableOpacity
+                      key={s.platformId}
+                      style={[
+                        styles.storeCheckboxItem,
+                        isSelected && styles.storeCheckboxItemActive
+                      ]}
+                      onPress={() => {
+                        setSelectedStoreIds((prev) =>
+                          isSelected
+                            ? prev.filter((id) => id !== s.platformId)
+                            : [...prev, s.platformId]
+                        );
+                      }}
+                    >
+                      <View style={[styles.storeDot, { backgroundColor: s.logoColor }]} />
+                      <Text style={[styles.storeCheckboxText, isSelected && styles.storeCheckboxTextActive]}>
+                        {s.platformName}
+                      </Text>
+                      {isSelected && <Check size={14} color="#10B981" style={{ marginLeft: 'auto' }} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <View style={styles.collectionModalFooter}>
+                {editingCollection && editingCollection.isCustom ? (
+                  <TouchableOpacity
+                    style={styles.deleteModalBtn}
+                    onPress={() => handleDeleteCollection(editingCollection.id)}
+                  >
+                    <Trash2 size={14} color="#EF4444" />
+                    <Text style={styles.deleteModalBtnText}>Delete</Text>
+                  </TouchableOpacity>
+                ) : <View style={{ flex: 1 }} />}
+
+                <TouchableOpacity
+                  style={[
+                    styles.saveModalBtn,
+                    (!customNameInput.trim() || selectedStoreIds.length === 0) && styles.saveModalBtnDisabled
+                  ]}
+                  disabled={!customNameInput.trim() || selectedStoreIds.length === 0}
+                  onPress={handleSaveCollection}
+                >
+                  <Text style={styles.saveModalBtnText}>Save Collection</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Strategy Matrix Modal */}
       <StrategyMatrixModal
@@ -966,6 +1204,184 @@ const styles = StyleSheet.create({
   },
   timeBadgeSuccessText: {
     color: '#10B981',
+    fontSize: 12,
+    fontWeight: '700'
+  },
+  collectionsSection: {
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E293B'
+  },
+  collectionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  collectionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#334155'
+  },
+  collectionPillActive: {
+    borderColor: '#10B981',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)'
+  },
+  collectionEmoji: {
+    fontSize: 12
+  },
+  collectionPillText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600'
+  },
+  collectionPillTextActive: {
+    color: '#10B981',
+    fontWeight: '700'
+  },
+  addCollectionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'transparent',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderStyle: 'dashed'
+  },
+  addCollectionBtnText: {
+    color: '#10B981',
+    fontSize: 11,
+    fontWeight: '700'
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16
+  },
+  collectionModalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#0F172A',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+    overflow: 'hidden'
+  },
+  collectionModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E293B'
+  },
+  collectionModalTitle: {
+    color: '#F8FAFC',
+    fontSize: 15,
+    fontWeight: '800'
+  },
+  collectionModalBody: {
+    padding: 16
+  },
+  inputLabel: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6
+  },
+  modalInput: {
+    backgroundColor: '#1E293B',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+    color: '#F8FAFC',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14
+  },
+  storeSelectionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4
+  },
+  storeCheckboxItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+    width: '48%'
+  },
+  storeCheckboxItemActive: {
+    borderColor: '#10B981',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)'
+  },
+  storeCheckboxText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1
+  },
+  storeCheckboxTextActive: {
+    color: '#F8FAFC',
+    fontWeight: '700'
+  },
+  collectionModalFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 20,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#1E293B'
+  },
+  saveModalBtn: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  saveModalBtnDisabled: {
+    opacity: 0.4
+  },
+  saveModalBtnText: {
+    color: '#0F172A',
+    fontSize: 13,
+    fontWeight: '800'
+  },
+  deleteModalBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)'
+  },
+  deleteModalBtnText: {
+    color: '#EF4444',
     fontSize: 12,
     fontWeight: '700'
   }

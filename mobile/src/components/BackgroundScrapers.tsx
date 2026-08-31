@@ -7,6 +7,7 @@ import { generateScraperScript } from '../core/ScraperScript';
 interface BackgroundScrapersProps {
   searchQuery: string;
   searchId: number;
+  activeStoreIds?: PlatformId[];
   onStoreResult: (
     platformId: PlatformId,
     item: ProductItem | null,
@@ -31,6 +32,14 @@ const STORES: { platformId: PlatformId; getUrl: (q: string) => string }[] = [
   {
     platformId: 'blinkit',
     getUrl: (q) => `https://blinkit.com/s/?q=${encodeURIComponent(q)}`
+  },
+  {
+    platformId: 'amazon_main',
+    getUrl: (q) => `https://www.amazon.in/s?k=${encodeURIComponent(q)}`
+  },
+  {
+    platformId: 'flipkart',
+    getUrl: (q) => `https://www.flipkart.com/search?q=${encodeURIComponent(q)}`
   }
 ];
 
@@ -45,12 +54,17 @@ const DESKTOP_USER_AGENT =
 export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
   searchQuery,
   searchId,
+  activeStoreIds,
   onStoreResult
 }) => {
   const webViewRefs = useRef<{ [key: string]: WebView | null }>({});
   const resolvedStores = useRef<Set<PlatformId>>(new Set());
   const activeSearchId = useRef<number>(searchId);
   const startTimeRef = useRef<number>(0);
+
+  const targetStores = STORES.filter(
+    (s) => !activeStoreIds || activeStoreIds.length === 0 || activeStoreIds.includes(s.platformId)
+  );
 
   useEffect(() => {
     resolvedStores.current.clear();
@@ -59,11 +73,11 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
 
     if (!searchQuery || !searchQuery.trim()) return;
 
-    console.log(`[LowP Mobile] Initiating parallel search for: "${searchQuery}"`);
+    console.log(`[LowP Mobile] Initiating parallel search for: "${searchQuery}" across ${targetStores.length} stores`);
 
-    // Safety fallback timeout (10s)
+    // Safety fallback timeout (9s)
     const timeout = setTimeout(() => {
-      STORES.forEach(({ platformId }) => {
+      targetStores.forEach(({ platformId }) => {
         if (!resolvedStores.current.has(platformId)) {
           resolvedStores.current.add(platformId);
           const elapsed = Date.now() - startTimeRef.current;
@@ -74,7 +88,7 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
     }, 9000);
 
     return () => clearTimeout(timeout);
-  }, [searchId, searchQuery]);
+  }, [searchId, searchQuery, activeStoreIds]);
 
   const handleMessage = (platformId: PlatformId, event: WebViewMessageEvent) => {
     try {
@@ -104,7 +118,7 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
 
   return (
     <View style={styles.hiddenContainer} pointerEvents="none">
-      {STORES.map((store) => {
+      {targetStores.map((store) => {
         const targetUrl = store.getUrl(searchQuery);
         const scraperJs = generateScraperScript(searchQuery, store.platformId);
         const key = `${store.platformId}_${searchId}`;

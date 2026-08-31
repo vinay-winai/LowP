@@ -28,7 +28,9 @@ const STORES: { id: PlatformId; name: string; color: string }[] = [
   { id: 'amazon_tez', name: 'Amazon Tez', color: '#FF9900' },
   { id: 'instamart', name: 'Instamart', color: '#FC8019' },
   { id: 'zepto', name: 'Zepto', color: '#7C3AED' },
-  { id: 'blinkit', name: 'Blinkit', color: '#F8CB46' }
+  { id: 'blinkit', name: 'Blinkit', color: '#F8CB46' },
+  { id: 'amazon_main', name: 'Amazon.in', color: '#FF9900' },
+  { id: 'flipkart', name: 'Flipkart', color: '#2874F0' }
 ];
 
 interface StrategyMatrixModalProps {
@@ -53,7 +55,9 @@ export const StrategyMatrixModal: React.FC<StrategyMatrixModalProps> = ({
     amazon_tez: { total: 0, availableCount: 0, missingCount: 0 },
     instamart: { total: 0, availableCount: 0, missingCount: 0 },
     zepto: { total: 0, availableCount: 0, missingCount: 0 },
-    blinkit: { total: 0, availableCount: 0, missingCount: 0 }
+    blinkit: { total: 0, availableCount: 0, missingCount: 0 },
+    amazon_main: { total: 0, availableCount: 0, missingCount: 0 },
+    flipkart: { total: 0, availableCount: 0, missingCount: 0 }
   };
 
   let optimalSplitTotal = 0;

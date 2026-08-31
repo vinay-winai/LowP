@@ -77,6 +77,190 @@ document.addEventListener("DOMContentLoaded", () => {
     if (matrixItemCountText) matrixItemCountText.textContent = `${count} ${count === 1 ? 'Item' : 'Items'} in Basket • Multi-Store Arbitrage`;
   }
 
+  const ALL_STORES_META = {
+    amazon_tez: { id: "amazon_tez", name: "Amazon Now (Tez)", logo: "⚡", color: "#FF9900" },
+    instamart: { id: "instamart", name: "Swiggy Instamart", logo: "🧡", color: "#FC8019" },
+    zepto: { id: "zepto", name: "Zepto", logo: "🟣", color: "#7C3AED" },
+    blinkit: { id: "blinkit", name: "Blinkit", logo: "🟡", color: "#F8CB46" },
+    amazon_main: { id: "amazon_main", name: "Amazon.in", logo: "📦", color: "#FF9900" },
+    flipkart: { id: "flipkart", name: "Flipkart", logo: "🛍️", color: "#2874F0" }
+  };
+
+  const collectionsList = document.getElementById("collectionsList");
+  const addCollectionBtn = document.getElementById("addCollectionBtn");
+  const collectionModalBackdrop = document.getElementById("collectionModalBackdrop");
+  const collectionModalTitle = document.getElementById("collectionModalTitle");
+  const closeCollectionModalBtn = document.getElementById("closeCollectionModalBtn");
+  const collectionNameInput = document.getElementById("collectionNameInput");
+  const storeCheckboxGrid = document.getElementById("storeCheckboxGrid");
+  const deleteCollectionBtn = document.getElementById("deleteCollectionBtn");
+  const saveCollectionBtn = document.getElementById("saveCollectionBtn");
+
+  let collections = [
+    { id: "10_min_pack", name: "10 min pack", emoji: "⚡", storeIds: ["amazon_tez", "instamart", "zepto", "blinkit"] },
+    { id: "big_online_pack", name: "Big Online Pack", emoji: "📦", storeIds: ["amazon_main", "flipkart"] },
+    { id: "all_stores", name: "All Stores", emoji: "🛒", storeIds: ["amazon_tez", "instamart", "zepto", "blinkit", "amazon_main", "flipkart"] }
+  ];
+  let activeCollectionId = "10_min_pack";
+  let editingCollectionId = null;
+
+  // Load Collections
+  chrome.runtime.sendMessage({ action: "GET_COLLECTIONS" }, (res) => {
+    if (res && res.success) {
+      if (Array.isArray(res.collections) && res.collections.length > 0) {
+        collections = res.collections;
+      }
+      if (res.activeId) {
+        activeCollectionId = res.activeId;
+      }
+      renderCollections();
+    }
+  });
+
+  function renderCollections() {
+    if (!collectionsList) return;
+    collectionsList.innerHTML = "";
+
+    collections.forEach((col) => {
+      const pill = document.createElement("div");
+      pill.className = `collection-pill ${col.id === activeCollectionId ? 'active' : ''}`;
+      pill.setAttribute("data-id", col.id);
+      
+      const emojiSpan = col.emoji ? `<span>${col.emoji}</span>` : '';
+      const nameSpan = `<span>${col.name}</span>`;
+      const editBtn = col.isCustom ? `<span class="pill-edit-icon" title="Edit collection">✎</span>` : '';
+      
+      pill.innerHTML = `${emojiSpan}${nameSpan}${editBtn}`;
+
+      pill.addEventListener("click", (e) => {
+        if (e.target.classList.contains("pill-edit-icon")) {
+          e.stopPropagation();
+          openCollectionModal(col);
+          return;
+        }
+        if (activeCollectionId !== col.id) {
+          activeCollectionId = col.id;
+          chrome.runtime.sendMessage({ action: "SET_ACTIVE_COLLECTION", payload: { collectionId: col.id } });
+          renderCollections();
+          const q = searchInput.value.trim();
+          if (q) performSearch(q);
+        }
+      });
+
+      collectionsList.appendChild(pill);
+    });
+  }
+
+  function openCollectionModal(col = null) {
+    editingCollectionId = col ? col.id : null;
+    if (collectionModalTitle) {
+      collectionModalTitle.textContent = col ? "Edit Collection" : "New Collection";
+    }
+    if (collectionNameInput) {
+      collectionNameInput.value = col ? col.name : "";
+    }
+    if (deleteCollectionBtn) {
+      deleteCollectionBtn.style.display = (col && col.isCustom) ? "block" : "none";
+    }
+
+    // Populate store checkboxes
+    if (storeCheckboxGrid) {
+      storeCheckboxGrid.innerHTML = "";
+      const selectedSet = new Set(col ? col.storeIds : ["amazon_tez", "instamart", "zepto", "blinkit"]);
+      
+      Object.keys(ALL_STORES_META).forEach((id) => {
+        const store = ALL_STORES_META[id];
+        const isChecked = selectedSet.has(id);
+        const item = document.createElement("label");
+        item.className = `store-checkbox-item ${isChecked ? 'checked' : ''}`;
+        item.innerHTML = `
+          <input type="checkbox" value="${id}" ${isChecked ? 'checked' : ''} />
+          <span class="store-checkbox-label">
+            <span>${store.logo}</span>
+            <span>${store.name}</span>
+          </span>
+        `;
+        const cb = item.querySelector('input[type="checkbox"]');
+        cb.addEventListener("change", () => {
+          if (cb.checked) {
+            item.classList.add("checked");
+          } else {
+            item.classList.remove("checked");
+          }
+        });
+        storeCheckboxGrid.appendChild(item);
+      });
+    }
+
+    if (collectionModalBackdrop) collectionModalBackdrop.style.display = "flex";
+  }
+
+  function closeCollectionModal() {
+    if (collectionModalBackdrop) collectionModalBackdrop.style.display = "none";
+    editingCollectionId = null;
+  }
+
+  if (addCollectionBtn) addCollectionBtn.addEventListener("click", () => openCollectionModal(null));
+  if (closeCollectionModalBtn) closeCollectionModalBtn.addEventListener("click", closeCollectionModal);
+
+  if (saveCollectionBtn) {
+    saveCollectionBtn.addEventListener("click", () => {
+      const name = (collectionNameInput.value || "").trim();
+      if (!name) {
+        alert("Please enter a collection name.");
+        return;
+      }
+      const checkedBoxes = storeCheckboxGrid.querySelectorAll('input[type="checkbox"]:checked');
+      const selectedIds = Array.from(checkedBoxes).map(cb => cb.value);
+      if (selectedIds.length === 0) {
+        alert("Please select at least one store.");
+        return;
+      }
+
+      if (editingCollectionId) {
+        const idx = collections.findIndex(c => c.id === editingCollectionId);
+        if (idx !== -1) {
+          collections[idx].name = name;
+          collections[idx].storeIds = selectedIds;
+        }
+      } else {
+        const newId = `custom_${Date.now()}`;
+        collections.push({
+          id: newId,
+          name,
+          emoji: "📁",
+          storeIds: selectedIds,
+          isCustom: true
+        });
+        activeCollectionId = newId;
+        chrome.runtime.sendMessage({ action: "SET_ACTIVE_COLLECTION", payload: { collectionId: newId } });
+      }
+
+      chrome.runtime.sendMessage({ action: "SAVE_COLLECTIONS", payload: { collections } });
+      renderCollections();
+      closeCollectionModal();
+
+      const q = searchInput.value.trim();
+      if (q) performSearch(q);
+    });
+  }
+
+  if (deleteCollectionBtn) {
+    deleteCollectionBtn.addEventListener("click", () => {
+      if (!editingCollectionId) return;
+      collections = collections.filter(c => c.id !== editingCollectionId);
+      if (activeCollectionId === editingCollectionId) {
+        activeCollectionId = "10_min_pack";
+        chrome.runtime.sendMessage({ action: "SET_ACTIVE_COLLECTION", payload: { collectionId: activeCollectionId } });
+      }
+      chrome.runtime.sendMessage({ action: "SAVE_COLLECTIONS", payload: { collections } });
+      renderCollections();
+      closeCollectionModal();
+      const q = searchInput.value.trim();
+      if (q) performSearch(q);
+    });
+  }
+
   // 1. Initialize Location
   chrome.runtime.sendMessage({ action: "GET_ACTIVE_LOCATION" }, (res) => {
     if (res && res.success && res.data) {
@@ -93,7 +277,7 @@ document.addEventListener("DOMContentLoaded", () => {
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     if (tabs && tabs[0] && tabs[0].url) {
       const activeUrl = tabs[0].url;
-      if (activeUrl.includes("amazon.in") || activeUrl.includes("swiggy.com") || activeUrl.includes("zepto.com")) {
+      if (activeUrl.includes("amazon.in") || activeUrl.includes("swiggy.com") || activeUrl.includes("zepto.com") || activeUrl.includes("flipkart.com") || activeUrl.includes("blinkit.com")) {
         chrome.tabs.sendMessage(tabs[0].id, { action: "GET_PAGE_PRODUCT_DATA", waitMs: 800 }, (resp) => {
           if (chrome.runtime.lastError) {
             return;
@@ -149,6 +333,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function getActiveStoreIds() {
+    const current = collections.find(c => c.id === activeCollectionId);
+    return current ? current.storeIds : ["amazon_tez", "instamart", "zepto", "blinkit"];
+  }
+
   function performSearch(query) {
     loadingState.style.display = "flex";
     cardsGrid.innerHTML = "";
@@ -157,15 +346,17 @@ document.addEventListener("DOMContentLoaded", () => {
     disconnectSearchPort();
     setResultMeta(null);
 
+    const storeIds = getActiveStoreIds();
+
     if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.connect) {
-      legacySearch(query);
+      legacySearch(query, storeIds);
       return;
     }
 
     try {
       activeSearchPort = chrome.runtime.connect({ name: "search-stream" });
     } catch (e) {
-      legacySearch(query);
+      legacySearch(query, storeIds);
       return;
     }
 
@@ -217,14 +408,14 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
 
-    port.postMessage({ action: "SEARCH_QUERY_STREAM", payload: { query } });
+    port.postMessage({ action: "SEARCH_QUERY_STREAM", payload: { query, storeIds } });
   }
 
-  function legacySearch(query) {
+  function legacySearch(query, storeIds) {
     const startedAt = Date.now();
     chrome.runtime.sendMessage({
       action: "SEARCH_QUERY",
-      payload: { query }
+      payload: { query, storeIds }
     }, (response) => {
       loadingState.style.display = "none";
       if (response && response.success && response.data) {
@@ -344,8 +535,13 @@ document.addEventListener("DOMContentLoaded", () => {
         ` : ''}
 
         <div class="card-action">
-          <a href="${selectedItem?.productUrl || store.productUrl}" target="_blank" class="store-link">
-            Get on ${store.platformName} →
+          ${(store.globalUrl || store.searchUrl) && (store.globalUrl !== (selectedItem?.productUrl || store.productUrl)) ? `
+            <a href="${store.globalUrl || store.searchUrl}" target="_blank" class="store-global-link" title="Global search on ${store.platformName}">
+              🔍 Search Store
+            </a>
+          ` : ''}
+          <a href="${selectedItem?.productUrl || store.productUrl || store.globalUrl || store.searchUrl}" target="_blank" class="store-link">
+            ${hasPrice ? `Get on ${store.platformName} →` : `Search on ${store.platformName} →`}
           </a>
         </div>
       `;
@@ -365,6 +561,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const selected = store.candidates[store.selectedIndex];
     store.item = selected;
     store.productUrl = selected.productUrl || store.productUrl;
+    store.globalUrl = selected.globalUrl || store.globalUrl;
+    store.searchUrl = selected.searchUrl || store.searchUrl;
     const price = Number(selected.price) || 0;
     const mrp = Number(selected.mrp) || price;
     const savings = Math.max(0, mrp - price);
@@ -397,7 +595,9 @@ document.addEventListener("DOMContentLoaded", () => {
         { id: 'amazon_tez', name: 'Amazon Tez', color: '#FF9900' },
         { id: 'instamart', name: 'Instamart', color: '#FC8019' },
         { id: 'zepto', name: 'Zepto', color: '#7C3AED' },
-        { id: 'blinkit', name: 'Blinkit', color: '#F8CB46' }
+        { id: 'blinkit', name: 'Blinkit', color: '#F8CB46' },
+        { id: 'amazon_main', name: 'Amazon.in', color: '#FF9900' },
+        { id: 'flipkart', name: 'Flipkart', color: '#2874F0' }
       ];
 
       STORES_LIST.forEach(s => {
@@ -478,7 +678,9 @@ document.addEventListener("DOMContentLoaded", () => {
       { id: 'amazon_tez', name: 'Amazon Tez', color: '#FF9900' },
       { id: 'instamart', name: 'Instamart', color: '#FC8019' },
       { id: 'zepto', name: 'Zepto', color: '#7C3AED' },
-      { id: 'blinkit', name: 'Blinkit', color: '#F8CB46' }
+      { id: 'blinkit', name: 'Blinkit', color: '#F8CB46' },
+      { id: 'amazon_main', name: 'Amazon.in', color: '#FF9900' },
+      { id: 'flipkart', name: 'Flipkart', color: '#2874F0' }
     ];
 
     // Totals calculation
@@ -486,7 +688,9 @@ document.addEventListener("DOMContentLoaded", () => {
       amazon_tez: { total: 0, count: 0 },
       instamart: { total: 0, count: 0 },
       zepto: { total: 0, count: 0 },
-      blinkit: { total: 0, count: 0 }
+      blinkit: { total: 0, count: 0 },
+      amazon_main: { total: 0, count: 0 },
+      flipkart: { total: 0, count: 0 }
     };
 
     let optimalSplitTotal = 0;

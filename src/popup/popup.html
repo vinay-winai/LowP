@@ -26,6 +26,14 @@
       </div>
     </header>
 
+    <!-- Store Collections Tab Bar -->
+    <div class="collections-bar" id="collectionsBar">
+      <div class="collections-scroll" id="collectionsList">
+        <!-- Rendered dynamically: ⚡ 10 min pack, 📦 Big Online Pack, 🛒 All Stores, custom packs -->
+      </div>
+      <button id="addCollectionBtn" class="add-collection-btn" title="Create or manage store collections">＋ Pack</button>
+    </div>
+
     <!-- Search Section -->
     <section class="search-section">
       <div class="search-box">
@@ -54,6 +62,39 @@
         </button>
       </div>
     </section>
+
+    <!-- Collection Builder Modal -->
+    <div class="modal-backdrop" id="collectionModalBackdrop" style="display: none;">
+      <div class="modal-content collection-modal">
+        <div class="modal-header">
+          <div class="matrix-modal-title-box">
+            <span class="matrix-modal-icon">📦</span>
+            <div>
+              <h3 class="matrix-modal-title" id="collectionModalTitle">Store Collection</h3>
+              <span class="matrix-modal-sub">Pick and choose stores to compare</span>
+            </div>
+          </div>
+          <button id="closeCollectionModalBtn" class="close-modal-btn">✕</button>
+        </div>
+        <div class="modal-body collection-modal-body">
+          <div class="form-group">
+            <label class="form-label" for="collectionNameInput">Collection Name</label>
+            <input type="text" id="collectionNameInput" class="form-input" placeholder="e.g. My Grocery Pack, Fast 3..." />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Select Stores to Include</label>
+            <div class="store-checkbox-grid" id="storeCheckboxGrid">
+              <!-- Checkboxes for all 6 stores -->
+            </div>
+          </div>
+          <div class="collection-modal-footer">
+            <button id="deleteCollectionBtn" class="delete-collection-btn" style="display: none;">Delete</button>
+            <div style="flex: 1;"></div>
+            <button id="saveCollectionBtn" class="save-collection-btn">Save Collection</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Strategy Matrix Modal -->
     <div class="modal-backdrop" id="matrixModalBackdrop" style="display: none;">
