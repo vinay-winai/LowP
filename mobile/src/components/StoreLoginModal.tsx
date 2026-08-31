@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Modal,
   View,
@@ -25,12 +25,12 @@ const STORE_CONFIG: Record<
 > = {
   amazon_tez: {
     name: 'Amazon Now (Tez)',
-    url: 'https://www.amazon.in',
+    url: 'https://www.amazon.in/tez/browse',
     color: '#FF9900'
   },
   instamart: {
     name: 'Swiggy Instamart',
-    url: 'https://www.swiggy.com',
+    url: 'https://www.swiggy.com/instamart',
     color: '#FC8019'
   },
   zepto: {
@@ -51,8 +51,9 @@ export const StoreLoginModal: React.FC<StoreLoginModalProps> = ({
   onClose,
   onLoginComplete
 }) => {
-  const [loading, setLoading] = useState(true);
-  const webViewRef = React.useRef<WebView>(null);
+  const [loading, setLoading] = useState(false);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const webViewRef = useRef<WebView>(null);
 
   if (!platformId || !STORE_CONFIG[platformId]) return null;
 
@@ -64,11 +65,23 @@ export const StoreLoginModal: React.FC<StoreLoginModalProps> = ({
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
+            {canGoBack && (
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => webViewRef.current?.goBack()}
+              >
+                <ArrowLeft size={20} color="#F8FAFC" />
+              </TouchableOpacity>
+            )}
             <View style={[styles.storeIndicator, { backgroundColor: config.color }]} />
-            <Text style={styles.title}>Connect {config.name}</Text>
+            <Text style={styles.title} numberOfLines={1}>
+              Connect {config.name}
+            </Text>
           </View>
 
           <View style={styles.headerActions}>
+            {loading && <ActivityIndicator size="small" color={config.color} style={styles.loadingSpinner} />}
+
             <TouchableOpacity
               style={styles.iconButton}
               onPress={() => webViewRef.current?.reload()}
@@ -96,28 +109,33 @@ export const StoreLoginModal: React.FC<StoreLoginModalProps> = ({
         {/* Security Banner */}
         <View style={styles.securityBanner}>
           <Text style={styles.securityText}>
-            🔒 Log in once directly with the official store. Your session and address are saved securely in your phone's cookie storage.
+            🔒 Log in or set your location directly in the store. Your session and address are saved in your device storage.
           </Text>
         </View>
 
+        {/* Loading Progress Bar */}
+        {loading && <View style={[styles.progressBar, { backgroundColor: config.color }]} />}
+
         {/* Interactive Web View */}
         <View style={styles.webViewContainer}>
-          {loading && (
-            <View style={styles.loadingOverlay}>
-              <ActivityIndicator size="large" color="#10B981" />
-            </View>
-          )}
           <WebView
             ref={webViewRef}
             source={{ uri: config.url }}
-            userAgent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
             style={styles.webView}
             javaScriptEnabled={true}
             domStorageEnabled={true}
             sharedCookiesEnabled={true}
             thirdPartyCookiesEnabled={true}
+            allowsBackForwardNavigationGestures={true}
+            setSupportMultipleWindows={false}
+            javaScriptCanOpenWindowsAutomatically={true}
+            onNavigationStateChange={(navState) => {
+              setCanGoBack(navState.canGoBack);
+              setLoading(navState.loading);
+            }}
             onLoadStart={() => setLoading(true)}
             onLoadEnd={() => setLoading(false)}
+            onError={() => setLoading(false)}
           />
         </View>
       </SafeAreaView>
@@ -143,7 +161,11 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8
+    gap: 8,
+    flex: 1
+  },
+  backButton: {
+    paddingRight: 4
   },
   storeIndicator: {
     width: 10,
@@ -153,12 +175,16 @@ const styles = StyleSheet.create({
   title: {
     color: '#F8FAFC',
     fontSize: 16,
-    fontWeight: '700'
+    fontWeight: '700',
+    flexShrink: 1
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12
+    gap: 10
+  },
+  loadingSpinner: {
+    marginRight: 2
   },
   iconButton: {
     padding: 6
@@ -191,22 +217,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16
   },
+  progressBar: {
+    height: 2,
+    width: '100%'
+  },
   webViewContainer: {
     flex: 1,
-    position: 'relative'
+    backgroundColor: '#FFFFFF'
   },
   webView: {
     flex: 1
-  },
-  loadingOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#0F172A',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10
   }
 });
