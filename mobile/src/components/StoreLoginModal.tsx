@@ -42,6 +42,16 @@ const STORE_CONFIG: Record<
     name: 'Blinkit',
     url: 'https://blinkit.com',
     color: '#F8CB46'
+  },
+  amazon_main: {
+    name: 'Amazon.in',
+    url: 'https://www.amazon.in',
+    color: '#FF9900'
+  },
+  flipkart: {
+    name: 'Flipkart',
+    url: 'https://www.flipkart.com',
+    color: '#2874F0'
   }
 };
 

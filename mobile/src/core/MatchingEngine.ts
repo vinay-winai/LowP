@@ -106,6 +106,37 @@ export class MatchingEngine {
     return score;
   }
 
+  static applyTitleLengthBonus<T extends { title: string; _score?: number; score?: number }>(candidates: T[], query: string): T[] {
+    if (!candidates || candidates.length <= 1 || !query) return candidates;
+    const cleanQ = typeof query === "string" ? query.trim() : "";
+    const qLen = cleanQ.length;
+    if (qLen === 0) return candidates;
+
+    const topN = candidates.slice(0, 3);
+    const sortedByLenDiff = topN
+      .map((item) => ({
+        item,
+        diff: Math.abs((item.title || "").trim().length - qLen)
+      }))
+      .sort((a, b) => a.diff - b.diff);
+
+    if (sortedByLenDiff[0]) {
+      sortedByLenDiff[0].item._score = (sortedByLenDiff[0].item._score || 0) + 20;
+      if (typeof sortedByLenDiff[0].item.score === "number") {
+        sortedByLenDiff[0].item.score += 20;
+      }
+    }
+    if (sortedByLenDiff[1]) {
+      sortedByLenDiff[1].item._score = (sortedByLenDiff[1].item._score || 0) + 10;
+      if (typeof sortedByLenDiff[1].item.score === "number") {
+        sortedByLenDiff[1].item.score += 10;
+      }
+    }
+
+    candidates.sort((a, b) => (b._score || b.score || 0) - (a._score || a.score || 0));
+    return candidates;
+  }
+
   static annotateBestOffers(results: StoreResult[]): StoreResult[] {
     const availableStores = results.filter(
       (r) => r.isAvailable && r.priceBreakdown && r.priceBreakdown.finalPayable > 0

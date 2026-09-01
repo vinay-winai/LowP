@@ -51,13 +51,13 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     // Reject shelf/category labels and badges scraped instead of a name.
     if (/previously bought|earlier bought|already bought/.test(s)) return true;
     if (/^(fresh|plain)?\\s*(toned|full cream|slim|cow|buffalo)?\\s*milk( pouch)?$/.test(s)) return true;
-    if (/^fresh \\w+ pouch$/.test(s)) return true;
+    if (/(?:showing\\s+)?results\\s+for|search\\s+results\\s+for|did\\s+you\\s+mean|showing\\s+\\d+.*results/i.test(s)) return true;
 
     const bannedPatterns = [
       /^(home|cart|search|login|help|offers|new|corporate|swiggy|zepto|amazon|blinkit|menu|account|profile|orders|notifications)$/i,
       /^(delivery in\\s*\\d+\\s*(?:mins?|minutes?)|\\d+\\s*(?:mins?|minutes?|hours?|sec|seconds?)|\\d+\\s*-\\s*\\d+\\s*(?:mins?|minutes?))$/i,
       /^(fastest delivery|standard delivery|get it in|unlock free delivery|free delivery|instant delivery)$/i,
-      /^(showing results for|results for|search results for)/i,
+      /(?:showing\\s+)?results\\s+for|search\\s+results\\s+for|did\\s+you\\s+mean|showing\\s+\\d+.*results/i,
       /^(out of stock|sold out|unavailable|currently unavailable|add|added|buy|view|closed|loading|customise|in stock|add to cart|add item|qty|\\+|\\-)$/i,
       /^(trending|bestseller|offers?|save|flat|best price|discount|\\d+%\\s*off|save\\s*₹?\\d+|\\d+\\s*off|see all|view all|explore)$/i,
       /^(corporate|falcon|help & support|categories|see more|product image|cart icon|item image|image|photo|thumbnail|logo|banner|offer_icon|offer icon|coupon|promo)$/i,
@@ -80,23 +80,23 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
   function cleanTitle(str) {
     if (!str || typeof str !== "string") return "";
     return str
-      .replace(/^sponsored\s*/i, "")
-      .replace(/\b(?:sponsored\s+ad|sponsored|ad)\s*[-–:]\s*/gi, "")
-      .replace(/^\s*\d+(?:\.\d+)?\s*%\s*off\s*/i, "")
-      .replace(/(?:₹|Rs\.?|INR)\s*[0-9,]+(?:\.[0-9]+)?/gi, "")
-      .replace(/\b(?:delivery in\s*)?\d+(?:\s*-\s*\d+)?\s*(?:mins?|minutes?|hours?|sec|seconds?)\b/gi, "")
-      .replace(/\b(?:add|options?)\s*\d*\b/gi, "")
-      .replace(/\b\d+(?:\.\d+)?\s*(?:lac|lakh)\b/gi, "")
-      .replace(/\b(?:fastest delivery|standard delivery|instant delivery|express delivery|free delivery|delivery)\b/gi, "")
-      .replace(/\b(?:mrp|add|buy|added|in stock|out of stock|off|\d+%\s*off|save)\b/gi, "")
+      .replace(/^sponsored\\s*/i, "")
+      .replace(/\\b(?:sponsored\\s+ad|sponsored|ad)\\s*[-–:]\\s*/gi, "")
+      .replace(/^\\s*\\d+(?:\\.\\d+)?\\s*%\\s*off\\s*/i, "")
+      .replace(/(?:₹|Rs\\.?|INR)\\s*[0-9,]+(?:\\.[0-9]+)?/gi, "")
+      .replace(/\\b(?:delivery in\\s*)?\\d+(?:\\s*-\\s*\\d+)?\\s*(?:mins?|minutes?|hours?|sec|seconds?)\\b/gi, "")
+      .replace(/\\b(?:add|options?)\\s*\\d*\\b/gi, "")
+      .replace(/\\b\\d+(?:\\.\\d+)?\\s*(?:lac|lakh)\\b/gi, "")
+      .replace(/\\b(?:fastest delivery|standard delivery|instant delivery|express delivery|free delivery|delivery)\\b/gi, "")
+      .replace(/\\b(?:mrp|add|buy|added|in stock|out of stock|off|\\d+%\\s*off|save)\\b/gi, "")
       .replace(/(?<=[a-z])(?=[A-Z])/g, " ")
-      .replace(/\badd\b/gi, "")
-      .replace(/\b(?:previously bought|earlier bought)\b/gi, "")
-      .replace(/(?<=[a-z])[A-Z](?=\s|$)/g, "")
+      .replace(/\\badd\\b/gi, "")
+      .replace(/\\b(?:previously bought|earlier bought)\\b/gi, "")
+      .replace(/(?<=[a-z])[A-Z](?=\\s|$)/g, "")
       .replace(/&amp;/g, "&")
       .replace(/&#x27;/g, "'")
       .replace(/&#39;/g, "'")
-      .replace(/\s+/g, " ")
+      .replace(/\\s+/g, " ")
       .trim();
   }
 
@@ -184,7 +184,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
 
   function extractFromCard(cardNode, platformId) {
     if (!cardNode) return null;
-    if (cardNode.closest && cardNode.closest('[class*="filter"], [class*="suggestion"], [class*="chip"], [class*="pill"], [class*="breadcrumb"], [class*="header"], [class*="footer"], [class*="nav"], header, footer, nav')) {
+    if (cardNode.closest && cardNode.closest('[class*="filter"], [class*="suggestion"], [class*="chip"], [class*="pill"], [class*="breadcrumb"], [class*="header"], [class*="footer"], [class*="nav"], [class*="search-heading"], [class*="result-info"], [class*="s-breadcrumb"], header, footer, nav')) {
       return null;
     }
 
@@ -202,6 +202,9 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     }
 
     const spacedCardText = getSpacedText(cardNode).replace(/\\s+/g, " ").trim();
+    if (/(?:showing\\s+)?results\\s+for|search\\s+results\\s+for|did\\s+you\\s+mean/i.test(spacedCardText)) {
+      return null;
+    }
     
     // 1. Price extraction
     let price = null;
@@ -260,7 +263,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
 
     // 2b. Priority product title selectors
     if (!title) {
-      const titleEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="ProductName"], [data-testid*="name"], [data-testid*="title"], [data-testid*="item_name"], [data-testid*="item-title"], [data-slot-id*="title"], [data-cy="title-recipe"] h2, h2.a-color-base, a.a-text-normal[href*="/dp/"] span, h2 a span, h2.a-size-medium, h2.a-size-base-plus, a[title], div.KzDlHZ, a.pIpigb, a.wjcEIp, a.s1Q9rs, div._4rR01T, div.YBLCv4, a.WKTcLC, [class*="ProductName"], [class*="ItemName"], [class*="product_name"], [class*="styled__ItemName"], [class*="ItemTitle"], [class*="Product__UpdatedTitle"], [class*="tw-text-base-black"], [class*="tw-line-clamp-2"], [class*="_2T1-K"], [class*="nov9b"], [class*="_1W_4e"], [class*="_1b1-N"], h1, h3, h4, h5') : null;
+      const titleEl = cardNode.querySelector ? cardNode.querySelector('h2.a-size-mini span, h2.a-size-mini, h2.a-size-base-plus, h2.a-size-medium, h2 a span, h2 a, [data-slot-id="ProductName"], [data-testid*="name"], [data-testid*="title"], [data-testid*="item_name"], [data-testid*="item-title"], [data-slot-id*="title"], [data-cy="title-recipe"] h2, h2.a-color-base, a.a-text-normal[href*="/dp/"] span, a[title], div.KzDlHZ, a.pIpigb, a.wjcEIp, a.s1Q9rs, div._4rR01T, div.YBLCv4, a.WKTcLC, [class*="ProductName"], [class*="ItemName"], [class*="product_name"], [class*="styled__ItemName"], [class*="ItemTitle"], [class*="Product__UpdatedTitle"], [class*="tw-text-base-black"], [class*="tw-line-clamp-2"], [class*="_2T1-K"], [class*="nov9b"], [class*="_1W_4e"], [class*="_1b1-N"], h1, h3, h4, h5') : null;
       if (titleEl) {
         const rawTxt = (titleEl.getAttribute && titleEl.getAttribute('title')) || titleEl.textContent;
         const txt = cleanTitle(rawTxt);
@@ -271,7 +274,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     }
 
     // 2c. Check for separate brand tag on Amazon/Flipkart and prepend if not already in title
-    const brandEl = cardNode.querySelector ? cardNode.querySelector('h2.a-size-mini span, span.a-size-medium.a-color-base') : null;
+    const brandEl = cardNode.querySelector ? cardNode.querySelector('span.a-size-medium.a-color-base, h5.s-line-clamp-1') : null;
     const brandTxt = brandEl ? cleanTitle(brandEl.textContent) : "";
     if (brandTxt && brandTxt.length >= 2 && brandTxt.length <= 25 && title && !title.toLowerCase().startsWith(brandTxt.toLowerCase())) {
       title = brandTxt + " " + title;
@@ -573,10 +576,37 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       return true;
     });
 
+    function applyTitleLengthBonus(cands, query) {
+      if (!cands || cands.length <= 1 || !query) return cands;
+      const cleanQ = String(query).trim();
+      const qLen = cleanQ.length;
+      if (qLen === 0) return cands;
+
+      const topN = cands.slice(0, 3);
+      const sortedByLenDiff = topN
+        .map((item) => ({
+          item,
+          diff: Math.abs((item.title || "").trim().length - qLen)
+        }))
+        .sort((a, b) => a.diff - b.diff);
+
+      if (sortedByLenDiff[0]) {
+        sortedByLenDiff[0].item._score = (sortedByLenDiff[0].item._score || 0) + 20;
+      }
+      if (sortedByLenDiff[1]) {
+        sortedByLenDiff[1].item._score = (sortedByLenDiff[1].item._score || 0) + 10;
+      }
+
+      cands.sort((a, b) => (b._score || 0) - (a._score || 0));
+      return cands;
+    }
+
     filtered.sort((a, b) => b._score - a._score);
     const qualified = filtered.filter((c) => c._score > 0);
-    // No/blank query: preserve document order untouched.
-    const pool = (searchQuery && searchQuery.trim() && qualified.length > 0) ? qualified : filtered;
+    let pool = (searchQuery && searchQuery.trim() && qualified.length > 0) ? qualified : filtered;
+    if (pool.length > 1 && searchQuery && searchQuery.trim()) {
+      applyTitleLengthBonus(pool, searchQuery);
+    }
     const topCandidates = pool.slice(0, 3);
     return { best: topCandidates[0] || null, candidates: topCandidates, found: candidates.length };
   }
@@ -699,21 +729,21 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       res = { best: null, candidates: [], found: 0 };
     }
 
-    // Empty-state early exit: when the site itself says nothing matched
-    // ("couldn't find", "no results", ...), stop polling immediately instead
-    // of burning the full budget.
-    if (!res.best && attempts >= 3 && (document.readyState === "complete" || document.readyState === "interactive")) {
+    // Empty-state early exit: when the site itself explicitly displays a "no results" state
+    if (!res.best && attempts >= 8 && document.readyState === "complete") {
       try {
         const bodyText = visibleBodyText();
-        if (/no results|couldn.t find|could not find|didn.t find|nothing here|did not match any|didn.t match|no matching|no items found|0 results|no products|nothing matched|unable to find|not available in/.test(bodyText)) {
+        const hasExplicitNoResults = /(?:no\s+results\s+for\s+[^.]*check\s+your\s+spelling|no\s+results\s+found\s+for|we\s+couldn't\s+find\s+any\s+results|could\s+not\s+find\s+any\s+results|did\s+not\s+match\s+any\s+products|no\s+products\s+found\s+for|0\s+items\s+found\s+for|nothing\s+here\s+yet)/i.test(bodyText) ||
+          !!(document.querySelector && document.querySelector('.s-no-outline, [data-component-type="s-no-results-found"], [data-testid="no-results-container"], [class*="noResults"], [class*="EmptyState"]'));
+        if (hasExplicitNoResults) {
           sendResult(false, null, [], { reason: 'empty_state' });
           return;
         }
       } catch (e) {}
     }
 
-    // Second-tier give-up: page fully loaded, 15+ attempts (~2.5s+), still zero candidates
-    if (!res.best && attempts >= 18 && document.readyState === "complete") {
+    // Second-tier give-up: page fully loaded, 18+ attempts (~2.5s+), still zero candidates
+    if (!res.best && attempts >= 20 && document.readyState === "complete") {
       sendResult(false, null, [], { reason: 'no_results_timeout' });
       return;
     }

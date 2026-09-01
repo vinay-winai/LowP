@@ -428,4 +428,27 @@ test('MatchingEngine & candidate filtering discards sponsored ads when score < 2
   assert.strictEqual(valid[0].title, 'LG S65TR 600W 5.1 Channel Dolby Digital Soundbar');
 });
 
+test('MatchingEngine.applyTitleLengthBonus awards +20 for closest title length and +10 for second closest', () => {
+  const query = 'paneer 200g'; // length: 11
+
+  const candidates = [
+    { title: 'Amul Fresh Malai Paneer 200g', _score: 80 }, // length: 28 (diff: 17)
+    { title: 'Amul Paneer 200g', _score: 80 },             // length: 16 (diff: 5) -> closest!
+    { title: 'Milky Mist Premium Fresh Cottage Cheese Paneer 200g Pack of 1', _score: 80 } // length: 60 (diff: 49)
+  ];
+
+  MatchingEngine.applyTitleLengthBonus(candidates, query);
+
+  // 'Amul Paneer 200g' was closest -> score: 80 + 20 = 100
+  // 'Amul Fresh Malai Paneer 200g' was second closest -> score: 80 + 10 = 90
+  // 'Milky Mist...' was 3rd -> score: 80 + 0 = 80
+  assert.strictEqual(candidates[0].title, 'Amul Paneer 200g');
+  assert.strictEqual(candidates[0]._score, 100);
+  assert.strictEqual(candidates[1].title, 'Amul Fresh Malai Paneer 200g');
+  assert.strictEqual(candidates[1]._score, 90);
+  assert.strictEqual(candidates[2].title, 'Milky Mist Premium Fresh Cottage Cheese Paneer 200g Pack of 1');
+  assert.strictEqual(candidates[2]._score, 80);
+});
+
+
 

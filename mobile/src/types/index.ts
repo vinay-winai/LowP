@@ -29,6 +29,7 @@ export interface ProductItem {
   productUrl?: string;
   globalUrl?: string;
   searchUrl?: string;
+  platformId?: PlatformId;
   _score?: number;
   arrivedSeq?: number;
 }

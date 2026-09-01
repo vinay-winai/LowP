@@ -42,16 +42,13 @@
     // Reject UI glyph names picked up as text ("down-chevron-icon", svg ids).
     if (/(^|[\s-])(icon|chevron|arrow|sprite|svg)([\s-]|$)|-icon$/.test(s)) return true;
 
-    // Reject shelf/category labels and badges scraped instead of a name.
-    if (/previously bought|earlier bought|already bought/.test(s)) return true;
-    if (/^(fresh|plain)?\s*(toned|full cream|slim|cow|buffalo)?\s*milk( pouch)?$/.test(s)) return true;
-    if (/^fresh \w+ pouch$/.test(s)) return true;
+    if (/(?:showing\s+)?results\s+for|search\s+results\s+for|did\s+you\s+mean|showing\s+\d+.*results/i.test(s)) return true;
 
     const bannedPatterns = [
       /^(home|cart|search|login|help|offers|new|corporate|swiggy|zepto|amazon|menu|account|profile|orders|notifications)$/i,
       /^(delivery in\s*\d+\s*(?:mins?|minutes?)|\d+\s*(?:mins?|minutes?|hours?|sec|seconds?)|\d+\s*-\s*\d+\s*(?:mins?|minutes?))$/i,
       /^(fastest delivery|standard delivery|get it in|unlock free delivery|free delivery)$/i,
-      /^(showing results for|results for|search results for)/i,
+      /(?:showing\s+)?results\s+for|search\s+results\s+for|did\s+you\s+mean|showing\s+\d+.*results/i,
       /^(out of stock|sold out|unavailable|currently unavailable|add|added|buy|view|closed|loading|customise|in stock|add to cart|add item|qty|\+|\-)$/i,
       /^(trending|bestseller|offers?|save|flat|best price|discount|\d+%\s*off|save\s*₹?\d+|\d+\s*off|see all|view all|explore)$/i,
       /^(corporate|falcon|help & support|categories|see more|product image|cart icon|item image|image|photo|thumbnail|logo|banner|offer_icon|offer icon|coupon|promo)$/i,
@@ -664,9 +661,37 @@
       return true;
     });
 
+    function applyTitleLengthBonus(cands, query) {
+      if (!cands || cands.length <= 1 || !query) return cands;
+      const cleanQ = String(query).trim();
+      const qLen = cleanQ.length;
+      if (qLen === 0) return cands;
+
+      const topN = cands.slice(0, 3);
+      const sortedByLenDiff = topN
+        .map((item) => ({
+          item,
+          diff: Math.abs((item.title || "").trim().length - qLen)
+        }))
+        .sort((a, b) => a.diff - b.diff);
+
+      if (sortedByLenDiff[0]) {
+        sortedByLenDiff[0].item._score = (sortedByLenDiff[0].item._score || 0) + 20;
+      }
+      if (sortedByLenDiff[1]) {
+        sortedByLenDiff[1].item._score = (sortedByLenDiff[1].item._score || 0) + 10;
+      }
+
+      cands.sort((a, b) => (b._score || 0) - (a._score || 0));
+      return cands;
+    }
+
     filtered.sort((a, b) => b._score - a._score);
     const qualified = filtered.filter((c) => c._score > 0);
-    const pool = (searchQuery && searchQuery.trim() && qualified.length > 0) ? qualified : filtered;
+    let pool = (searchQuery && searchQuery.trim() && qualified.length > 0) ? qualified : filtered;
+    if (pool.length > 1 && searchQuery && searchQuery.trim()) {
+      applyTitleLengthBonus(pool, searchQuery);
+    }
     const best = pool[0] || filtered[0] || candidates[0];
     return {
       best: best || null,
@@ -707,7 +732,9 @@
 
   function hasVisibleEmptyState() {
     if (document.readyState !== "complete") return false;
-    return /no results|couldn.t find|could not find|didn.t find|nothing here|did not match any|didn.t match|no matching|no items found|0 results|no products|nothing matched|unable to find|not available in/.test(visibleBodyText());
+    const bodyText = visibleBodyText();
+    return /(?:no\s+results\s+for\s+[^.]*check\s+your\s+spelling|no\s+results\s+found\s+for|we\s+couldn't\s+find\s+any\s+results|could\s+not\s+find\s+any\s+results|did\s+not\s+match\s+any\s+products|no\s+products\s+found\s+for|0\s+items\s+found\s+for|nothing\s+here\s+yet)/i.test(bodyText) ||
+      !!(document.querySelector && document.querySelector('.s-no-outline, [data-component-type="s-no-results-found"], [data-testid="no-results-container"], [class*="noResults"], [class*="EmptyState"]'));
   }
 
   const withEmptyStateReason = (extraction) => ({

@@ -7,7 +7,8 @@ import {
   ScrollView,
   StyleSheet,
   StatusBar,
-  ActivityIndicator
+  ActivityIndicator,
+  Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StoreCard } from '../components/StoreCard';
@@ -42,6 +43,26 @@ import {
   Trash2,
   Layers
 } from 'lucide-react-native';
+
+export const getStoreSearchUrl = (platformId: PlatformId, query: string): string => {
+  const cleanQ = encodeURIComponent((query || '').trim());
+  switch (platformId) {
+    case 'amazon_tez':
+      return `https://www.amazon.in/tez/browse/search?searchKeyword=${cleanQ}`;
+    case 'instamart':
+      return `https://www.swiggy.com/instamart/search?custom_back=true&query=${cleanQ}`;
+    case 'zepto':
+      return `https://www.zepto.com/search?query=${cleanQ}`;
+    case 'blinkit':
+      return `https://blinkit.com/s/?q=${cleanQ}`;
+    case 'amazon_main':
+      return `https://www.amazon.in/s?k=${cleanQ}`;
+    case 'flipkart':
+      return `https://www.flipkart.com/search?q=${cleanQ}`;
+    default:
+      return '#';
+  }
+};
 
 export const ALL_STORE_TEMPLATES: Record<PlatformId, StoreResult> = {
   amazon_tez: {
@@ -276,14 +297,20 @@ export const HomeScreen: React.FC = () => {
     pendingStores.current = new Set(colStoreIds);
 
     setStores(
-      colStoreIds.map((id) => ({
-        ...ALL_STORE_TEMPLATES[id],
-        statusMessage: 'Searching...',
-        isAvailable: false,
-        item: null,
-        priceBreakdown: null,
-        responseTimeMs: undefined
-      }))
+      colStoreIds.map((id) => {
+        const searchUrl = getStoreSearchUrl(id, clean);
+        return {
+          ...ALL_STORE_TEMPLATES[id],
+          statusMessage: 'Searching...',
+          isAvailable: false,
+          item: null,
+          priceBreakdown: null,
+          productUrl: searchUrl,
+          globalUrl: searchUrl,
+          searchUrl: searchUrl,
+          responseTimeMs: undefined
+        };
+      })
     );
   };
 
@@ -299,7 +326,12 @@ export const HomeScreen: React.FC = () => {
       const updated = prev.map((store) => {
         if (store.platformId !== platformId) return store;
 
-        const storeCandidates = candidates && candidates.length > 0 ? candidates : (item ? [item] : []);
+        const storeSearchUrl = getStoreSearchUrl(platformId, activeSearch || searchQuery);
+        const storeCandidates = (candidates && candidates.length > 0 ? candidates : (item ? [item] : [])).map((c) => ({
+          ...c,
+          globalUrl: c.globalUrl || storeSearchUrl,
+          searchUrl: c.searchUrl || storeSearchUrl
+        }));
         const activeItem = item || storeCandidates[0] || null;
 
         if (!activeItem) {
@@ -311,6 +343,9 @@ export const HomeScreen: React.FC = () => {
             candidates: [],
             selectedIndex: 0,
             priceBreakdown: null,
+            productUrl: storeSearchUrl,
+            globalUrl: storeSearchUrl,
+            searchUrl: storeSearchUrl,
             responseTimeMs: durationMs,
             arrivedSeq: ++arrivalSeqRef.current
           };
@@ -325,7 +360,9 @@ export const HomeScreen: React.FC = () => {
           candidates: storeCandidates,
           selectedIndex: 0,
           priceBreakdown,
-          productUrl: activeItem.productUrl || store.productUrl,
+          productUrl: activeItem.productUrl || storeSearchUrl,
+          globalUrl: activeItem.globalUrl || storeSearchUrl,
+          searchUrl: activeItem.searchUrl || storeSearchUrl,
           responseTimeMs: durationMs,
           arrivedSeq: ++arrivalSeqRef.current
         };
@@ -388,15 +425,18 @@ export const HomeScreen: React.FC = () => {
         const total = store.candidates.length;
         const currentIdx = store.selectedIndex || 0;
         const nextIdx = direction === 'next' ? (currentIdx + 1) % total : (currentIdx - 1 + total) % total;
-        const newItem = store.candidates[nextIdx];
-        const newBreakdown = MatchingEngine.calculateTotalCost(newItem);
+        const nextItem = store.candidates[nextIdx];
+        const nextCost = MatchingEngine.calculateTotalCost(nextItem);
+        const storeSearchUrl = getStoreSearchUrl(platformId, activeSearch || searchQuery);
 
         return {
           ...store,
-          item: newItem,
+          item: nextItem,
           selectedIndex: nextIdx,
-          priceBreakdown: newBreakdown,
-          productUrl: newItem.productUrl || store.productUrl
+          priceBreakdown: nextCost,
+          productUrl: nextItem.productUrl || storeSearchUrl,
+          globalUrl: nextItem.globalUrl || storeSearchUrl,
+          searchUrl: nextItem.searchUrl || storeSearchUrl
         };
       });
 
@@ -457,6 +497,26 @@ export const HomeScreen: React.FC = () => {
       blinkit: {
         platformId: 'blinkit',
         platformName: 'Blinkit',
+        isAvailable: false,
+        item: null,
+        price: 0,
+        mrp: 0,
+        productUrl: '#',
+        isCheapestInRow: false
+      },
+      amazon_main: {
+        platformId: 'amazon_main',
+        platformName: 'Amazon.in',
+        isAvailable: false,
+        item: null,
+        price: 0,
+        mrp: 0,
+        productUrl: '#',
+        isCheapestInRow: false
+      },
+      flipkart: {
+        platformId: 'flipkart',
+        platformName: 'Flipkart',
         isAvailable: false,
         item: null,
         price: 0,
