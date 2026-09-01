@@ -16,6 +16,7 @@ import { BackgroundScrapers } from '../components/BackgroundScrapers';
 import { LocationModal } from '../components/LocationModal';
 import { StoreLoginModal } from '../components/StoreLoginModal';
 import { StrategyMatrixModal } from '../components/StrategyMatrixModal';
+import { InAppBrowserModal } from '../components/InAppBrowserModal';
 import { MatchingEngine } from '../core/MatchingEngine';
 import { LocationService, DEFAULT_LOCATION } from '../core/LocationService';
 import {
@@ -189,6 +190,17 @@ export const HomeScreen: React.FC = () => {
   const [matrixRows, setMatrixRows] = useState<StrategyMatrixRow[]>([]);
   const [matrixModalVisible, setMatrixModalVisible] = useState(false);
   const [addedToast, setAddedToast] = useState(false);
+  const [browserModal, setBrowserModal] = useState<{
+    visible: boolean;
+    url: string | null;
+    title: string;
+    color: string;
+  }>({
+    visible: false,
+    url: null,
+    title: '',
+    color: '#38BDF8'
+  });
 
   const pendingStores = useRef<Set<PlatformId>>(new Set());
   const searchStartTime = useRef<number>(0);
@@ -203,6 +215,7 @@ export const HomeScreen: React.FC = () => {
 
   useEffect(() => {
     LocationService.getActiveLocation().then(setActiveLocation);
+
     // Pre-warm DNS and TLS connections to store domains on app mount
     const origins = [
       'https://www.amazon.in/',
@@ -643,7 +656,7 @@ export const HomeScreen: React.FC = () => {
 
       {/* Connected Stores Bar */}
       <View style={styles.connectedStoresSection}>
-        <Text style={styles.connectedStoresLabel}>Stores (Tap to Login/Sync):</Text>
+        <Text style={styles.connectedStoresLabel}>Stores:</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storesRow}>
           {Object.keys(ALL_STORE_TEMPLATES).map((key) => {
             const s = ALL_STORE_TEMPLATES[key as PlatformId];
@@ -810,6 +823,14 @@ export const HomeScreen: React.FC = () => {
             store={store}
             isLoading={isLoading}
             onCycleCandidate={(dir) => handleCycleCandidate(store.platformId, dir)}
+            onOpenLink={(url, title, color) => {
+              setBrowserModal({
+                visible: true,
+                url,
+                title,
+                color: color || store.logoColor
+              });
+            }}
           />
         ))}
       </ScrollView>
@@ -841,6 +862,15 @@ export const HomeScreen: React.FC = () => {
         onLoginComplete={() => {
           if (activeSearch) handleTriggerSearch(activeSearch);
         }}
+      />
+
+      {/* In-App Store Browser Modal */}
+      <InAppBrowserModal
+        visible={browserModal.visible}
+        url={browserModal.url}
+        title={browserModal.title}
+        color={browserModal.color}
+        onClose={() => setBrowserModal((prev) => ({ ...prev, visible: false }))}
       />
 
       {/* Custom Collection Builder Modal */}

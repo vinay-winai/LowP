@@ -1,15 +1,21 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { StoreResult } from '../types';
-import { ExternalLink, CheckCircle2, XCircle, Sparkles, ChevronLeft, ChevronRight, Search } from 'lucide-react-native';
+import { ExternalLink, Sparkles, ChevronLeft, ChevronRight, Search } from 'lucide-react-native';
 
 interface StoreCardProps {
   store: StoreResult;
   isLoading: boolean;
   onCycleCandidate?: (direction: 'next' | 'prev') => void;
+  onOpenLink?: (url: string, title: string, color?: string) => void;
 }
 
-export const StoreCard: React.FC<StoreCardProps> = ({ store, isLoading, onCycleCandidate }) => {
+export const StoreCard: React.FC<StoreCardProps> = ({
+  store,
+  isLoading,
+  onCycleCandidate,
+  onOpenLink
+}) => {
   const hasPrice = store.isAvailable && store.priceBreakdown && store.priceBreakdown.finalPayable > 0;
   const isBlinkit = store.platformId === 'blinkit';
   const pillTextColor = isBlinkit ? '#111827' : '#FFFFFF';
@@ -24,13 +30,21 @@ export const StoreCard: React.FC<StoreCardProps> = ({ store, isLoading, onCycleC
 
   const handleOpenProduct = () => {
     if (productUrl && productUrl !== '#') {
-      Linking.openURL(productUrl).catch(() => {});
+      if (onOpenLink) {
+        onOpenLink(productUrl, store.item?.title || store.platformName, store.logoColor);
+      } else {
+        Linking.openURL(productUrl).catch(() => {});
+      }
     }
   };
 
   const handleOpenSearch = () => {
     if (globalUrl && globalUrl !== '#') {
-      Linking.openURL(globalUrl).catch(() => {});
+      if (onOpenLink) {
+        onOpenLink(globalUrl, `${store.platformName} Search`, store.logoColor);
+      } else {
+        Linking.openURL(globalUrl).catch(() => {});
+      }
     }
   };
 
@@ -65,22 +79,9 @@ export const StoreCard: React.FC<StoreCardProps> = ({ store, isLoading, onCycleC
           <View style={styles.statusIndicator}>
             {isLoading ? (
               <Text style={styles.searchingText}>Searching...</Text>
-            ) : store.isAvailable ? (
-              <View style={styles.inStockRow}>
-                <CheckCircle2 size={13} color="#10B981" />
-                <Text style={styles.inStockText}>Available</Text>
-                {store.responseTimeMs !== undefined && (
-                  <Text style={styles.responseTimeText}>• {(store.responseTimeMs / 1000).toFixed(2)}s</Text>
-                )}
-              </View>
-            ) : (
-              <View style={styles.outOfStockRow}>
-                <XCircle size={13} color="#94A3B8" />
-                <Text style={styles.outOfStockText}>
-                  Unavailable{store.responseTimeMs !== undefined ? ` • ${(store.responseTimeMs / 1000).toFixed(2)}s` : ''}
-                </Text>
-              </View>
-            )}
+            ) : store.responseTimeMs !== undefined ? (
+              <Text style={styles.responseTimeText}>{(store.responseTimeMs / 1000).toFixed(2)}s</Text>
+            ) : null}
           </View>
         </View>
       </View>
@@ -250,30 +251,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center'
   },
+  statusGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
   searchingText: {
     color: '#38BDF8',
     fontSize: 12,
     fontWeight: '500'
   },
-  inStockRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4
-  },
-  inStockText: {
-    color: '#10B981',
-    fontSize: 12,
-    fontWeight: '600'
-  },
   responseTimeText: {
     color: '#64748B',
     fontSize: 11,
     fontWeight: '500'
-  },
-  outOfStockRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4
   },
   outOfStockText: {
     color: '#64748B',
