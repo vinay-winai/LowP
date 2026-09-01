@@ -65,7 +65,7 @@ async function directHttpSearch(
       });
       if (res && res.ok) {
         const html = await res.text();
-        const cardBlocks = html.split(/data-component-type="s-search-result"|class="[^"]*s-result-item[^"]*"/);
+        const cardBlocks = html.split(/data-component-type="s-search-result"|<div[^>]*data-asin="[A-Z0-9]{10}"|class="[^"]*s-result-item[^"]*"/);
         const candidates: ProductItem[] = [];
 
         for (let i = 1; i < cardBlocks.length; i++) {
@@ -80,7 +80,7 @@ async function directHttpSearch(
           }
 
           if (!title) {
-            const dpLinkMatch = block.match(/<a[^>]*class="[^"]*(?:s-link-style|a-text-normal)[^"]*"[^>]*href="[^"]*\/dp\/[^"]*"[^>]*>([\s\S]*?)<\/a>/i);
+            const dpLinkMatch = block.match(/<a[^>]*class="[^"]*(?:s-link-style|a-text-normal|a-link-normal)[^"]*"[^>]*href="[^"]*\/dp\/[^"]*"[^>]*>([\s\S]*?)<\/a>/i);
             if (dpLinkMatch) {
               const text = dpLinkMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
               if (text.length > 5 && !text.startsWith('₹')) {
@@ -91,9 +91,20 @@ async function directHttpSearch(
 
           if (!title) {
             const h2Match = block.match(/<h2[^>]*><a[^>]*><span[^>]*>([\s\S]*?)<\/span><\/a><\/h2>/i) ||
-                            block.match(/<h2[^>]*><span[^>]*>([\s\S]*?)<\/span><\/h2>/i);
+                            block.match(/<h2[^>]*><span[^>]*>([\s\S]*?)<\/span><\/h2>/i) ||
+                            block.match(/<h2[^>]*>([\s\S]*?)<\/h2>/i);
             if (h2Match) {
-              title = h2Match[1].replace(/<[^>]+>/g, '').trim();
+              const text = h2Match[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+              if (text.length > 5 && !text.startsWith('₹')) {
+                title = text;
+              }
+            }
+          }
+
+          if (!title) {
+            const spanMatch = block.match(/<span[^>]*class="[^"]*(?:a-size-medium|a-size-base-plus|a-text-normal)[^"]*"[^>]*>([^<]+)<\/span>/i);
+            if (spanMatch && spanMatch[1].trim().length > 5) {
+              title = spanMatch[1].trim();
             }
           }
 

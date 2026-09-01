@@ -389,81 +389,91 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       }
     } catch (e) {}
 
-    // 2. Listing Cards
-    const cardSelectors = [
-      '[data-testid="item-collection-card-full"]',
-      'div[class*="_3Rr1X"]',
-      'div[class*="sWdPz"]',
-      'div[class*="_1WDPG"]',
-      '[data-testid="product-card"]',
-      '[data-testid*="product"]',
-      'div[class*="ProductCard"]',
-      'div[class*="product-card"]',
-      'div[class*="itemCard"]',
-      'div[class*="product_card"]',
-      'div[class*="styles__ProductCard"]',
-      'div[class*="style__Card"]',
-      'div[class*="item-card"]',
-      'div[class*="card"]',
-      'div[class*="Product__"]',
-      'div[class*="tw-relative"]',
-      'div[data-component-type="s-search-result"]',
-      'div[class*="s-result-item"]',
-      'div[data-asin]:not([data-asin=""])',
-      'div[data-id]',
-      'div[class*="_1AtVbE"]',
-      'div[class*="_75nlfW"]',
-      'div[class*="slAVV4"]',
-      'div[class*="cPHDOP"]',
-      'div[class*="RGLWAk"]'
-    ];
+    // 2a. Dedicated Amazon card extraction (preserves full ASIN containers from being pruned)
+    if (targetPlatformId === "amazon_main" || targetPlatformId === "amazon_tez") {
+      const amzCards = Array.from(document.querySelectorAll('div[data-component-type="s-search-result"], div[data-asin]:not([data-asin=""]), [data-slot-id="ProductCard"]'));
+      for (const card of amzCards) {
+        const item = extractFromCard(card, targetPlatformId);
+        if (item && item.price > 0 && !isDuplicateCandidate(candidates, item)) {
+          item.__el = card;
+          candidates.push(item);
+          if (candidates.length >= 6) break;
+        }
+      }
+    }
 
-    const allMatched = Array.from(document.querySelectorAll(cardSelectors.join(', ')));
-    // Amazon wraps every product in BOTH an outer grid cell and an inner card
-    // container; both match broad selectors so the same product is scraped
-    // twice. Keep only innermost matches via pairwise contains().
-    // Innermost-match sweep with early exits: once a node is proven to be a
-    // wrapper (it contains another match) we stop comparing it, and proven
-    // inner cards prune their own descendants in the same pass. This keeps
-    // the cost near-linear in practice instead of a full n^2 grind, which
-    // matters on mobile WebViews where the extraction loop re-runs the whole
-    // pipeline on every hydration retry.
-    // Product-card selection: keep matched nodes holding an image plus a
-    // plausible price in their text. Some stores (Blinkit) render prices as
-    // bare "₹77" text with no class hooks, so a price ELEMENT probe fails.
-    // Qualify on price-text only. Requiring an <img> races Blinkit's lazy
-    // image insertion and drops real cards during early passes.
-    let cards = allMatched.filter((c) => {
-      const t = c.textContent || "";
-      if (/(?:₹|Rs\\.?|INR)\\s*[0-9,]{1,6}/i.test(t)) return true;
-      for (const el of c.querySelectorAll("div, span, p")) {
-        if (el.children && el.children.length > 0) continue;
-        if (/^[0-9]{1,6}$/.test((el.textContent || "").trim())) return true;
-      }
-      return false;
-    });
-    // Prefer image-holding cards when available (better titles via alt text),
-    // but never at the cost of dropping price-valid cards that lack images yet.
-    const withImg = cards.filter((c) => c.querySelector("img"));
-    if (withImg.length >= 3) cards = withImg;
-    // If several nested matches qualify, keep the innermost per family
-    // (drop the node that CONTAINS another qualifying node).
-    cards = cards.filter((c, i) => {
-      for (let j = 0; j < cards.length; j++) {
-        if (j !== i && c.contains(cards[j])) return false;
-      }
-      return true;
-    });
-    let scannedCards = 0;
-    for (const card of cards) {
-      if (++scannedCards > 60) break;
-      const item = extractFromCard(card, targetPlatformId);
-      if (item && item.price > 0 && !isDuplicateCandidate(candidates, item)) {
-        item.__el = card;
-        candidates.push(item);
-        // Only the store's own top listings matter: deep-page sponsored
-        // strips were polluting results. 5 is enough to pick a best-of-3.
-        if (candidates.length >= 5) break;
+    // 2b. General Listing Cards
+    if (candidates.length === 0) {
+      const cardSelectors = [
+        '[data-testid="item-collection-card-full"]',
+        '[data-testid="ItemCard"]',
+        '[data-testid="item-card"]',
+        '[data-testid*="item-card"]',
+        '[data-testid*="ItemCard"]',
+        '[data-testid*="item_card"]',
+        '[data-testid*="instamart-item"]',
+        '[data-testid*="search-item"]',
+        'div[class*="_1WqD_"]',
+        'div[class*="_1255M"]',
+        'div[class*="_3Yt3W"]',
+        'div[class*="_3Rr1X"]',
+        'div[class*="sWdPz"]',
+        'div[class*="_1WDPG"]',
+        '[data-testid="product-card"]',
+        '[data-testid*="product"]',
+        'div[class*="ProductCard"]',
+        'div[class*="product-card"]',
+        'div[class*="itemCard"]',
+        'div[class*="ItemCard"]',
+        'div[class*="product_card"]',
+        'div[class*="styles__ProductCard"]',
+        'div[class*="style__Card"]',
+        'div[class*="item-card"]',
+        'div[class*="Product__"]',
+        'div[class*="tw-relative"]',
+        'div[data-component-type="s-search-result"]',
+        'div[class*="s-result-item"]',
+        'div[data-asin]:not([data-asin=""])',
+        'div[data-id]',
+        'div[class*="_1AtVbE"]',
+        'div[class*="_75nlfW"]',
+        'div[class*="slAVV4"]',
+        'div[class*="cPHDOP"]',
+        'div[class*="RGLWAk"]',
+        'a[href*="/instamart/item/"]',
+        'a[href*="/item/"]'
+      ];
+
+      const allMatched = Array.from(document.querySelectorAll(cardSelectors.join(', ')));
+      let cards = allMatched.filter((c) => {
+        const t = c.textContent || "";
+        if (/(?:₹|Rs\\.?|INR)\\s*[0-9,]{1,6}/i.test(t)) return true;
+        for (const el of c.querySelectorAll("div, span, p")) {
+          if (el.children && el.children.length > 0) continue;
+          if (/^[0-9]{1,6}$/.test((el.textContent || "").trim())) return true;
+        }
+        return false;
+      });
+      const withImg = cards.filter((c) => c.querySelector("img"));
+      if (withImg.length >= 3) cards = withImg;
+      cards = cards.filter((c, i) => {
+        if (c.hasAttribute && (c.hasAttribute('data-asin') || c.getAttribute('data-component-type') === 's-search-result')) {
+          return true;
+        }
+        for (let j = 0; j < cards.length; j++) {
+          if (j !== i && c.contains(cards[j])) return false;
+        }
+        return true;
+      });
+      let scannedCards = 0;
+      for (const card of cards) {
+        if (++scannedCards > 60) break;
+        const item = extractFromCard(card, targetPlatformId);
+        if (item && item.price > 0 && !isDuplicateCandidate(candidates, item)) {
+          item.__el = card;
+          candidates.push(item);
+          if (candidates.length >= 5) break;
+        }
       }
     }
     // Sponsored badges often sit OUTSIDE the innermost product node, so mark
@@ -619,7 +629,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     try {
       let href = (window.location.href || "").toLowerCase();
       try { href += " " + decodeURIComponent(href).replace(/\\+/g, " "); } catch (e) {}
-      if (href.includes("/dp/") || href.includes("/product/") || href.includes("/pn/") || href.includes("/item/") || href.includes("/prid/")) {
+      if (href.includes("/dp/") || href.includes("/product/") || href.includes("/pn/") || href.includes("/item/") || href.includes("/prid/") || href.includes("/s?") || href.includes("/s/") || href.includes("/b?") || href.includes("/b/") || href.includes("/search")) {
         return true;
       }
       if (queryTokens.length > 0) {
@@ -742,8 +752,8 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       } catch (e) {}
     }
 
-    // Second-tier give-up: page fully loaded, 18+ attempts (~2.5s+), still zero candidates
-    if (!res.best && attempts >= 20 && document.readyState === "complete") {
+    // Second-tier give-up: page fully loaded, 45+ attempts (~6s+), still zero candidates
+    if (!res.best && attempts >= 45 && document.readyState === "complete") {
       sendResult(false, null, [], { reason: 'no_results_timeout' });
       return;
     }
