@@ -8,15 +8,6 @@ export interface StoreCollection {
   isCustom?: boolean;
 }
 
-export interface LocationProfile {
-  id: string;
-  name: string;
-  pincode: string;
-  lat: number;
-  lng: number;
-  address: string;
-  isDefault?: boolean;
-}
 
 export interface ProductItem {
   id: string;

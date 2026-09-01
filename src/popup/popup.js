@@ -7,8 +7,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const searchBtn = document.getElementById("searchBtn");
   const cardsGrid = document.getElementById("cardsGrid");
   const loadingState = document.getElementById("loadingState");
-  const activeLocationText = document.getElementById("activeLocationText");
-  const locationPill = document.getElementById("locationPill");
   const toggleDebugBtn = document.getElementById("toggleDebugBtn");
   const copyDebugBtn = document.getElementById("copyDebugBtn");
   const debugDrawer = document.getElementById("debugDrawer");
@@ -27,7 +25,6 @@ document.addEventListener("DOMContentLoaded", () => {
     resultMeta.style.display = "block";
   }
 
-  let activeLocation = null;
   let currentResults = [];
   let strategyMatrixRows = [];
 
@@ -41,6 +38,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const matrixItemCountText = document.getElementById("matrixItemCountText");
   const clearMatrixBtn = document.getElementById("clearMatrixBtn");
   const closeMatrixBtn = document.getElementById("closeMatrixBtn");
+  const openSettingsBtn = document.getElementById("openSettingsBtn");
+
+  if (openSettingsBtn) {
+    openSettingsBtn.addEventListener("click", () => {
+      if (typeof chrome !== "undefined" && chrome.runtime?.openOptionsPage) {
+        chrome.runtime.openOptionsPage();
+      } else if (typeof chrome !== "undefined" && chrome.runtime?.getURL) {
+        window.open(chrome.runtime.getURL("src/options/options.html"));
+      }
+    });
+  }
 
   // Hide Debug Inspector entirely when the user disabled logging in Options.
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
@@ -261,17 +269,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // 1. Initialize Location
-  chrome.runtime.sendMessage({ action: "GET_ACTIVE_LOCATION" }, (res) => {
-    if (res && res.success && res.data) {
-      activeLocation = res.data;
-      activeLocationText.textContent = `${activeLocation.name || 'Hyderabad'} (${activeLocation.pincode || '500085'})`;
-    }
-  });
 
-  locationPill.addEventListener("click", () => {
-    chrome.runtime.openOptionsPage();
-  });
 
   // 2. Auto-Detect Product Title from Active Tab
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {

@@ -8,21 +8,18 @@ import {
   StyleSheet,
   StatusBar,
   ActivityIndicator,
-  Modal
+  Modal,
+  Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StoreCard } from '../components/StoreCard';
 import { BackgroundScrapers } from '../components/BackgroundScrapers';
-import { LocationModal } from '../components/LocationModal';
 import { StoreLoginModal } from '../components/StoreLoginModal';
 import { StrategyMatrixModal } from '../components/StrategyMatrixModal';
-import { InAppBrowserModal } from '../components/InAppBrowserModal';
 import { MatchingEngine } from '../core/MatchingEngine';
-import { LocationService, DEFAULT_LOCATION } from '../core/LocationService';
 import {
   PlatformId,
   StoreCollection,
-  LocationProfile,
   ProductItem,
   StoreResult,
   StrategyMatrixRow,
@@ -30,7 +27,6 @@ import {
 } from '../types';
 import {
   Search,
-  MapPin,
   X,
   Sparkles,
   Store,
@@ -167,7 +163,6 @@ const QUICK_TAGS = [
 ];
 
 export const HomeScreen: React.FC = () => {
-  const [activeLocation, setActiveLocation] = useState<LocationProfile>(DEFAULT_LOCATION);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSearch, setActiveSearch] = useState('');
   const [searchId, setSearchId] = useState(0);
@@ -184,28 +179,16 @@ export const HomeScreen: React.FC = () => {
     currentCollection.storeIds.map((id) => ({ ...ALL_STORE_TEMPLATES[id] }))
   );
   const [searchDuration, setSearchDuration] = useState<number | null>(null);
-  const [locationModalVisible, setLocationModalVisible] = useState(false);
   const [loginModalVisible, setLoginModalVisible] = useState(false);
   const [selectedLoginStore, setSelectedLoginStore] = useState<PlatformId | null>(null);
   const [matrixRows, setMatrixRows] = useState<StrategyMatrixRow[]>([]);
   const [matrixModalVisible, setMatrixModalVisible] = useState(false);
   const [addedToast, setAddedToast] = useState(false);
-  const [browserModal, setBrowserModal] = useState<{
-    visible: boolean;
-    url: string | null;
-    title: string;
-    color: string;
-  }>({
-    visible: false,
-    url: null,
-    title: '',
-    color: '#38BDF8'
-  });
 
   const pendingStores = useRef<Set<PlatformId>>(new Set());
   const searchStartTime = useRef<number>(0);
 
-  // Exact-term result cache: key is pincode + RAW typed query (case/space
+  // Exact-term result cache: key is RAW typed query (case/space
   // normalized only). "milk" and "milk 1l" are different searches. Entries
   // live 90s — prices are stable minute-to-minute, repeats return instantly.
   const searchCacheRef = useRef<Map<string, { ts: number; stores: StoreResult[] }>>(new Map());
@@ -214,7 +197,6 @@ export const HomeScreen: React.FC = () => {
   const arrivalSeqRef = useRef(0);
 
   useEffect(() => {
-    LocationService.getActiveLocation().then(setActiveLocation);
 
     // Pre-warm DNS and TLS connections to store domains on app mount
     const origins = [
@@ -286,7 +268,7 @@ export const HomeScreen: React.FC = () => {
 
     const colStoreIds = storeOverride || currentCollection.storeIds;
     const cacheTerm = query.trim().toLowerCase();
-    const cacheKey = `${activeLocation.pincode}|${cacheTerm}#${colStoreIds.slice().sort().join(',')}`;
+    const cacheKey = `${cacheTerm}#${colStoreIds.slice().sort().join(',')}`;
     activeCacheKeyRef.current = cacheKey;
     searchStartTime.current = Date.now();
 
@@ -604,16 +586,6 @@ export const HomeScreen: React.FC = () => {
               Matrix {matrixRows.length > 0 ? `(${matrixRows.length})` : ''}
             </Text>
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.locationPill}
-            onPress={() => setLocationModalVisible(true)}
-          >
-            <MapPin size={13} color="#10B981" />
-            <Text style={styles.locationPillText} numberOfLines={1}>
-              {activeLocation.name.split(' ')[0]} ({activeLocation.pincode})
-            </Text>
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -823,13 +795,10 @@ export const HomeScreen: React.FC = () => {
             store={store}
             isLoading={isLoading}
             onCycleCandidate={(dir) => handleCycleCandidate(store.platformId, dir)}
-            onOpenLink={(url, title, color) => {
-              setBrowserModal({
-                visible: true,
-                url,
-                title,
-                color: color || store.logoColor
-              });
+            onOpenLink={(url) => {
+              if (url && url !== '#') {
+                Linking.openURL(url).catch(() => {});
+              }
             }}
           />
         ))}
@@ -843,16 +812,7 @@ export const HomeScreen: React.FC = () => {
         onStoreResult={handleStoreResult}
       />
 
-      {/* Location Modal */}
-      <LocationModal
-        visible={locationModalVisible}
-        activeLocation={activeLocation}
-        onClose={() => setLocationModalVisible(false)}
-        onSelectLocation={(loc) => {
-          setActiveLocation(loc);
-          if (activeSearch) handleTriggerSearch(activeSearch);
-        }}
-      />
+
 
       {/* Store Login Modal */}
       <StoreLoginModal
@@ -862,15 +822,6 @@ export const HomeScreen: React.FC = () => {
         onLoginComplete={() => {
           if (activeSearch) handleTriggerSearch(activeSearch);
         }}
-      />
-
-      {/* In-App Store Browser Modal */}
-      <InAppBrowserModal
-        visible={browserModal.visible}
-        url={browserModal.url}
-        title={browserModal.title}
-        color={browserModal.color}
-        onClose={() => setBrowserModal((prev) => ({ ...prev, visible: false }))}
       />
 
       {/* Custom Collection Builder Modal */}
@@ -1041,23 +992,7 @@ const styles = StyleSheet.create({
   matrixHeaderBtnTextActive: {
     color: '#10B981'
   },
-  locationPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#1E293B',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#334155',
-    maxWidth: 150
-  },
-  locationPillText: {
-    color: '#F8FAFC',
-    fontSize: 11,
-    fontWeight: '700'
-  },
+
   connectedStoresSection: {
     paddingHorizontal: 16,
     paddingTop: 10,

@@ -1,6 +1,8 @@
 # LowP Mobile - Real-Time Grocery Price Comparator (Android & iOS)
 
-A native mobile application built with **Expo (React Native)** and **TypeScript** that delivers live, hyperlocal grocery price comparisons across **Amazon Now (Tez)**, **Swiggy Instamart**, **Zepto**, and **Blinkit**.
+> **Online price comparison • 100% local • No data collected**
+
+A native mobile application built with **Expo (React Native)** and **TypeScript** that delivers live, hyperlocal grocery price comparisons across **Amazon India / Tez**, **Swiggy Instamart**, **Zepto**, **Blinkit**, and **Flipkart**.
 
 ---
 

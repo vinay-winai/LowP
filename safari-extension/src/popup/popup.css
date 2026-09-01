@@ -109,30 +109,23 @@ body {
   color: #EF4444;
 }
 
-.location-pill {
-  background: var(--bg-card);
+.settings-btn {
+  background: transparent;
   border: 1px solid var(--border-color);
-  padding: 5px 9px;
-  border-radius: 20px;
+  color: var(--text-sub);
+  font-size: 13px;
+  padding: 3px 6px;
+  border-radius: 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 5px;
-  transition: all 0.2s ease;
+  justify-content: center;
+  transition: all 0.2s;
 }
 
-.location-pill:hover {
+.settings-btn:hover {
+  background: rgba(56, 189, 248, 0.15);
   border-color: var(--accent-blue);
-  background: var(--bg-card-hover);
-}
-
-.loc-icon {
-  font-size: 12px;
-}
-
-.loc-text {
-  font-size: 11px;
-  font-weight: 600;
   color: var(--accent-blue);
 }
 

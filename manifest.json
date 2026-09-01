@@ -7,7 +7,6 @@
   "permissions": [
     "storage",
     "alarms",
-    "geolocation",
     "cookies",
     "tabs",
     "activeTab",
@@ -23,8 +22,7 @@
     "*://*.zepto.com/*",
     "*://*.zeptonow.com/*",
     "*://*.blinkit.com/*",
-    "*://*.flipkart.com/*",
-    "*://*.nominatim.openstreetmap.org/*"
+    "*://*.flipkart.com/*"
   ],
   "background": {
     "service_worker": "src/background/service-worker.js"

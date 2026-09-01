@@ -23,11 +23,8 @@ global.chrome = {
 };
 
 const {
-  DEFAULT_LOCATION,
-  DEFAULT_PROFILES,
   DEFAULT_COLLECTIONS,
   CollectionService,
-  LocationService,
   MatchingEngine,
   AmazonTezProvider,
   InstamartProvider,
@@ -115,13 +112,6 @@ test('MatchingEngine - annotateBestOffers assigns lowest price badge', () => {
   assert.strictEqual(blinkit.isLowestPrice, false);
 });
 
-test('LocationService - initializes with default Hyderabad 500085 location', async () => {
-  const loc = await LocationService.getActiveLocation();
-  assert.strictEqual(loc.pincode, '500085');
-  assert.strictEqual(loc.lat, 17.501725514188223);
-  assert.strictEqual(loc.lng, 78.39361254731166);
-});
-
 test('Providers - formatResult returns structured schema across Amazon Tez, Instamart, Zepto, and Blinkit', () => {
   const amzTez = new AmazonTezProvider();
   const im = new InstamartProvider();
@@ -135,20 +125,20 @@ test('Providers - formatResult returns structured schema across Amazon Tez, Inst
     quantity: '200 g'
   };
 
-  const resAmzTez = amzTez.formatResult(mockItem, DEFAULT_LOCATION);
+  const resAmzTez = amzTez.formatResult(mockItem);
   assert.strictEqual(resAmzTez.platformId, 'amazon_tez');
   assert.strictEqual(resAmzTez.isAvailable, true);
   assert.strictEqual(resAmzTez.priceBreakdown.finalPayable, 127);
 
-  const resIm = im.formatResult(null, DEFAULT_LOCATION);
+  const resIm = im.formatResult(null);
   assert.strictEqual(resIm.platformId, 'instamart');
   assert.strictEqual(resIm.isAvailable, false);
 
-  const resZepto = zepto.formatResult(mockItem, DEFAULT_LOCATION);
+  const resZepto = zepto.formatResult(mockItem);
   assert.strictEqual(resZepto.platformId, 'zepto');
   assert.strictEqual(resZepto.isAvailable, true);
 
-  const resBlinkit = blinkit.formatResult(mockItem, DEFAULT_LOCATION);
+  const resBlinkit = blinkit.formatResult(mockItem);
   assert.strictEqual(resBlinkit.platformId, 'blinkit');
   assert.strictEqual(resBlinkit.isAvailable, true);
 });
@@ -160,7 +150,7 @@ test('Providers - zero-price fallback is not reported as an available item', () 
     price: 0,
     mrp: 0,
     productUrl: provider.getSearchUrl('paneer')
-  }, DEFAULT_LOCATION, 'paneer');
+  }, null, 'paneer');
 
   assert.strictEqual(result.isAvailable, false);
   assert.strictEqual(result.item, null);
@@ -181,7 +171,7 @@ test('Providers - preserves up to three ranked candidates and selected index', (
       { title: 'extra candidate', price: 99, mrp: 100 }
     ],
     selectedIndex: 1
-  }, DEFAULT_LOCATION, 'paneer');
+  }, null, 'paneer');
 
   assert.strictEqual(result.candidates.length, 3);
   assert.strictEqual(result.selectedIndex, 1);
@@ -226,12 +216,12 @@ test('firstPositive - resolves null when every attempt fails or yields nothing',
 test('SearchCache - round-trips entries and expires them after the TTL', async () => {
   SearchCache.resetForTests();
   const t0 = 1000000;
-  await SearchCache.set('500085', 'cache ttl probe', [{ platformId: 'zepto' }], t0);
+  await SearchCache.set('cache ttl probe', [{ platformId: 'zepto' }], t0);
 
-  const fresh = await SearchCache.get('500085', 'Cache TTL Probe', t0 + 1000);
+  const fresh = await SearchCache.get('Cache TTL Probe', t0 + 1000);
   assert.ok(fresh && Array.isArray(fresh.results));
 
-  const expired = await SearchCache.get('500085', 'cache ttl probe', t0 + SearchCache.TTL_MS + 1);
+  const expired = await SearchCache.get('cache ttl probe', t0 + SearchCache.TTL_MS + 1);
   assert.strictEqual(expired, null);
 });
 
@@ -239,15 +229,15 @@ test('SearchCache - evicts oldest entries beyond the cap', async () => {
   SearchCache.resetForTests();
   const base = 2000000;
   for (let i = 0; i < 35; i++) {
-    await SearchCache.set('500085', `item ${i}`, [{ index: i }], base + i * 10);
+    await SearchCache.set(`item ${i}`, [{ index: i }], base + i * 10);
   }
   const map = await SearchCache.hydrate();
   assert.ok(map.size <= SearchCache.MAX_ENTRIES);
 
-  const evicted = await SearchCache.get('500085', 'item 0', base);
+  const evicted = await SearchCache.get('item 0', base);
   assert.strictEqual(evicted, null);
 
-  const kept = await SearchCache.get('500085', 'item 34', base + 340);
+  const kept = await SearchCache.get('item 34', base + 340);
   assert.ok(kept);
 });
 
@@ -282,7 +272,7 @@ test('handleSearchQuery - serves repeat queries from the short-TTL cache without
   const storeIds = ['amazon_main', 'flipkart'];
   const storeSig = storeIds.sort().join(',');
   const cacheKey = `cache hit probe#${storeSig}`;
-  await SearchCache.set(DEFAULT_LOCATION.pincode, cacheKey, seededResults, seedTs);
+  await SearchCache.set(cacheKey, seededResults, seedTs);
 
   const results = await handleSearchQuery('cache hit probe', null, storeIds);
 
@@ -297,16 +287,16 @@ test('handleSearchQuery - serves repeat queries from the short-TTL cache without
 test('SearchCache - treats variations of a search term as distinct entries', async () => {
   SearchCache.resetForTests();
   const seedTs = Date.now();
-  await SearchCache.set(DEFAULT_LOCATION.pincode, 'milk', [
+  await SearchCache.set('milk', [
     { platformId: 'amazon_tez', isAvailable: true, priceBreakdown: { finalPayable: 30 }, title: 'plain milk' }
   ], seedTs);
 
   // "milk 1l" must NOT be served from the "milk" entry...
-  const miss = await SearchCache.get(DEFAULT_LOCATION.pincode, 'milk 1l', seedTs + 1000);
+  const miss = await SearchCache.get('milk 1l', seedTs + 1000);
   assert.strictEqual(miss, null);
 
   // ...and only an exact term match (case/whitespace aside) hits.
-  const hit = await SearchCache.get(DEFAULT_LOCATION.pincode, '  MILK ', seedTs + 1000);
+  const hit = await SearchCache.get('  MILK ', seedTs + 1000);
   assert.ok(hit);
 });
 
@@ -351,7 +341,7 @@ test('AmazonMainProvider & FlipkartProvider - construct valid search URLs and fo
     brand: 'Apple',
     quantity: '1 unit',
     productUrl: 'https://www.amazon.in/dp/B0B3C572LT'
-  }, DEFAULT_LOCATION, 'macbook air');
+  }, null, 'macbook air');
 
   assert.strictEqual(formatted.platformId, 'amazon_main');
   assert.strictEqual(formatted.isAvailable, true);

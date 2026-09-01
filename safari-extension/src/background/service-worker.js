@@ -41,170 +41,7 @@ function logDebug(category, message, data = null) {
   console.log(`[LowP ${category}] ${message}`, data || "");
 }
 
-// ==========================================
-// 2. LOCATION PROFILES & PINCODE RESOLVER
-// ==========================================
-const DEFAULT_LOCATION = {
-  id: "loc_hyd_500085",
-  name: "Hyderabad (Kukatpally)",
-  pincode: "500085",
-  lat: 17.501725514188223,
-  lng: 78.39361254731166,
-  address: "Kukatpally, Hyderabad, Telangana 500085",
-  isDefault: true
-};
 
-const DEFAULT_PROFILES = [
-  DEFAULT_LOCATION,
-  {
-    id: "loc_blr_560034",
-    name: "Bengaluru (Koramangala)",
-    pincode: "560034",
-    lat: 12.9352,
-    lng: 77.6245,
-    address: "Koramangala, Bengaluru, Karnataka 560034"
-  },
-  {
-    id: "loc_mum_400050",
-    name: "Mumbai (Bandra)",
-    pincode: "400050",
-    lat: 19.0596,
-    lng: 72.8295,
-    address: "Bandra West, Mumbai, Maharashtra 400050"
-  },
-  {
-    id: "loc_del_110001",
-    name: "Delhi (Connaught Place)",
-    pincode: "110001",
-    lat: 28.6304,
-    lng: 77.2177,
-    address: "Connaught Place, New Delhi, Delhi 110001"
-  }
-];
-
-class LocationService {
-  static async getActiveLocation() {
-    return new Promise((resolve) => {
-      if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.sync) {
-        return resolve(DEFAULT_LOCATION);
-      }
-      chrome.storage.sync.get(["activeLocation", "locationProfiles"], (result) => {
-        if (!result.locationProfiles || result.locationProfiles.length === 0) {
-          chrome.storage.sync.set({
-            locationProfiles: DEFAULT_PROFILES,
-            activeLocation: DEFAULT_LOCATION
-          });
-          return resolve(DEFAULT_LOCATION);
-        }
-        resolve(result.activeLocation || result.locationProfiles[0] || DEFAULT_LOCATION);
-      });
-    });
-  }
-
-  static async getProfiles() {
-    return new Promise((resolve) => {
-      if (typeof chrome === "undefined" || !chrome.storage || !chrome.storage.sync) {
-        return resolve(DEFAULT_PROFILES);
-      }
-      chrome.storage.sync.get(["locationProfiles"], (result) => {
-        if (!result.locationProfiles || result.locationProfiles.length === 0) {
-          chrome.storage.sync.set({ locationProfiles: DEFAULT_PROFILES });
-          return resolve(DEFAULT_PROFILES);
-        }
-        resolve(result.locationProfiles);
-      });
-    });
-  }
-
-  static async setActiveProfile(profileId) {
-    const profiles = await this.getProfiles();
-    const target = profiles.find((p) => p.id === profileId);
-    if (!target) throw new Error("Location profile not found");
-
-    await new Promise((resolve) => {
-      chrome.storage.sync.set({ activeLocation: target }, resolve);
-    });
-    logDebug("Location", "Switched active location", target);
-    return target;
-  }
-
-  static async saveCustomLocation(name, addressText) {
-    const geo = await this.geocodeAddress(addressText);
-    const profiles = await this.getProfiles();
-    const newProfile = {
-      id: `loc_${Date.now()}`,
-      name: name.trim() || `Location ${profiles.length + 1}`,
-      address: geo.display_name || addressText.trim(),
-      pincode: geo.pincode || "500085",
-      lat: geo.lat,
-      lng: geo.lng
-    };
-    profiles.push(newProfile);
-    await new Promise((resolve) => {
-      chrome.storage.sync.set({ locationProfiles: profiles, activeLocation: newProfile }, resolve);
-    });
-    logDebug("Location", "Saved custom location", newProfile);
-    return newProfile;
-  }
-
-  static async deleteProfile(profileId) {
-    let profiles = await this.getProfiles();
-    if (profiles.length <= 1) throw new Error("Cannot delete the only location profile.");
-    profiles = profiles.filter((p) => p.id !== profileId);
-    const active = await this.getActiveLocation();
-    const updates = { locationProfiles: profiles };
-    if (active.id === profileId) {
-      updates.activeLocation = profiles[0];
-    }
-    await new Promise((resolve) => chrome.storage.sync.set(updates, resolve));
-    return true;
-  }
-
-  static async geocodeAddress(addressText) {
-    const pinMatch = (addressText || "").match(/\b([1-9][0-9]{5})\b/);
-    if (pinMatch) {
-      const pin = pinMatch[1];
-      const pinMap = {
-        "500085": { lat: 17.5017, lng: 78.3936, name: "Kukatpally, Hyderabad" },
-        "500072": { lat: 17.4947, lng: 78.3996, name: "KPHB Colony, Hyderabad" },
-        "560034": { lat: 12.9352, lng: 77.6245, name: "Koramangala, Bengaluru" },
-        "400050": { lat: 19.0596, lng: 72.8295, name: "Bandra, Mumbai" },
-        "110001": { lat: 28.6304, lng: 77.2177, name: "Connaught Place, Delhi" }
-      };
-      if (pinMap[pin]) {
-        return {
-          lat: pinMap[pin].lat,
-          lng: pinMap[pin].lng,
-          pincode: pin,
-          display_name: `${pinMap[pin].name}, ${pin}`
-        };
-      }
-    }
-
-    try {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=in&q=${encodeURIComponent(addressText)}`;
-      const res = await fetch(url, { headers: { "User-Agent": "LowPPriceComparator/2.0" } });
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.length > 0) {
-          return {
-            lat: parseFloat(data[0].lat),
-            lng: parseFloat(data[0].lon),
-            display_name: data[0].display_name,
-            pincode: pinMatch ? pinMatch[1] : "500085"
-          };
-        }
-      }
-    } catch (e) {}
-
-    return {
-      lat: DEFAULT_LOCATION.lat,
-      lng: DEFAULT_LOCATION.lng,
-      display_name: addressText || DEFAULT_LOCATION.address,
-      pincode: pinMatch ? pinMatch[1] : DEFAULT_LOCATION.pincode
-    };
-  }
-}
 
 // ==========================================
 // 3. MATCHING ENGINE (PURE BASE PRICE & BADGES)
@@ -2572,8 +2409,11 @@ class SearchCache {
   static memory = null;
   static hydration = null;
 
-  static makeKey(pincode, query) {
-    return `${pincode || "unknown"}|${String(query || "").toLowerCase().trim()}`;
+  static makeKey(pincodeOrQuery, query) {
+    if (query === undefined || typeof query === "number") {
+      return String(pincodeOrQuery || "").toLowerCase().trim();
+    }
+    return `${pincodeOrQuery || "all"}|${String(query || "").toLowerCase().trim()}`;
   }
 
   static async hydrate() {
@@ -2621,12 +2461,13 @@ class SearchCache {
     }
   }
 
-  static async get(pincode, query, now = Date.now()) {
+  static async get(pincodeOrQuery, queryOrNow, now = Date.now()) {
     const map = await this.hydrate();
-    const key = this.makeKey(pincode, query);
+    const effectiveNow = (typeof queryOrNow === "number") ? queryOrNow : now;
+    const key = this.makeKey(pincodeOrQuery, typeof queryOrNow === "string" ? queryOrNow : undefined);
     const entry = map.get(key);
     if (!entry) return null;
-    if (now - entry.ts >= this.TTL_MS) {
+    if (effectiveNow - entry.ts >= this.TTL_MS) {
       map.delete(key);
       this.persist();
       return null;
@@ -2634,10 +2475,17 @@ class SearchCache {
     return entry;
   }
 
-  static async set(pincode, query, results, now = Date.now()) {
+  static async set(pincodeOrQuery, queryOrResults, resultsOrNow, now = Date.now()) {
     const map = await this.hydrate();
-    map.set(this.makeKey(pincode, query), { ts: now, results });
-    this.prune(map, now);
+    if (Array.isArray(queryOrResults)) {
+      const ts = (typeof resultsOrNow === "number") ? resultsOrNow : now;
+      map.set(this.makeKey(pincodeOrQuery), { ts, results: queryOrResults });
+      this.prune(map, ts);
+    } else {
+      const ts = (typeof now === "number") ? now : Date.now();
+      map.set(this.makeKey(pincodeOrQuery, queryOrResults), { ts, results: resultsOrNow });
+      this.prune(map, ts);
+    }
     this.persist();
     return true;
   }
@@ -2648,25 +2496,13 @@ class SearchCache {
   }
 }
 
-async function resolveSearchContext(query, locationId = null) {
-  const activeLoc = await LocationService.getActiveLocation();
-  let userSettings = activeLoc;
-  if (locationId) {
-    const profiles = await LocationService.getProfiles();
-    const custom = profiles.find((p) => p.id === locationId);
-    if (custom) userSettings = custom;
-  }
-  return { userSettings, cleanQuery: MatchingEngine.cleanSearchTerm(query) };
+async function resolveSearchContext(query) {
+  return { cleanQuery: MatchingEngine.cleanSearchTerm(query) };
 }
 
 // Runs every provider in parallel and reports each result through onResult as
 // soon as it settles, so callers can render progressively instead of waiting
 // for the slowest store. Resolves with the fully annotated result array.
-// Store SPAs (notably Zepto/Blinkit, and Amazon in some layouts) refuse to
-// render their product grid while the window is maximized/fullscreen: the
-// renderer reports the pages as occluded/hidden. Rather than returning
-// mysterious empty results, block the query outright with an actionable
-// message whenever the focused window is maximized.
 function getWindowBlockReason() {
   return new Promise((resolve) => {
     if (typeof chrome === "undefined" || !chrome.windows || !chrome.windows.getLastFocused) return resolve(null);
@@ -2757,6 +2593,12 @@ class CollectionService {
 async function streamSearchResults(query, locationId = null, onResult = () => {}, storeIds = null) {
   if (!query || !query.trim()) return [];
 
+  if (typeof locationId === "function") {
+    storeIds = onResult;
+    onResult = locationId;
+    locationId = null;
+  }
+
   const windowBlock = await getWindowBlockReason();
   if (windowBlock) throw new Error(windowBlock);
 
@@ -2764,20 +2606,20 @@ async function streamSearchResults(query, locationId = null, onResult = () => {}
     try { onResult(store); } catch (e) {}
   };
 
-  const { userSettings, cleanQuery } = await resolveSearchContext(query, locationId);
+  const { cleanQuery } = await resolveSearchContext(query);
   const startTime = Date.now();
 
   const activeProviders = (Array.isArray(storeIds) && storeIds.length > 0)
     ? PROVIDERS.filter((p) => storeIds.includes(p.platformId))
     : PROVIDERS;
 
-  logDebug("Search", `Executing search for "${cleanQuery}" in ${userSettings.name} (Pincode: ${userSettings.pincode}) across ${activeProviders.length} store(s)`);
+  logDebug("Search", `Executing search for "${cleanQuery}" across ${activeProviders.length} store(s)`);
 
   const cacheTerm = String(query || "").toLowerCase().trim();
   const storeSig = activeProviders.map((p) => p.platformId).sort().join(",");
   const cacheKey = `${cacheTerm}#${storeSig}`;
 
-  const cached = await SearchCache.get(userSettings.pincode, cacheKey);
+  const cached = await SearchCache.get(cacheKey);
   if (cached) {
     logDebug("Search", `Cache hit for "${cleanQuery}" (age ${Date.now() - cached.ts}ms)`);
     const cachedResults = cached.results.map((result) => ({ ...result, cachedAt: cached.ts }));
@@ -2787,7 +2629,7 @@ async function streamSearchResults(query, locationId = null, onResult = () => {}
 
   const unavailableResult = (provider, reason) => {
     if (reason) logDebug("ProviderTimeout", `${provider.platformId} ${reason}`);
-    return provider.formatResult(null, userSettings, cleanQuery);
+    return provider.formatResult(null, null, cleanQuery);
   };
 
   const collected = [];
@@ -2795,7 +2637,7 @@ async function streamSearchResults(query, locationId = null, onResult = () => {}
 
   const providerPromises = activeProviders.map((provider) =>
     withTimeout(
-      Promise.resolve().then(() => provider.search(cleanQuery, userSettings)),
+      Promise.resolve().then(() => provider.search(cleanQuery)),
       PROVIDER_TIMEOUT_MS,
       `${provider.platformId} provider`
     ).catch((err) => {
@@ -2832,7 +2674,7 @@ async function streamSearchResults(query, locationId = null, onResult = () => {}
     activeProviders.findIndex((p) => p.platformId === a.platformId) -
     activeProviders.findIndex((p) => p.platformId === b.platformId)
   );
-  await SearchCache.set(userSettings.pincode, cacheKey, annotatedResults);
+  await SearchCache.set(cacheKey, annotatedResults);
   const durationMs = Date.now() - startTime;
 
   logDebug("Search", `Completed search in ${durationMs}ms (${(durationMs / 1000).toFixed(2)}s). Available stores: ${annotatedResults.filter(r => r.isAvailable && r.priceBreakdown?.finalPayable > 0).length}`);
@@ -2869,33 +2711,7 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage)
       return true;
     }
 
-    if (action === "GET_ACTIVE_LOCATION") {
-      LocationService.getActiveLocation()
-        .then((loc) => sendResponse({ success: true, data: loc }))
-        .catch((err) => sendResponse({ success: false, error: err.message }));
-      return true;
-    }
 
-    if (action === "SET_ACTIVE_LOCATION") {
-      LocationService.setActiveProfile(payload.profileId)
-        .then((loc) => sendResponse({ success: true, data: loc }))
-        .catch((err) => sendResponse({ success: false, error: err.message }));
-      return true;
-    }
-
-    if (action === "GEOCODE_ADDRESS") {
-      LocationService.saveCustomLocation(payload.name, payload.addressText)
-        .then((profile) => sendResponse({ success: true, data: profile }))
-        .catch((err) => sendResponse({ success: false, error: err.message }));
-      return true;
-    }
-
-    if (action === "DELETE_LOCATION_PROFILE") {
-      LocationService.deleteProfile(payload.profileId)
-        .then((res) => sendResponse({ success: true, data: res }))
-        .catch((err) => sendResponse({ success: false, error: err.message }));
-      return true;
-    }
 
     if (action === "GET_COLLECTIONS") {
       Promise.all([CollectionService.getCollections(), CollectionService.getActiveCollectionId()])
@@ -2984,11 +2800,8 @@ if (typeof chrome !== "undefined" && chrome.alarms && chrome.alarms.onAlarm) {
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
-    DEFAULT_LOCATION,
-    DEFAULT_PROFILES,
     DEFAULT_COLLECTIONS,
     CollectionService,
-    LocationService,
     MatchingEngine,
     BaseProvider,
     AmazonTezProvider,
