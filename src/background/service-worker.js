@@ -662,9 +662,12 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
   }
 
   function hasVisibleEmptyState() {
-    if (document.readyState !== "complete") return false;
+    // No readyState gate: the store paints its empty copy in ~1s while
+    // readyState can still be interactive, and visibleBodyText() already
+    // excludes script/style bundles so a loading shell can't match.
+    // Only called when zero candidates were extracted.
     const bodyText = visibleBodyText();
-    return /(?:no\s+results\s+for\s+[^.]*check\s+your\s+spelling|no\s+results\s+found\s+for|we\s+couldn't\s+find\s+any\s+results|could\s+not\s+find\s+any\s+results|did\s+not\s+match\s+any\s+products|no\s+products\s+found\s+for|0\s+items\s+found\s+for|nothing\s+here\s+yet)/i.test(bodyText) ||
+    return /(?:no\s+results\s+for\s+[^.]*check\s+your\s+spelling|no\s+results\s+found\s+for|we\s+couldn't\s+find\s+any\s+results|could\s+not\s+find\s+any\s+results|did\s+not\s+match\s+any\s+products|no\s+products\s+found\s+for|0\s+items\s+found\s+for|nothing\s+here\s+yet|sorry|couldn'?t\s+find|could\s+not\s+find)/i.test(bodyText) ||
       !!(document.querySelector && document.querySelector('.s-no-outline, [data-component-type="s-no-results-found"], [data-testid="no-results-container"], [class*="noResults"], [class*="EmptyState"]'));
   }
 

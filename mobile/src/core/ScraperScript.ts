@@ -739,11 +739,15 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       res = { best: null, candidates: [], found: 0 };
     }
 
-    // Empty-state early exit: when the site itself explicitly displays a "no results" state
-    if (!res.best && attempts >= 8 && document.readyState === "complete") {
+    // Empty-state early exit: when the page shows sorry / couldn't find /
+    // could not find (or the other known empty copy), end this store's query
+    // at once instead of waiting out the timeout. No readyState gate: the
+    // store paints its empty copy in ~1s while readyState can still lag, and
+    // visibleBodyText() already excludes script/style bundles.
+    if (!res.best && attempts >= 8) {
       try {
         const bodyText = visibleBodyText();
-        const hasExplicitNoResults = /(?:no\s+results\s+for\s+[^.]*check\s+your\s+spelling|no\s+results\s+found\s+for|we\s+couldn't\s+find\s+any\s+results|could\s+not\s+find\s+any\s+results|did\s+not\s+match\s+any\s+products|no\s+products\s+found\s+for|0\s+items\s+found\s+for|nothing\s+here\s+yet)/i.test(bodyText) ||
+        const hasExplicitNoResults = /(?:no\\s+results\\s+for\\s+[^.]*check\\s+your\\s+spelling|no\\s+results\\s+found\\s+for|we\\s+couldn't\\s+find\\s+any\\s+results|could\\s+not\\s+find\\s+any\\s+results|did\\s+not\\s+match\\s+any\\s+products|no\\s+products\\s+found\\s+for|0\\s+items\\s+found\\s+for|nothing\\s+here\\s+yet|sorry|couldn'?t\\s+find|could\\s+not\\s+find)/i.test(bodyText) ||
           !!(document.querySelector && document.querySelector('.s-no-outline, [data-component-type="s-no-results-found"], [data-testid="no-results-container"], [class*="noResults"], [class*="EmptyState"]'));
         if (hasExplicitNoResults) {
           sendResult(false, null, [], { reason: 'empty_state' });
