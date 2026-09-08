@@ -7,9 +7,13 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "plugins": [
+      "expo-status-bar",
       [
         "expo-splash-screen",
         {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
           "backgroundColor": "#0F172A"
         }
       ]
@@ -31,9 +35,10 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "expo-status-bar",
-      "expo-splash-screen"
-    ]
+    "extra": {
+      "eas": {
+        "projectId": "fc1bce65-e90d-4ace-89fc-2444e98f3edd"
+      }
+    }
   }
 }
