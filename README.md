@@ -61,6 +61,7 @@ A fast, lightweight, and privacy-first real-time price comparator available as a
 ### Android Mobile App
 Android apk available for [download](https://github.com/vinay-winai/LowP/releases/tag/v0.2.0). 
 
+Also Expo:
 ```bash
 cd mobile
 npm start
