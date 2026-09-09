@@ -12,6 +12,7 @@ import {
   Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StoreCard } from '../components/StoreCard';
 import { BackgroundScrapers } from '../components/BackgroundScrapers';
 import { StoreLoginModal } from '../components/StoreLoginModal';
@@ -142,14 +143,10 @@ export const DEFAULT_COLLECTIONS: StoreCollection[] = [
     name: 'Big Online Pack',
     emoji: '📦',
     storeIds: ['amazon_main', 'flipkart']
-  },
-  {
-    id: 'all_stores',
-    name: 'All Stores',
-    emoji: '🛒',
-    storeIds: ['amazon_tez', 'instamart', 'zepto', 'blinkit', 'amazon_main', 'flipkart']
   }
 ];
+
+export const MAX_COLLECTIONS = 7;
 
 const SEARCH_CACHE_TTL_MS = 90000;
 const SEARCH_CACHE_MAX_ENTRIES = 30;
@@ -161,6 +158,48 @@ const QUICK_TAGS = [
   'Milk 1L',
   'Fortune Oil 1L'
 ];
+
+const COLLECTIONS_STORAGE_KEY = 'lowp_collections_v1';
+const ACTIVE_COLLECTION_STORAGE_KEY = 'lowp_active_collection_v1';
+const KNOWN_STORE_IDS: PlatformId[] = [
+  'amazon_tez',
+  'instamart',
+  'zepto',
+  'blinkit',
+  'amazon_main',
+  'flipkart'
+];
+
+// Validate persisted packs so a corrupt / foreign entry can never break the
+// collections bar or the scraper set after a relaunch. Drops the retired
+// "all_stores" pack, dedupes by id, clamps to the 7-pack maximum.
+function sanitizeCollections(raw: unknown): StoreCollection[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const clean: StoreCollection[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    const rec = entry as Record<string, unknown>;
+    if (typeof rec.id !== 'string' || !rec.id || typeof rec.name !== 'string' || !rec.name) continue;
+    if (rec.id === 'all_stores') continue;
+    if (seen.has(rec.id)) continue;
+    if (!Array.isArray(rec.storeIds)) continue;
+    const storeIds = (rec.storeIds as unknown[]).filter(
+      (id): id is PlatformId => typeof id === 'string' && (KNOWN_STORE_IDS as string[]).includes(id)
+    );
+    if (storeIds.length === 0) continue;
+    seen.add(rec.id);
+    clean.push({
+      id: rec.id,
+      name: rec.name,
+      emoji: typeof rec.emoji === 'string' ? rec.emoji : '📁',
+      storeIds,
+      isCustom: rec.isCustom === true ? true : undefined
+    });
+    if (clean.length >= MAX_COLLECTIONS) break;
+  }
+  return clean.length > 0 ? clean : null;
+}
 
 export const HomeScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -187,6 +226,10 @@ export const HomeScreen: React.FC = () => {
 
   const pendingStores = useRef<Set<PlatformId>>(new Set());
   const searchStartTime = useRef<number>(0);
+  // Gated until the persisted packs have been restored once, so the initial
+  // default state never overwrites the user's saved packs on relaunch.
+  const [collectionsReady, setCollectionsReady] = useState(false);
+  const collectionsScrollRef = useRef<ScrollView>(null);
 
   // Exact-term result cache: key is RAW typed query (case/space
   // normalized only). "milk" and "milk 1l" are different searches. Entries
@@ -211,6 +254,68 @@ export const HomeScreen: React.FC = () => {
     });
   }, []);
 
+  // Restore user-created store packs exactly once on launch.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [savedColsRaw, savedActiveId] = await Promise.all([
+          AsyncStorage.getItem(COLLECTIONS_STORAGE_KEY),
+          AsyncStorage.getItem(ACTIVE_COLLECTION_STORAGE_KEY)
+        ]);
+        if (cancelled) return;
+        let nextCols: StoreCollection[] | null = null;
+        if (savedColsRaw) {
+          try {
+            nextCols = sanitizeCollections(JSON.parse(savedColsRaw));
+          } catch {
+            nextCols = null;
+          }
+        }
+        if (nextCols && nextCols.length > 0) {
+          setCollections(nextCols);
+          const validActive =
+            savedActiveId && nextCols.some((c) => c.id === savedActiveId)
+              ? savedActiveId
+              : nextCols[0].id;
+          setActiveCollectionId(validActive);
+          const targetCol =
+            nextCols.find((c) => c.id === validActive) || nextCols[0];
+          setStores(
+            targetCol.storeIds.map((id) => ({ ...ALL_STORE_TEMPLATES[id] }))
+          );
+        } else if (savedActiveId) {
+          // Packs missing but an active id survived: honour it when it names
+          // a built-in pack so the previously selected tab is restored.
+          const builtin = DEFAULT_COLLECTIONS.find((c) => c.id === savedActiveId);
+          if (builtin) {
+            setActiveCollectionId(builtin.id);
+            setStores(builtin.storeIds.map((id) => ({ ...ALL_STORE_TEMPLATES[id] })));
+          }
+        }
+      } catch {
+        // Corrupt storage must never block launch; defaults stay in place.
+      } finally {
+        if (!cancelled) setCollectionsReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Persist packs and the selected pack — only after the initial restore, so
+  // the in-memory defaults can't wipe saved packs on a fresh launch.
+  useEffect(() => {
+    if (!collectionsReady) return;
+    AsyncStorage.setItem(COLLECTIONS_STORAGE_KEY, JSON.stringify(collections)).catch(() => {});
+  }, [collections, collectionsReady]);
+
+  useEffect(() => {
+    if (!collectionsReady) return;
+    AsyncStorage.setItem(ACTIVE_COLLECTION_STORAGE_KEY, activeCollectionId).catch(() => {});
+  }, [activeCollectionId, collectionsReady]);
+
   const handleSelectCollection = (colId: string) => {
     setActiveCollectionId(colId);
     const targetCol = collections.find((c) => c.id === colId) || DEFAULT_COLLECTIONS[0];
@@ -221,6 +326,7 @@ export const HomeScreen: React.FC = () => {
   };
 
   const handleOpenCollectionModal = (col: StoreCollection | null = null) => {
+    if (!col && collections.length >= MAX_COLLECTIONS) return;
     setEditingCollection(col);
     setCustomNameInput(col ? col.name : '');
     setSelectedStoreIds(col ? col.storeIds : ['amazon_tez', 'instamart', 'zepto', 'blinkit']);
@@ -236,6 +342,7 @@ export const HomeScreen: React.FC = () => {
         prev.map((c) => (c.id === editingCollection.id ? { ...c, name, storeIds: selectedStoreIds } : c))
       );
     } else {
+      if (collections.length >= MAX_COLLECTIONS) return;
       const newCol: StoreCollection = {
         id: `custom_${Date.now()}`,
         name,
@@ -243,9 +350,18 @@ export const HomeScreen: React.FC = () => {
         storeIds: selectedStoreIds,
         isCustom: true
       };
-      setCollections((prev) => [...prev, newCol]);
+      setCollections((prev) =>
+        prev.length >= MAX_COLLECTIONS ? prev : [...prev, newCol]
+      );
       setActiveCollectionId(newCol.id);
       setStores(newCol.storeIds.map((id) => ({ ...ALL_STORE_TEMPLATES[id] })));
+      // The new pack is appended at the end of a horizontal strip — scroll it
+      // into view so it doesn't look like it was never added.
+      setTimeout(() => {
+        try {
+          collectionsScrollRef.current?.scrollToEnd({ animated: true });
+        } catch {}
+      }, 100);
     }
     setCollectionModalVisible(false);
     if (activeSearch) {
@@ -254,10 +370,13 @@ export const HomeScreen: React.FC = () => {
   };
 
   const handleDeleteCollection = (colId: string) => {
-    setCollections((prev) => prev.filter((c) => c.id !== colId));
+    if (collections.length <= 1) return;
+    const remaining = collections.filter((c) => c.id !== colId);
+    setCollections(remaining);
     if (activeCollectionId === colId) {
-      setActiveCollectionId('10_min_pack');
-      setStores(DEFAULT_COLLECTIONS[0].storeIds.map((id) => ({ ...ALL_STORE_TEMPLATES[id] })));
+      const fallback = remaining[0] || DEFAULT_COLLECTIONS[0];
+      setActiveCollectionId(fallback.id);
+      setStores(fallback.storeIds.map((id) => ({ ...ALL_STORE_TEMPLATES[id] })));
     }
     setCollectionModalVisible(false);
   };
@@ -591,7 +710,12 @@ export const HomeScreen: React.FC = () => {
 
       {/* Store Collections Tab Bar */}
       <View style={styles.collectionsSection}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.collectionsRow}>
+        <ScrollView
+          ref={collectionsScrollRef}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.collectionsRow}
+        >
           {collections.map((col) => {
             const isActive = col.id === activeCollectionId;
             return (
@@ -604,24 +728,29 @@ export const HomeScreen: React.FC = () => {
                 <Text style={[styles.collectionPillText, isActive && styles.collectionPillTextActive]}>
                   {col.name}
                 </Text>
-                {col.isCustom && (
-                  <TouchableOpacity
-                    onPress={() => handleOpenCollectionModal(col)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    style={{ marginLeft: 4 }}
-                  >
-                    <Edit2 size={11} color={isActive ? '#10B981' : '#94A3B8'} />
-                  </TouchableOpacity>
-                )}
+                <TouchableOpacity
+                  onPress={() => handleOpenCollectionModal(col)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={{ marginLeft: 4 }}
+                  accessibilityLabel={`Edit ${col.name}`}
+                >
+                  <Edit2 size={11} color={isActive ? '#10B981' : '#94A3B8'} />
+                </TouchableOpacity>
               </TouchableOpacity>
             );
           })}
           <TouchableOpacity
-            style={styles.addCollectionBtn}
+            style={[
+              styles.addCollectionBtn,
+              collections.length >= MAX_COLLECTIONS && styles.addCollectionBtnDisabled
+            ]}
             onPress={() => handleOpenCollectionModal(null)}
+            disabled={collections.length >= MAX_COLLECTIONS}
           >
-            <Plus size={13} color="#10B981" />
-            <Text style={styles.addCollectionBtnText}>Pack</Text>
+            <Plus size={13} color={collections.length >= MAX_COLLECTIONS ? '#475569' : '#10B981'} />
+            <Text style={styles.addCollectionBtnText}>
+              Pack {collections.length}/{MAX_COLLECTIONS}
+            </Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
@@ -886,7 +1015,7 @@ export const HomeScreen: React.FC = () => {
               </View>
 
               <View style={styles.collectionModalFooter}>
-                {editingCollection && editingCollection.isCustom ? (
+                {editingCollection && collections.length > 1 ? (
                   <TouchableOpacity
                     style={styles.deleteModalBtn}
                     onPress={() => handleDeleteCollection(editingCollection.id)}
@@ -1281,6 +1410,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#334155',
     borderStyle: 'dashed'
+  },
+  addCollectionBtnDisabled: {
+    opacity: 0.45,
+    borderColor: '#475569'
   },
   addCollectionBtnText: {
     color: '#10B981',

@@ -25,10 +25,12 @@
 
     <!-- Store Collections Tab Bar -->
     <div class="collections-bar" id="collectionsBar">
-      <div class="collections-scroll" id="collectionsList">
-        <!-- Rendered dynamically: ⚡ 10 min pack, 📦 Big Online Pack, 🛒 All Stores, custom packs -->
+      <button id="collectionsPrevBtn" class="collections-nav-btn" title="Scroll packs left" aria-label="Scroll packs left">‹</button>
+      <div class="collections-scroll" id="collectionsList" role="tablist" aria-label="Store packs">
+        <!-- Rendered dynamically: ⚡ 10 min pack, 📦 Big Online Pack, custom packs -->
       </div>
-      <button id="addCollectionBtn" class="add-collection-btn" title="Create or manage store collections">＋ Pack</button>
+      <button id="collectionsNextBtn" class="collections-nav-btn" title="Scroll packs right" aria-label="Scroll packs right">›</button>
+      <button id="addCollectionBtn" class="add-collection-btn" title="Create store pack (max 7)">＋ Pack <span id="packCount" class="pack-count"></span></button>
     </div>
 
     <!-- Search Section -->

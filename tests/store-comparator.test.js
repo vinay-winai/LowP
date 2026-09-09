@@ -353,10 +353,9 @@ test('AmazonMainProvider & FlipkartProvider - construct valid search URLs and fo
 test('CollectionService - returns default collections and allows custom collection management', async () => {
   const collections = await CollectionService.getCollections();
   assert.ok(Array.isArray(collections));
-  assert.strictEqual(collections.length, 3);
+  assert.strictEqual(collections.length, 2);
   assert.strictEqual(collections[0].id, '10_min_pack');
   assert.strictEqual(collections[1].id, 'big_online_pack');
-  assert.strictEqual(collections[2].id, 'all_stores');
 
   const customList = [
     ...collections,
@@ -364,12 +363,34 @@ test('CollectionService - returns default collections and allows custom collecti
   ];
   await CollectionService.saveCollections(customList);
   const reloaded = await CollectionService.getCollections();
-  assert.strictEqual(reloaded.length, 4);
+  assert.strictEqual(reloaded.length, 3);
   assert.ok(reloaded.some(c => c.id === 'custom_1'));
 
   await CollectionService.setActiveCollectionId('custom_1');
   const activeId = await CollectionService.getActiveCollectionId();
   assert.strictEqual(activeId, 'custom_1');
+});
+
+test('CollectionService - drops retired all_stores pack and clamps to max 7 packs', async () => {
+  const { MAX_COLLECTIONS, normalizeStoredCollections } = require('../src/background/service-worker.js');
+  assert.strictEqual(MAX_COLLECTIONS, 7);
+
+  const legacy = [
+    { id: '10_min_pack', name: '10 min pack', emoji: '⚡', storeIds: ['zepto'] },
+    { id: 'all_stores', name: 'All Stores', emoji: '🛒', storeIds: ['zepto', 'blinkit'] }
+  ];
+  const migrated = normalizeStoredCollections(legacy);
+  assert.ok(!migrated.some(c => c.id === 'all_stores'));
+
+  const oversized = Array.from({ length: 10 }, (_, i) => ({
+    id: `custom_${i}`, name: `Pack ${i}`, emoji: '📁', storeIds: ['zepto'], isCustom: true
+  }));
+  const clamped = normalizeStoredCollections(oversized);
+  assert.strictEqual(clamped.length, MAX_COLLECTIONS);
+
+  await CollectionService.saveCollections(oversized);
+  const reloaded = await CollectionService.getCollections();
+  assert.ok(reloaded.length <= MAX_COLLECTIONS);
 });
 
 test('Amazon.in & Flipkart card extraction logic parses titles and prices accurately', () => {

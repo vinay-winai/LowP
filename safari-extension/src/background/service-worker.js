@@ -2528,6 +2528,8 @@ function getWindowBlockReason() {
 const COLLECTIONS_KEY = "lowp_collections_v1";
 const ACTIVE_COLLECTION_KEY = "lowp_active_collection_v1";
 
+const MAX_COLLECTIONS = 7;
+
 const DEFAULT_COLLECTIONS = [
   {
     id: "10_min_pack",
@@ -2540,22 +2542,43 @@ const DEFAULT_COLLECTIONS = [
     name: "Big Online Pack",
     emoji: "📦",
     storeIds: ["amazon_main", "flipkart"]
-  },
-  {
-    id: "all_stores",
-    name: "All Stores",
-    emoji: "🛒",
-    storeIds: ["amazon_tez", "instamart", "zepto", "blinkit", "amazon_main", "flipkart"]
   }
 ];
 
+// Drops the retired "all_stores" pack, dedupes by id, clamps to the maximum.
+function normalizeStoredCollections(list) {
+  if (!Array.isArray(list)) return DEFAULT_COLLECTIONS;
+  const seen = new Set();
+  const out = [];
+  for (const col of list) {
+    if (!col || typeof col.id !== "string" || typeof col.name !== "string") continue;
+    if (!Array.isArray(col.storeIds) || col.storeIds.length === 0) continue;
+    if (col.id === "all_stores") continue;
+    if (seen.has(col.id)) continue;
+    seen.add(col.id);
+    out.push(col);
+    if (out.length >= MAX_COLLECTIONS) break;
+  }
+  return out.length > 0 ? out : DEFAULT_COLLECTIONS;
+}
+
 class CollectionService {
   static async getCollections() {
+    // Prefer sync (cross-device), fall back to local mirror (side-panel /
+    // sign-out contexts where sync can be empty or stale).
     try {
       if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
         const res = await new Promise((resolve) => chrome.storage.sync.get([COLLECTIONS_KEY], resolve));
         if (res && Array.isArray(res[COLLECTIONS_KEY]) && res[COLLECTIONS_KEY].length > 0) {
-          return res[COLLECTIONS_KEY];
+          return normalizeStoredCollections(res[COLLECTIONS_KEY]);
+        }
+      }
+    } catch (e) {}
+    try {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        const res = await new Promise((resolve) => chrome.storage.local.get([COLLECTIONS_KEY], resolve));
+        if (res && Array.isArray(res[COLLECTIONS_KEY]) && res[COLLECTIONS_KEY].length > 0) {
+          return normalizeStoredCollections(res[COLLECTIONS_KEY]);
         }
       }
     } catch (e) {}
@@ -2563,18 +2586,34 @@ class CollectionService {
   }
 
   static async saveCollections(collections) {
+    const normalized = normalizeStoredCollections(collections);
+    // Mirror to both areas so a custom pack is visible/persistent no matter
+    // which area a later GET reads from. Each write is best-effort.
     try {
       if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
-        await new Promise((resolve) => chrome.storage.sync.set({ [COLLECTIONS_KEY]: collections }, resolve));
+        await new Promise((resolve) => chrome.storage.sync.set({ [COLLECTIONS_KEY]: normalized }, resolve));
       }
     } catch (e) {}
-    return collections;
+    try {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        await new Promise((resolve) => chrome.storage.local.set({ [COLLECTIONS_KEY]: normalized }, resolve));
+      }
+    } catch (e) {}
+    return normalized;
   }
 
   static async getActiveCollectionId() {
     try {
       if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
         const res = await new Promise((resolve) => chrome.storage.sync.get([ACTIVE_COLLECTION_KEY], resolve));
+        if (res && res[ACTIVE_COLLECTION_KEY]) {
+          return res[ACTIVE_COLLECTION_KEY];
+        }
+      }
+    } catch (e) {}
+    try {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        const res = await new Promise((resolve) => chrome.storage.local.get([ACTIVE_COLLECTION_KEY], resolve));
         if (res && res[ACTIVE_COLLECTION_KEY]) {
           return res[ACTIVE_COLLECTION_KEY];
         }
@@ -2587,6 +2626,11 @@ class CollectionService {
     try {
       if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
         await new Promise((resolve) => chrome.storage.sync.set({ [ACTIVE_COLLECTION_KEY]: id }, resolve));
+      }
+    } catch (e) {}
+    try {
+      if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
+        await new Promise((resolve) => chrome.storage.local.set({ [ACTIVE_COLLECTION_KEY]: id }, resolve));
       }
     } catch (e) {}
     return id;
@@ -2804,6 +2848,8 @@ if (typeof chrome !== "undefined" && chrome.alarms && chrome.alarms.onAlarm) {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     DEFAULT_COLLECTIONS,
+    MAX_COLLECTIONS,
+    normalizeStoredCollections,
     CollectionService,
     MatchingEngine,
     BaseProvider,

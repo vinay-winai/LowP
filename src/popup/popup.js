@@ -96,6 +96,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const collectionsList = document.getElementById("collectionsList");
   const addCollectionBtn = document.getElementById("addCollectionBtn");
+  const packCount = document.getElementById("packCount");
+  const collectionsPrevBtn = document.getElementById("collectionsPrevBtn");
+  const collectionsNextBtn = document.getElementById("collectionsNextBtn");
   const collectionModalBackdrop = document.getElementById("collectionModalBackdrop");
   const collectionModalTitle = document.getElementById("collectionModalTitle");
   const closeCollectionModalBtn = document.getElementById("closeCollectionModalBtn");
@@ -104,62 +107,186 @@ document.addEventListener("DOMContentLoaded", () => {
   const deleteCollectionBtn = document.getElementById("deleteCollectionBtn");
   const saveCollectionBtn = document.getElementById("saveCollectionBtn");
 
+  const MAX_COLLECTIONS = 7;
+
   let collections = [
     { id: "10_min_pack", name: "10 min pack", emoji: "⚡", storeIds: ["amazon_tez", "instamart", "zepto", "blinkit"] },
-    { id: "big_online_pack", name: "Big Online Pack", emoji: "📦", storeIds: ["amazon_main", "flipkart"] },
-    { id: "all_stores", name: "All Stores", emoji: "🛒", storeIds: ["amazon_tez", "instamart", "zepto", "blinkit", "amazon_main", "flipkart"] }
+    { id: "big_online_pack", name: "Big Online Pack", emoji: "📦", storeIds: ["amazon_main", "flipkart"] }
   ];
   let activeCollectionId = "10_min_pack";
   let editingCollectionId = null;
+  // Migrate stored packs: drop the retired "All Stores" pack, dedupe by id,
+  // clamp to the 7-pack maximum. Users can recreate an all-stores pack as a
+  // custom pack if they want it back.
+  function normalizeCollections(list) {
+    if (!Array.isArray(list)) return collections;
+    const seen = new Set();
+    const out = [];
+    for (const col of list) {
+      if (!col || typeof col.id !== "string" || typeof col.name !== "string") continue;
+      if (!Array.isArray(col.storeIds) || col.storeIds.length === 0) continue;
+      if (col.id === "all_stores") continue;
+      if (seen.has(col.id)) continue;
+      seen.add(col.id);
+      out.push(col);
+      if (out.length >= MAX_COLLECTIONS) break;
+    }
+    return out.length > 0 ? out : collections.slice(0, MAX_COLLECTIONS);
+  }
+  // Guards the initial GET_COLLECTIONS round-trip: if the user creates /
+  // edits / deletes a pack before the async response arrives, the stale
+  // response must not clobber the newer local state.
+  let collectionsDirty = false;
 
   // Load Collections
   chrome.runtime.sendMessage({ action: "GET_COLLECTIONS" }, (res) => {
+    if (chrome.runtime.lastError) {
+      renderCollections();
+      return;
+    }
     if (res && res.success) {
       if (Array.isArray(res.collections) && res.collections.length > 0) {
-        collections = res.collections;
+        if (collectionsDirty) {
+          // Merge: keep locally-created customs the server doesn't know yet.
+          const serverById = new Map(res.collections.map((c) => [c.id, c]));
+          collections.forEach((localCol) => {
+            if (!serverById.has(localCol.id)) {
+              res.collections.push(localCol);
+            } else if (localCol.isCustom) {
+              serverById.set(localCol.id, localCol);
+            }
+          });
+          collections = normalizeCollections(res.collections.map((c) => serverById.get(c.id) || c));
+          // Re-persist the merged set so other surfaces converge.
+          chrome.runtime.sendMessage({ action: "SAVE_COLLECTIONS", payload: { collections } });
+        } else {
+          collections = normalizeCollections(res.collections);
+        }
       }
       if (res.activeId) {
-        activeCollectionId = res.activeId;
+        const exists = collections.some((c) => c.id === res.activeId);
+        // Only adopt the stored active id when it still exists (or when the
+        // user hasn't already picked a newer one while loading).
+        if (exists && !collectionsDirty) {
+          activeCollectionId = res.activeId;
+        } else if (!exists && !collectionsDirty) {
+          activeCollectionId = collections[0] ? collections[0].id : "10_min_pack";
+        }
       }
       renderCollections();
     }
   });
+
+  function selectCollection(colId) {
+    if (activeCollectionId === colId) return;
+    activeCollectionId = colId;
+    collectionsDirty = true;
+    chrome.runtime.sendMessage({ action: "SET_ACTIVE_COLLECTION", payload: { collectionId: colId } });
+    renderCollections();
+    const q = searchInput.value.trim();
+    if (q) performSearch(q);
+  }
+
+  function scrollPillIntoView(pillEl) {
+    // Scroll within the strip only — scrollIntoView() would also scroll the
+    // whole side panel / page, which feels broken in the narrow panel.
+    try {
+      if (!pillEl || !collectionsList) return;
+      const listRect = collectionsList.getBoundingClientRect();
+      const pillRect = pillEl.getBoundingClientRect();
+      if (pillRect.left < listRect.left) {
+        collectionsList.scrollLeft -= (listRect.left - pillRect.left + 8);
+      } else if (pillRect.right > listRect.right) {
+        collectionsList.scrollLeft += (pillRect.right - listRect.right + 8);
+      }
+    } catch (e) {}
+  }
 
   function renderCollections() {
     if (!collectionsList) return;
     collectionsList.innerHTML = "";
 
     collections.forEach((col) => {
+      const isActive = col.id === activeCollectionId;
       const pill = document.createElement("div");
-      pill.className = `collection-pill ${col.id === activeCollectionId ? 'active' : ''}`;
+      pill.className = `collection-pill ${isActive ? 'active' : ''}`;
       pill.setAttribute("data-id", col.id);
-      
-      const emojiSpan = col.emoji ? `<span>${col.emoji}</span>` : '';
-      const nameSpan = `<span>${col.name}</span>`;
-      const editBtn = col.isCustom ? `<span class="pill-edit-icon" title="Edit collection">✎</span>` : '';
-      
-      pill.innerHTML = `${emojiSpan}${nameSpan}${editBtn}`;
+      pill.setAttribute("role", "tab");
+      pill.setAttribute("tabindex", "0");
+      pill.setAttribute("aria-selected", isActive ? "true" : "false");
+      pill.title = `${col.name} — click to compare, ✎ to edit`;
+
+      const emojiSpan = col.emoji ? `<span aria-hidden="true">${col.emoji}</span>` : '';
+      // Every pack (built-in or created) is editable — the edit affordance is
+      // a real button with a finger-sized hit area, not a tiny glyph span.
+      pill.innerHTML = `${emojiSpan}<span class="pill-name">${col.name}</span><button type="button" class="pill-edit-btn" title="Edit ${col.name}" aria-label="Edit ${col.name}">✎</button>`;
 
       pill.addEventListener("click", (e) => {
-        if (e.target.classList.contains("pill-edit-icon")) {
+        if (e.target.closest(".pill-edit-btn")) {
           e.stopPropagation();
           openCollectionModal(col);
           return;
         }
-        if (activeCollectionId !== col.id) {
-          activeCollectionId = col.id;
-          chrome.runtime.sendMessage({ action: "SET_ACTIVE_COLLECTION", payload: { collectionId: col.id } });
-          renderCollections();
-          const q = searchInput.value.trim();
-          if (q) performSearch(q);
+        selectCollection(col.id);
+      });
+      pill.addEventListener("keydown", (e) => {
+        if (e.target.closest && e.target.closest(".pill-edit-btn")) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          selectCollection(col.id);
         }
       });
+      const editBtn = pill.querySelector(".pill-edit-btn");
+      if (editBtn) {
+        editBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openCollectionModal(col);
+        });
+      }
 
       collectionsList.appendChild(pill);
     });
+
+    // Pack counter + limit affordance on the + Pack button.
+    if (packCount) {
+      packCount.textContent = `${collections.length}/${MAX_COLLECTIONS}`;
+    }
+    if (addCollectionBtn) {
+      const atMax = collections.length >= MAX_COLLECTIONS;
+      addCollectionBtn.disabled = atMax;
+      addCollectionBtn.classList.toggle("disabled", atMax);
+      addCollectionBtn.title = atMax
+        ? `Maximum ${MAX_COLLECTIONS} packs reached — edit or delete a pack to add another`
+        : `Create store pack (${collections.length}/${MAX_COLLECTIONS})`;
+    }
+
+    // Keep the active (often newly-created, appended at the end) pill visible.
+    try {
+      const activeEl = collectionsList.querySelector(`[data-id="${CSS.escape(activeCollectionId)}"]`);
+      if (activeEl) scrollPillIntoView(activeEl);
+    } catch (e) {}
   }
 
+  if (collectionsPrevBtn) {
+    collectionsPrevBtn.addEventListener("click", () => {
+      if (collectionsList) collectionsList.scrollBy({ left: -160, behavior: "smooth" });
+    });
+  }
+  if (collectionsNextBtn) {
+    collectionsNextBtn.addEventListener("click", () => {
+      if (collectionsList) collectionsList.scrollBy({ left: 160, behavior: "smooth" });
+    });
+  }
+
+  // Paint defaults immediately so the bar is never empty while storage loads.
+  renderCollections();
+
   function openCollectionModal(col = null) {
+    // Creating a new pack past the maximum is blocked at the button and here.
+    if (!col && collections.length >= MAX_COLLECTIONS) {
+      alert(`Maximum ${MAX_COLLECTIONS} packs reached. Edit or delete a pack to add another.`);
+      return;
+    }
     editingCollectionId = col ? col.id : null;
     if (collectionModalTitle) {
       collectionModalTitle.textContent = col ? "Edit Collection" : "New Collection";
@@ -168,7 +295,10 @@ document.addEventListener("DOMContentLoaded", () => {
       collectionNameInput.value = col ? col.name : "";
     }
     if (deleteCollectionBtn) {
-      deleteCollectionBtn.style.display = (col && col.isCustom) ? "block" : "none";
+      // Every pack is deletable (built-ins included) except the last one —
+      // deleting the final pack would leave search with no store set.
+      const canDelete = !!col && collections.length > 1;
+      deleteCollectionBtn.style.display = canDelete ? "block" : "none";
     }
 
     // Populate store checkboxes
@@ -232,6 +362,10 @@ document.addEventListener("DOMContentLoaded", () => {
           collections[idx].storeIds = selectedIds;
         }
       } else {
+        if (collections.length >= MAX_COLLECTIONS) {
+          alert(`Maximum ${MAX_COLLECTIONS} packs reached. Edit or delete a pack to add another.`);
+          return;
+        }
         const newId = `custom_${Date.now()}`;
         collections.push({
           id: newId,
@@ -244,6 +378,7 @@ document.addEventListener("DOMContentLoaded", () => {
         chrome.runtime.sendMessage({ action: "SET_ACTIVE_COLLECTION", payload: { collectionId: newId } });
       }
 
+      collectionsDirty = true;
       chrome.runtime.sendMessage({ action: "SAVE_COLLECTIONS", payload: { collections } });
       renderCollections();
       closeCollectionModal();
@@ -256,11 +391,16 @@ document.addEventListener("DOMContentLoaded", () => {
   if (deleteCollectionBtn) {
     deleteCollectionBtn.addEventListener("click", () => {
       if (!editingCollectionId) return;
+      if (collections.length <= 1) {
+        alert("You need at least one pack. Create another pack before deleting this one.");
+        return;
+      }
       collections = collections.filter(c => c.id !== editingCollectionId);
       if (activeCollectionId === editingCollectionId) {
-        activeCollectionId = "10_min_pack";
+        activeCollectionId = collections[0] ? collections[0].id : "10_min_pack";
         chrome.runtime.sendMessage({ action: "SET_ACTIVE_COLLECTION", payload: { collectionId: activeCollectionId } });
       }
+      collectionsDirty = true;
       chrome.runtime.sendMessage({ action: "SAVE_COLLECTIONS", payload: { collections } });
       renderCollections();
       closeCollectionModal();
