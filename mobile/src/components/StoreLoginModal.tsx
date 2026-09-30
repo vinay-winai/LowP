@@ -11,12 +11,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { PlatformId } from '../types';
 import { X, RefreshCw, ArrowLeft, ShieldCheck } from 'lucide-react-native';
+import { StoreSession, SESSION_LABELS, isStoreSessionUrl, readSessionMessage, sessionObserverScript } from '../core/StoreSession';
 
 interface StoreLoginModalProps {
   visible: boolean;
   platformId: PlatformId | null;
   onClose: () => void;
-  onLoginComplete: (platformId: PlatformId) => void;
+  session: StoreSession;
+  onSessionChange: (platformId: PlatformId, session: StoreSession) => void;
 }
 
 const STORE_CONFIG: Record<
@@ -59,13 +61,17 @@ export const StoreLoginModal: React.FC<StoreLoginModalProps> = ({
   visible,
   platformId,
   onClose,
-  onLoginComplete
+  session,
+  onSessionChange
 }) => {
   const [loading, setLoading] = useState(false);
   const [canGoBack, setCanGoBack] = useState(false);
   const webViewRef = useRef<WebView>(null);
+  const navigationToken = useRef('');
+  const navigationUrl = useRef('');
+  const observedToken = useRef('');
 
-  if (!platformId || !STORE_CONFIG[platformId]) return null;
+  if (!visible || !platformId || !STORE_CONFIG[platformId]) return null;
 
   const config = STORE_CONFIG[platformId];
 
@@ -102,7 +108,6 @@ export const StoreLoginModal: React.FC<StoreLoginModalProps> = ({
             <TouchableOpacity
               style={styles.doneButton}
               onPress={() => {
-                onLoginComplete(platformId);
                 onClose();
               }}
             >
@@ -121,6 +126,12 @@ export const StoreLoginModal: React.FC<StoreLoginModalProps> = ({
           <Text style={styles.securityText}>
             🔒 Log in or set your location directly in the store. Your session and address are saved in your device storage.
           </Text>
+          <Text style={styles.sessionText} accessibilityLiveRegion="polite">
+            {SESSION_LABELS[session.status]}
+            {session.status === 'unknown' ? platformId === 'amazon_tez'
+              ? ' · Tap Deliver to to check sign-in status.'
+              : ' · Open Account to check sign-in status.' : ''}
+          </Text>
         </View>
 
         {/* Loading Progress Bar */}
@@ -129,6 +140,7 @@ export const StoreLoginModal: React.FC<StoreLoginModalProps> = ({
         {/* Interactive Web View */}
         <View style={styles.webViewContainer}>
           <WebView
+            key={platformId}
             ref={webViewRef}
             source={{ uri: config.url }}
             style={styles.webView}
@@ -142,10 +154,45 @@ export const StoreLoginModal: React.FC<StoreLoginModalProps> = ({
             onNavigationStateChange={(navState) => {
               setCanGoBack(navState.canGoBack);
               setLoading(navState.loading);
+              if (!navState.loading && isStoreSessionUrl(platformId, navState.url)) {
+                webViewRef.current?.injectJavaScript(sessionObserverScript(platformId, navigationToken.current));
+              }
             }}
-            onLoadStart={() => setLoading(true)}
-            onLoadEnd={() => setLoading(false)}
-            onError={() => setLoading(false)}
+            onLoadStart={(event) => {
+              navigationToken.current = `${platformId}:${Date.now()}:${Math.random()}`;
+              navigationUrl.current = event.nativeEvent.url;
+              observedToken.current = '';
+              setLoading(true);
+              onSessionChange(platformId, { status: 'checking', evidence: 'none', checkedAt: Date.now() });
+              // Android emits load-start for some SPA transitions without a matching
+              // load-end. Refresh the observer in the surviving document as well.
+              if (isStoreSessionUrl(platformId, event.nativeEvent.url)) {
+                webViewRef.current?.injectJavaScript(sessionObserverScript(platformId, navigationToken.current));
+              }
+            }}
+            onLoadEnd={(event) => {
+              setLoading(false);
+              if (event.nativeEvent.url !== navigationUrl.current) return;
+              if (observedToken.current !== navigationToken.current) {
+                onSessionChange(platformId, { status: 'unknown', evidence: 'none', checkedAt: Date.now() });
+              }
+              if (isStoreSessionUrl(platformId, event.nativeEvent.url)) {
+                webViewRef.current?.injectJavaScript(sessionObserverScript(platformId, navigationToken.current));
+              }
+            }}
+            onMessage={(event) => {
+              const observation = readSessionMessage(event.nativeEvent.data, platformId,
+                navigationToken.current, event.nativeEvent.url);
+              if (observation) {
+                observedToken.current = navigationToken.current;
+                onSessionChange(platformId, observation);
+              }
+            }}
+            onError={() => {
+              setLoading(false);
+              navigationToken.current = '';
+              onSessionChange(platformId, { status: 'unknown', evidence: 'none', checkedAt: Date.now() });
+            }}
           />
         </View>
       </SafeAreaView>
@@ -226,6 +273,12 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     fontSize: 12,
     lineHeight: 16
+  },
+  sessionText: {
+    color: '#CBD5E1',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 6
   },
   progressBar: {
     height: 2,

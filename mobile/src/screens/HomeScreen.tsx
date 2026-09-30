@@ -18,6 +18,7 @@ import { BackgroundScrapers } from '../components/BackgroundScrapers';
 import { StoreLoginModal } from '../components/StoreLoginModal';
 import { StrategyMatrixModal } from '../components/StrategyMatrixModal';
 import { MatchingEngine } from '../core/MatchingEngine';
+import { StoreSession, currentSession, updateStoreSession, SESSION_LABELS } from '../core/StoreSession';
 import {
   PlatformId,
   StoreCollection,
@@ -220,6 +221,8 @@ export const HomeScreen: React.FC = () => {
   const [searchDuration, setSearchDuration] = useState<number | null>(null);
   const [loginModalVisible, setLoginModalVisible] = useState(false);
   const [selectedLoginStore, setSelectedLoginStore] = useState<PlatformId | null>(null);
+  const [storeSessions, setStoreSessions] = useState<Partial<Record<PlatformId, StoreSession>>>({});
+  const [, refreshSessionAge] = useState(0);
   const [matrixRows, setMatrixRows] = useState<StrategyMatrixRow[]>([]);
   const [matrixModalVisible, setMatrixModalVisible] = useState(false);
   const [addedToast, setAddedToast] = useState(false);
@@ -238,6 +241,33 @@ export const HomeScreen: React.FC = () => {
   const activeCacheKeyRef = useRef<string | null>(null);
   const latestStoresRef = useRef<StoreResult[] | null>(null);
   const arrivalSeqRef = useRef(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => refreshSessionAge((value) => value + 1), 15000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleSessionChange = (platformId: PlatformId, observation: StoreSession) => {
+    setStoreSessions((previous) => updateStoreSession(previous, platformId, observation));
+  };
+
+  const handleCloseStore = () => {
+    setLoginModalVisible(false);
+    if (!selectedLoginStore) return;
+    setStoreSessions((previous) => {
+      const last = previous[selectedLoginStore];
+      return last?.status === 'checking'
+        ? updateStoreSession(previous, selectedLoginStore, { status: 'unknown', evidence: 'none', checkedAt: 0 })
+        : previous;
+    });
+    // Login and delivery-address changes may change the next search's prices.
+    // Closing a store does not itself start a search or confirm authentication.
+    const changedStores = selectedLoginStore === 'amazon_main' || selectedLoginStore === 'amazon_tez'
+      ? ['amazon_main', 'amazon_tez'] : [selectedLoginStore];
+    for (const key of searchCacheRef.current.keys()) {
+      if (changedStores.some((id) => key.split('#').pop()?.split(',').includes(id))) searchCacheRef.current.delete(key);
+    }
+  };
 
   useEffect(() => {
 
@@ -761,17 +791,24 @@ export const HomeScreen: React.FC = () => {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storesRow}>
           {Object.keys(ALL_STORE_TEMPLATES).map((key) => {
             const s = ALL_STORE_TEMPLATES[key as PlatformId];
+            const session = currentSession(storeSessions[s.platformId]);
+            const statusColor = session.status === 'signed_in' ? '#6EE7B7'
+              : session.status === 'signed_out' ? '#FCD34D' : '#CBD5E1';
             return (
               <TouchableOpacity
                 key={s.platformId}
                 style={[styles.storePill, { borderColor: s.logoColor }]}
+                accessibilityLabel={`${s.platformName}, ${SESSION_LABELS[session.status]}. Open store to check account or delivery location.`}
                 onPress={() => {
                   setSelectedLoginStore(s.platformId);
                   setLoginModalVisible(true);
                 }}
               >
-                <View style={[styles.storeDot, { backgroundColor: s.logoColor }]} />
-                <Text style={styles.storePillText}>{s.platformName}</Text>
+                <View style={[styles.storeDot, { backgroundColor: statusColor }]} />
+                <View>
+                  <Text style={styles.storePillText}>{s.platformName}</Text>
+                  <Text style={[styles.storeSessionText, { color: statusColor }]}>{SESSION_LABELS[session.status]}</Text>
+                </View>
               </TouchableOpacity>
             );
           })}
@@ -947,10 +984,9 @@ export const HomeScreen: React.FC = () => {
       <StoreLoginModal
         visible={loginModalVisible}
         platformId={selectedLoginStore}
-        onClose={() => setLoginModalVisible(false)}
-        onLoginComplete={() => {
-          if (activeSearch) handleTriggerSearch(activeSearch);
-        }}
+        session={currentSession(selectedLoginStore ? storeSessions[selectedLoginStore] : undefined)}
+        onClose={handleCloseStore}
+        onSessionChange={handleSessionChange}
       />
 
       {/* Custom Collection Builder Modal */}
@@ -1138,6 +1174,7 @@ const styles = StyleSheet.create({
     gap: 8
   },
   storePill: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -1156,6 +1193,10 @@ const styles = StyleSheet.create({
     color: '#F8FAFC',
     fontSize: 11,
     fontWeight: '600'
+  },
+  storeSessionText: {
+    fontSize: 10,
+    marginTop: 2
   },
   searchSection: {
     paddingHorizontal: 16,
