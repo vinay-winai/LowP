@@ -1,17 +1,15 @@
-export function generateScraperScript(searchQuery: string, platformId: string): string {
+export function generateScraperScript(searchQuery: string, platformId: string, searchId = 0, diagnostics = false): string {
   const sanitizedQuery = JSON.stringify(searchQuery);
   const sanitizedPlatformId = JSON.stringify(platformId);
 
   return `
 (function() {
-  // A navigation should have exactly one extraction loop. Guard against a
-  // duplicate native injection before it starts another full DOM scan.
-  if (window.__lowpScraperTimer) {
-    clearInterval(window.__lowpScraperTimer);
-    window.__lowpScraperTimer = null;
-  }
   const searchQuery = ${sanitizedQuery};
   const targetPlatformId = ${sanitizedPlatformId};
+  const searchId = ${JSON.stringify(searchId)};
+  const requestKey = JSON.stringify([targetPlatformId, searchQuery, searchId]);
+  if (window.__lowpScraper && window.__lowpScraper.key === requestKey) return;
+  if (window.__lowpScraper) window.__lowpScraper.dispose();
 
   function titleKey(str) {
     // Drop parenthetical alt names so "Potato (Aalugadda)" and "Potato"
@@ -36,14 +34,16 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     });
   }
 
-  function isBadTitle(str) {
+  function isBadTitle(str, maxLength = 150) {
     if (!str || typeof str !== "string") return true;
     const s = str.trim().toLowerCase();
-    if (s.length < 2 || s.length > 150) return true;
+    if (s.length < 2 || s.length > maxLength) return true;
 
     // Reject numeric / unit fragments ("/100 ml", "466", "% off") that the
     // generic text fallback sometimes grabs instead of a real product name.
     if ((s.match(/[a-z]/g) || []).length < 3) return true;
+    if (/^[\\d.\\s]+out of 5 stars\\b/.test(s)) return true;
+    if (/^m\\.?r\\.?p\\.?:?$/.test(s)) return true;
 
     // Reject UI glyph names picked up as text ("down-chevron-icon", svg ids).
     if (/(^|[\\s-])(icon|chevron|arrow|sprite|svg)([\\s-]|$)|-icon$/.test(s)) return true;
@@ -182,6 +182,14 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     return text;
   }
 
+  function extractQuantity(text) {
+    if (typeof text !== 'string') return '';
+    const clean = text.replace(/\\u00a0/g, ' ');
+    const measure = clean.match(/(?:\\b\\d+\\s*[x×]\\s*)?\\b\\d+(?:\\.\\d+)?\\s*(?:kgs?|kilograms?|grams?|gms?|g|ml|millilitres?|milliliters?|litres?|liters?|ltrs?|l)\\b(?:\\s*[x×]\\s*\\d+\\b|\\s*\\(?pack\\s+of\\s+\\d+\\)?)?/i);
+    const count = clean.match(/\\b\\d+\\s*(?:pcs?|pieces?|units?|packs?)\\b/i);
+    return (measure || count) ? (measure || count)[0].replace(/\\s+/g, ' ').trim() : '';
+  }
+
   function extractFromCard(cardNode, platformId) {
     if (!cardNode) return null;
     if (cardNode.closest && cardNode.closest('[class*="filter"], [class*="suggestion"], [class*="chip"], [class*="pill"], [class*="breadcrumb"], [class*="header"], [class*="footer"], [class*="nav"], [class*="search-heading"], [class*="result-info"], [class*="s-breadcrumb"], header, footer, nav')) {
@@ -250,13 +258,14 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     const image = imgEl ? (imgEl.src || (imgEl.getAttribute && imgEl.getAttribute('src')) || "assets/icon48.png") : "assets/icon48.png";
 
     let title = "";
+    const titleLimit = platformId === 'amazon_main' ? 500 : 150;
 
     // 2. Title extraction:
     // 2a. Full aria-label on h2 (Amazon full product title)
     const ariaHeading = cardNode.querySelector ? cardNode.querySelector('h2[aria-label]') : null;
     if (ariaHeading && ariaHeading.getAttribute('aria-label')) {
       const cleanAria = cleanTitle(ariaHeading.getAttribute('aria-label'));
-      if (cleanAria && cleanAria.length >= 6 && !isBadTitle(cleanAria)) {
+      if (cleanAria && cleanAria.length >= 6 && !isBadTitle(cleanAria, titleLimit)) {
         title = cleanAria;
       }
     }
@@ -267,7 +276,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       if (titleEl) {
         const rawTxt = (titleEl.getAttribute && titleEl.getAttribute('title')) || titleEl.textContent;
         const txt = cleanTitle(rawTxt);
-        if (txt && txt.length >= 3 && !isBadTitle(txt)) {
+        if (txt && txt.length >= 3 && !isBadTitle(txt, titleLimit)) {
           title = txt;
         }
       }
@@ -282,12 +291,12 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
 
     if (!title && imgEl && (imgEl.alt || (imgEl.getAttribute && imgEl.getAttribute('alt')))) {
       const altTxt = cleanTitle(imgEl.alt || imgEl.getAttribute('alt'));
-      if (altTxt && altTxt.length >= 3 && !isBadTitle(altTxt)) {
+      if (altTxt && altTxt.length >= 3 && !isBadTitle(altTxt, titleLimit)) {
         title = altTxt;
       }
     }
 
-    if (!title) {
+    if (!title && platformId !== 'amazon_main') {
       const textElements = cardNode.querySelectorAll ? cardNode.querySelectorAll('p, span, div, a') : [];
       for (const el of textElements) {
         const txt = cleanTitle(el.textContent);
@@ -298,13 +307,13 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       }
     }
 
-    if (!title || isBadTitle(title)) {
+    if (!title || isBadTitle(title, titleLimit)) {
       (window.__lowpFailLog = window.__lowpFailLog || []).push({ f: "title", txt: (title || cardNode.textContent || "").slice(0, 60) });
       return null;
     }
 
-    const qtyEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="PackSize"], [data-testid*="quantity"], [data-testid*="weight"], [data-testid*="item_quantity"], [class*="PackSize"], [class*="weight"], [class*="quantity"], span[class*="pack"], span[class*="unit"]') : null;
-    const quantity = qtyEl ? qtyEl.textContent.trim() : "1 unit";
+    const qtyEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="PackSize"], [data-testid*="quantity"], [data-testid*="weight"], [data-testid*="item_quantity"], [class*="PackSize"], [class*="_3wq_F"], [class*="tw-text-200"][class*="tw-font-medium"][class*="tw-line-clamp-1"], [class*="weight"], [class*="quantity"], span[class*="pack"], span[class*="unit"]') : null;
+    const quantity = extractQuantity((qtyEl ? qtyEl.textContent : "") + " " + spacedCardText + " " + title);
 
     let mrp = price;
     const mrpEl = cardNode.querySelector ? cardNode.querySelector('span.a-price.a-text-price span.a-offscreen, span[data-a-strike="true"], span.a-text-price, div.kRYCnD, div.yRaY8j, div._3I9_wc, [class*="kRYCnD"], [class*="yRaY8j"], [class*="_3I9_wc"], s, del, strike, [class*="strike"], [class*="slashed"]') : null;
@@ -350,12 +359,13 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
   }
 
   function runExtraction() {
+    let allMatchedCardsFound = false;
     const candidates = [];
 
     // 1. Next.js Data Check
     try {
       const nextEl = document.getElementById('__NEXT_DATA__');
-      if (nextEl && nextEl.textContent) {
+      if (!window.__lowpSkipInitialSearchData && nextEl && nextEl.textContent) {
         const nextJson = JSON.parse(nextEl.textContent);
         function walk(o) {
           if (!o || typeof o !== 'object') return;
@@ -373,7 +383,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
                   price,
                   mrp: Math.max(mrp, price),
                   brand: targetPlatformId === "instamart" ? "Swiggy Instamart" : (targetPlatformId === "zepto" ? "Zepto" : (targetPlatformId === "blinkit" ? "Blinkit" : (targetPlatformId === "amazon_main" ? "Amazon.in" : (targetPlatformId === "flipkart" ? "Flipkart" : "Amazon Now (Tez)")))),
-                  quantity: o.quantity || o.pack_size || o.weight || "1 unit",
+                  quantity: extractQuantity(String(o.quantity || o.pack_size || o.weight || "") + " " + (o.name || o.title || "")),
                   image: o.image || o.imageUrl || (o.imageId ? "https://media-assets.swiggy.com/swiggy/image/upload/fl_lossy,f_auto,q_auto,w_252,h_252/" + o.imageId : "assets/icon48.png"),
                   productUrl: window.location.href,
                   platformId: targetPlatformId
@@ -455,6 +465,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
         return false;
       });
       const withImg = cards.filter((c) => c.querySelector("img"));
+      allMatchedCardsFound = cards.length > 0;
       if (withImg.length >= 3) cards = withImg;
       cards = cards.filter((c, i) => {
         if (c.hasAttribute && (c.hasAttribute('data-asin') || c.getAttribute('data-component-type') === 's-search-result')) {
@@ -479,6 +490,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     // Sponsored badges often sit OUTSIDE the innermost product node, so mark
     // items by geometry: badge rect -> nearest product card below it.
     try {
+      if (candidates.some((c) => c.__el)) {
       const sponsoredRoots = [];
       const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
       let tn;
@@ -511,14 +523,15 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
           break;
         }
       }
+      }
     } catch (e) {}
 
     // 3. Proximity Fallback — the most expensive walk. Skip it while the
     // document is still a shell, cap the scan, and use targeted nodes for
     // stores with stable price containers (Tez keeps the full fallback).
-    if (candidates.length === 0) {
+    if (candidates.length === 0 && targetPlatformId !== 'amazon_main') {
       const docReady = document.readyState === "complete";
-      if (docReady || cards.length > 0 || targetPlatformId === "amazon_tez") {
+      if (docReady || allMatchedCardsFound || targetPlatformId === "amazon_tez") {
         const allEls = targetPlatformId === "amazon_tez"
           ? document.querySelectorAll('*')
           : document.querySelectorAll('[data-testid*="price" i], [class*="price" i], [class*="amount" i], [class*="cost" i], span');
@@ -621,23 +634,17 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     return { best: topCandidates[0] || null, candidates: topCandidates, found: candidates.length };
   }
 
-  // Stale-page guard: a reused WebView mid-navigation must never answer with
-  // the previous query's products. Results are accepted when the live
-  // document URL contains any significant search token.
-  const queryTokens = String(searchQuery || "").toLowerCase().replace(/[^a-z0-9\\s]/g, " ").split(/\\s+/).filter((t) => t.length >= 2);
+  // Reused WebViews must match the entire requested query before scanning.
   const hrefOk = () => {
     try {
-      let href = (window.location.href || "").toLowerCase();
-      try { href += " " + decodeURIComponent(href).replace(/\\+/g, " "); } catch (e) {}
-      if (href.includes("/dp/") || href.includes("/product/") || href.includes("/pn/") || href.includes("/item/") || href.includes("/prid/") || href.includes("/s?") || href.includes("/s/") || href.includes("/b?") || href.includes("/b/") || href.includes("/search")) {
-        return true;
-      }
-      if (queryTokens.length > 0) {
-        return queryTokens.some((t) => href.includes(t));
-      }
-      return true;
+      const url = new URL(window.location.href);
+      const parameter = targetPlatformId === 'amazon_tez' ? 'searchKeyword'
+        : targetPlatformId === 'amazon_main' ? 'k'
+        : targetPlatformId === 'zepto' || targetPlatformId === 'instamart' ? 'query' : 'q';
+      const normalize = value => String(value || '').trim().toLowerCase().replace(/\\s+/g, ' ');
+      return normalize(url.searchParams.get(parameter)) === normalize(searchQuery);
     } catch (e) {
-      return true;
+      return false;
     }
   };
 
@@ -680,6 +687,31 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
   // 3. Fast adaptive polling (150ms) ensures background/timer throttled
   //    WebViews still settle within ~1.5s instead of paying 500ms dead waits.
   let attempts = 0;
+  const startedAt = Date.now();
+  const measureWork = ${diagnostics};
+  const workClock = () => typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+  const scriptStartSinceNavigationMs = measureWork ? workClock() : null;
+  let extractionWorkMs = 0;
+  let extractionMaxMs = 0;
+  let firstCandidateMs = null;
+  let scanCount = 0;
+  let longTaskMs = 0;
+  let longTaskCount = 0;
+  let longTaskMaxMs = 0;
+  let workObserver = null;
+  function countLongTasks(entries) {
+    entries.forEach(entry => {
+      longTaskMs += entry.duration;
+      longTaskMaxMs = Math.max(longTaskMaxMs, entry.duration);
+      longTaskCount++;
+    });
+  }
+  if (measureWork && typeof PerformanceObserver !== 'undefined') {
+    try {
+      workObserver = new PerformanceObserver(list => countLongTasks(list.getEntries()));
+      workObserver.observe({ entryTypes: ['longtask'] });
+    } catch (e) {}
+  }
   let bestRes = null;
   let lastSig = null;
   let lastChangeAt = Date.now();
@@ -688,12 +720,35 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
   let mutationObserver = null;
   let debounceTimer = null;
   let lastAttemptTime = 0;
+  let lastEmptyCheckTime = 0;
+  let loginGateSince = null;
+  let lastReason = 'running';
+
+  function dispose() {
+    finalized = true;
+    if (workObserver) {
+      countLongTasks(workObserver.takeRecords());
+      workObserver.disconnect();
+      workObserver = null;
+    }
+    if (pollInterval) clearInterval(pollInterval);
+    if (mutationObserver) mutationObserver.disconnect();
+    if (debounceTimer) clearTimeout(debounceTimer);
+    document.removeEventListener("DOMContentLoaded", attemptExtraction);
+    document.removeEventListener("readystatechange", attemptExtraction);
+    window.removeEventListener("pagehide", dispose);
+  }
+  window.__lowpScraper = { key: requestKey, dispose,
+    state: () => ({ finalized, attempts, elapsedMs: Date.now() - startedAt, reason: lastReason,
+      extractionWorkMs, extractionMaxMs, scanCount, firstCandidateMs }) };
+  window.addEventListener("pagehide", dispose, { once: true });
 
   const sigOf = (res) => ((res && res.candidates) || []).map((c) => c.title + "@" + c.price).join("|");
 
   function sendResult(success, data, candidates, debug) {
     if (finalized) return;
-    finalized = true;
+    lastReason = success ? 'success' : (debug && debug.reason) || 'empty';
+    dispose();
     if (pollInterval) {
       clearInterval(pollInterval);
       pollInterval = null;
@@ -711,9 +766,23 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       debounceTimer = null;
     }
     if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+      let timing;
+      if (measureWork) {
+        const nav = typeof performance !== 'undefined' && performance.getEntriesByType
+          ? performance.getEntriesByType('navigation')[0] : null;
+        timing = { scriptElapsedMs: Date.now() - startedAt, extractionWorkMs: Math.round(extractionWorkMs),
+          extractionMaxMs: Math.round(extractionMaxMs), scanCount, firstCandidateMs,
+          scriptStartSinceNavigationMs: scriptStartSinceNavigationMs === null ? null : Math.round(scriptStartSinceNavigationMs),
+          longTaskMs: Math.round(longTaskMs), longTaskCount, longTaskMaxMs: Math.round(longTaskMaxMs),
+          responseEndMs: nav ? Math.round(nav.responseEnd) : null,
+          domInteractiveMs: nav ? Math.round(nav.domInteractive) : null,
+          domContentLoadedMs: nav ? Math.round(nav.domContentLoadedEventEnd) : null,
+          readyState: document.readyState };
+      }
       window.ReactNativeWebView.postMessage(JSON.stringify({
         type: 'SCRAPE_RESULT',
         platformId: targetPlatformId,
+        searchId,
         success,
         data: data || null,
         candidates: candidates || [],
@@ -721,6 +790,7 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
           url: window.location.href,
           title: document.title,
           attempts: attempts,
+          timing,
           domNodes: document.getElementsByTagName ? document.getElementsByTagName("*").length : 0
         }, debug || {})
       }));
@@ -733,10 +803,19 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     if (now - lastAttemptTime < 80) return;
     lastAttemptTime = now;
     attempts++;
+    if (!hrefOk()) {
+      if (now - startedAt >= 8500) sendResult(false, null, [], { reason: 'unexpected_search_url' });
+      return;
+    }
 
+    const workStart = measureWork ? workClock() : 0;
     let res = runExtraction();
-    if (res.best && !hrefOk()) {
-      res = { best: null, candidates: [], found: 0 };
+    if (measureWork) {
+      const workMs = workClock() - workStart;
+      extractionWorkMs += workMs;
+      extractionMaxMs = Math.max(extractionMaxMs, workMs);
+      scanCount++;
+      if (res.best && firstCandidateMs === null) firstCandidateMs = Date.now() - startedAt;
     }
 
     // Empty-state early exit: when the page shows sorry / couldn't find /
@@ -744,8 +823,28 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     // at once instead of waiting out the timeout. No readyState gate: the
     // store paints its empty copy in ~1s while readyState can still lag, and
     // visibleBodyText() already excludes script/style bundles.
-    if (!res.best && attempts >= 8) {
+    if (!res.best && attempts >= 8 && now - lastEmptyCheckTime >= 600) {
+      lastEmptyCheckTime = now;
       try {
+        // Only explicit search-blocking copy, never a header Login button.
+        // Require it to persist across checks so hydration placeholders do not
+        // prematurely end an otherwise valid product search.
+        const loginGate = (targetPlatformId === 'instamart' || targetPlatformId === 'zepto') &&
+          Array.from(document.querySelectorAll('h1,h2,h3,p,span,div')).some(el => {
+            const text = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+            if(text.length > 250 || !/log ?in to continue (?:shopping|searching)|please log ?in to continue searching/i.test(text)) return false;
+            if(el.closest('[hidden], [inert]')) return false;
+            for(let parent = el; parent; parent = parent.parentElement) {
+              const style = getComputedStyle(parent);
+              if(style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
+            }
+            return Array.from(el.getClientRects()).some(rect => rect.width > 0 && rect.height > 0);
+          });
+        if(loginGate) {
+          if(loginGateSince === null) loginGateSince = now;
+          else if(now - loginGateSince >= 600) {sendResult(false, null, [], {reason:'login_required'}); return;}
+          return;
+        } else loginGateSince = null;
         const bodyText = visibleBodyText();
         const hasExplicitNoResults = /(?:no\\s+results\\s+for\\s+[^.]*check\\s+your\\s+spelling|no\\s+results\\s+found\\s+for|we\\s+couldn't\\s+find\\s+any\\s+results|could\\s+not\\s+find\\s+any\\s+results|did\\s+not\\s+match\\s+any\\s+products|no\\s+products\\s+found\\s+for|0\\s+items\\s+found\\s+for|nothing\\s+here\\s+yet|sorry|couldn'?t\\s+find|could\\s+not\\s+find)/i.test(bodyText) ||
           !!(document.querySelector && document.querySelector('.s-no-outline, [data-component-type="s-no-results-found"], [data-testid="no-results-container"], [class*="noResults"], [class*="EmptyState"]'));
@@ -754,12 +853,6 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
           return;
         }
       } catch (e) {}
-    }
-
-    // Second-tier give-up: page fully loaded, 45+ attempts (~6s+), still zero candidates
-    if (!res.best && attempts >= 45 && document.readyState === "complete") {
-      sendResult(false, null, [], { reason: 'no_results_timeout' });
-      return;
     }
 
     if (res.best) {
@@ -791,16 +884,17 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
       }
     }
 
-    if (attempts >= 40) { // ~6-7s limit
+    if (now - startedAt >= 8500) {
       sendResult(!!(bestRes && bestRes.best), (bestRes && bestRes.best) || null, (bestRes && bestRes.candidates) || [], {
         failures: (window.__lowpFailLog || []).slice(0, 12),
-        reason: 'max_attempts'
+        reason: 'extraction_timeout'
       });
     }
   }
 
   // 1. Immediate execution
   attemptExtraction();
+  if (finalized) return;
 
   // 2. Reactive MutationObserver
   try {
@@ -808,8 +902,9 @@ export function generateScraperScript(searchQuery: string, platformId: string): 
     if (rootNode && typeof MutationObserver !== "undefined") {
       mutationObserver = new MutationObserver(() => {
         if (finalized) return;
-        if (debounceTimer) clearTimeout(debounceTimer);
+        if (debounceTimer) return;
         debounceTimer = setTimeout(() => {
+          debounceTimer = null;
           attemptExtraction();
         }, 60);
       });

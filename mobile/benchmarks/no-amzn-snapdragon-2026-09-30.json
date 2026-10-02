@@ -1,0 +1,160 @@
+{
+  "date": "2026-09-30",
+  "soc": "Snapdragon 8s Gen 3",
+  "model": "I2221",
+  "android": "16",
+  "buildMode": "Expo Go development via USB reverse 8082",
+  "timingCapture": "App UI readouts, rounded to 0.01s",
+  "pack": "No amzn",
+  "stores": [
+    "instamart",
+    "zepto",
+    "blinkit",
+    "amazon_main",
+    "flipkart"
+  ],
+  "protocol": "Five paired rounds: restart app, select No amzn, Paneer 200g, then Amul Butter 500g. Wait 12s after submission before UI capture. Sessions/website caches retained; no app-data clearing or exact-query cache hits. First four pairs use rounded UI totals; fifth uses restored Metro logs. Invalid clipped per-store UI timings were discarded. Round 5 had a longer gap between queries while capture was repaired.",
+  "sourceHashes": [
+    {
+      "path": "mobile/src/components/BackgroundScrapers.tsx",
+      "sha256": "FFEA48E83BF3AAC78A5CD1EF564EC957EB8D11284CB2CBDEF451BB40FCB28E9E"
+    },
+    {
+      "path": "mobile/src/core/ScraperScript.ts",
+      "sha256": "10FD9AF7D6623E0014D5B9EECDFA4B22A3E499449C49255B1871335C168AB37C"
+    },
+    {
+      "path": "mobile/src/screens/HomeScreen.tsx",
+      "sha256": "14CB0050F1F75249A565BE319D6A636705F3480EE105B06BC78948D9FFB38F18"
+    }
+  ],
+  "trials": [
+    {
+      "round": 1,
+      "phase": "app_restart",
+      "query": "Paneer 200g",
+      "totalMs": 3790,
+      "stores": [],
+      "timingSource": "App UI rounded to 0.01s"
+    },
+    {
+      "round": 1,
+      "phase": "subsequent_query",
+      "query": "Amul Butter 500g",
+      "totalMs": 2780,
+      "stores": [],
+      "timingSource": "App UI rounded to 0.01s"
+    },
+    {
+      "round": 2,
+      "phase": "app_restart",
+      "query": "Paneer 200g",
+      "totalMs": 3820,
+      "stores": [],
+      "timingSource": "App UI rounded to 0.01s"
+    },
+    {
+      "round": 2,
+      "phase": "subsequent_query",
+      "query": "Amul Butter 500g",
+      "totalMs": 3020,
+      "stores": [],
+      "timingSource": "App UI rounded to 0.01s"
+    },
+    {
+      "round": 3,
+      "phase": "app_restart",
+      "query": "Paneer 200g",
+      "totalMs": 3900,
+      "stores": [],
+      "timingSource": "App UI rounded to 0.01s"
+    },
+    {
+      "round": 3,
+      "phase": "subsequent_query",
+      "query": "Amul Butter 500g",
+      "totalMs": 3080,
+      "stores": [],
+      "timingSource": "App UI rounded to 0.01s"
+    },
+    {
+      "round": 4,
+      "phase": "app_restart",
+      "query": "Paneer 200g",
+      "totalMs": 3510,
+      "stores": [],
+      "timingSource": "App UI rounded to 0.01s"
+    },
+    {
+      "round": 4,
+      "phase": "subsequent_query",
+      "query": "Amul Butter 500g",
+      "totalMs": 3120,
+      "stores": [],
+      "timingSource": "App UI rounded to 0.01s"
+    },
+    {
+      "round": 5,
+      "phase": "app_restart",
+      "query": "Paneer 200g",
+      "totalMs": 3794,
+      "timingSource": "Metro console",
+      "stores": [
+        {
+          "store": "amazon_main",
+          "elapsedMs": 1322
+        },
+        {
+          "store": "blinkit",
+          "elapsedMs": 2177
+        },
+        {
+          "store": "flipkart",
+          "elapsedMs": 2969
+        },
+        {
+          "store": "zepto",
+          "elapsedMs": 3427
+        },
+        {
+          "store": "instamart",
+          "elapsedMs": 3667
+        }
+      ]
+    },
+    {
+      "round": 5,
+      "phase": "subsequent_query",
+      "query": "Amul Butter 500g",
+      "totalMs": 3582,
+      "timingSource": "Metro console",
+      "stores": [
+        {
+          "store": "amazon_main",
+          "elapsedMs": 1324
+        },
+        {
+          "store": "blinkit",
+          "elapsedMs": 1349
+        },
+        {
+          "store": "instamart",
+          "elapsedMs": 2061
+        },
+        {
+          "store": "flipkart",
+          "elapsedMs": 2407
+        },
+        {
+          "store": "zepto",
+          "elapsedMs": 3462
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Timing measures response completion, not SKU correctness. Amazon.in and Flipkart returned broader unrelated grocery candidates; other stores also returned alternative brands/pack sizes.",
+    "Per-store records only available for round 5; no per-store median claimed.",
+    "Expo server restarted before round 5; this is an exploratory development baseline, not a controlled before/after experiment."
+  ]
+}

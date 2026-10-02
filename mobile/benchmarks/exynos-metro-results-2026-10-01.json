@@ -1,0 +1,412 @@
+{
+  "date": "2026-10-01",
+  "capture": "Parsed Metro console output; round 1 transcribed from captured output with one title shortened",
+  "searches": [
+    {
+      "query": "Paneer 200g",
+      "stores": [
+        {
+          "store": "amazon_main",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer - 200g",
+          "price": 114,
+          "elapsedMs": 1630
+        },
+        {
+          "store": "blinkit",
+          "outcome": "result",
+          "title": "Mother Dairy Paneer",
+          "price": 100,
+          "elapsedMs": 4973
+        },
+        {
+          "store": "flipkart",
+          "outcome": "result",
+          "title": "Tatmods Paneer Phool 200gm (Indian Rennet) Natural & Pure Dried Paneer Phool",
+          "price": 248,
+          "elapsedMs": 6018
+        },
+        {
+          "store": "instamart",
+          "outcome": "result",
+          "title": "Milky Mist Paneer",
+          "price": 130,
+          "elapsedMs": 8828
+        },
+        {
+          "store": "zepto",
+          "outcome": "timeout",
+          "elapsedMs": 9048
+        }
+      ],
+      "totalMs": 9197
+    },
+    {
+      "query": "Amul Butter 500g",
+      "stores": [
+        {
+          "store": "amazon_main",
+          "outcome": "result",
+          "title": "Mango Butter for DIY skincare - 500 g",
+          "price": 1669,
+          "elapsedMs": 1713
+        },
+        {
+          "store": "blinkit",
+          "outcome": "result",
+          "title": "Amul Fresh Butter Cookies",
+          "price": 85,
+          "elapsedMs": 3773
+        },
+        {
+          "store": "flipkart",
+          "outcome": "result",
+          "title": "Amul Milk Spray Powder 500G TIN Pack Of 1 Milk Powder",
+          "price": 603,
+          "elapsedMs": 4248
+        },
+        {
+          "store": "instamart",
+          "outcome": "result",
+          "title": "Amul Butter Chiplets",
+          "price": 80,
+          "elapsedMs": 4964
+        },
+        {
+          "store": "zepto",
+          "outcome": "result",
+          "title": "Amul Unsalted Cooking Butter",
+          "price": 65,
+          "elapsedMs": 6187
+        }
+      ],
+      "totalMs": 6337
+    },
+    {
+      "query": "Paneer 200g",
+      "stores": [
+        {
+          "store": "amazon_main",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer - 200g",
+          "price": 114,
+          "elapsedMs": 1570
+        },
+        {
+          "store": "blinkit",
+          "outcome": "result",
+          "title": "Mother Dairy Paneer",
+          "price": 100,
+          "elapsedMs": 5515
+        },
+        {
+          "store": "instamart",
+          "outcome": "result",
+          "title": "Milky Mist Paneer",
+          "price": 130,
+          "elapsedMs": 6078
+        },
+        {
+          "store": "flipkart",
+          "outcome": "result",
+          "title": "Tatmods Paneer Phool 200gm (Indian Rennet) Natural & Pure Dried Paneer Phool",
+          "price": 248,
+          "elapsedMs": 6488
+        },
+        {
+          "store": "zepto",
+          "outcome": "result",
+          "title": "Milky Mist Paneer",
+          "price": 100,
+          "elapsedMs": 8559
+        }
+      ],
+      "totalMs": 8690
+    },
+    {
+      "query": "Amul Butter 500g",
+      "stores": [
+        {
+          "store": "amazon_main",
+          "outcome": "result",
+          "title": "Amul Table Butter Salted 100 Gm.",
+          "price": 62,
+          "elapsedMs": 1651
+        },
+        {
+          "store": "blinkit",
+          "outcome": "result",
+          "title": "Amul Fresh Butter Cookies",
+          "price": 85,
+          "elapsedMs": 3320
+        },
+        {
+          "store": "instamart",
+          "outcome": "result",
+          "title": "Amul Butter Chiplets",
+          "price": 80,
+          "elapsedMs": 4693
+        },
+        {
+          "store": "flipkart",
+          "outcome": "result",
+          "title": "Amul Milk Spray Powder 500G TIN Pack Of 1 Milk Powder",
+          "price": 603,
+          "elapsedMs": 5162
+        },
+        {
+          "store": "zepto",
+          "outcome": "result",
+          "title": "Amul Unsalted Cooking Butter",
+          "price": 65,
+          "elapsedMs": 6361
+        }
+      ],
+      "totalMs": 6634
+    },
+    {
+      "query": "Paneer 200g",
+      "stores": [
+        {
+          "store": "amazon_main",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer - 200g",
+          "price": 114,
+          "elapsedMs": 1344
+        },
+        {
+          "store": "blinkit",
+          "outcome": "result",
+          "title": "Mother Dairy Paneer",
+          "price": 100,
+          "elapsedMs": 4309
+        },
+        {
+          "store": "flipkart",
+          "outcome": "result",
+          "title": "Tatmods Paneer Phool 200gm (Indian Rennet) Natural & Pure Dried Paneer Phool",
+          "price": 248,
+          "elapsedMs": 5500
+        },
+        {
+          "store": "zepto",
+          "outcome": "result",
+          "title": "Milky Mist Paneer",
+          "price": 100,
+          "elapsedMs": 6669
+        },
+        {
+          "store": "instamart",
+          "outcome": "result",
+          "title": "Milky Mist Paneer",
+          "price": 130,
+          "elapsedMs": 7039
+        }
+      ],
+      "totalMs": 7188
+    },
+    {
+      "query": "Amul Butter 500g",
+      "stores": [
+        {
+          "store": "amazon_main",
+          "outcome": "result",
+          "title": "Amul Table Butter Salted 100 Gm.",
+          "price": 62,
+          "elapsedMs": 1559
+        },
+        {
+          "store": "blinkit",
+          "outcome": "result",
+          "title": "Amul Fresh Butter Cookies",
+          "price": 85,
+          "elapsedMs": 3142
+        },
+        {
+          "store": "instamart",
+          "outcome": "result",
+          "title": "Amul Butter Chiplets",
+          "price": 80,
+          "elapsedMs": 4045
+        },
+        {
+          "store": "flipkart",
+          "outcome": "result",
+          "title": "AMOROUS High protein Mango With Chia Peanut Butter 500g",
+          "price": 259,
+          "elapsedMs": 4752
+        },
+        {
+          "store": "zepto",
+          "outcome": "result",
+          "title": "Amul Unsalted Cooking Butter",
+          "price": 65,
+          "elapsedMs": 6041
+        }
+      ],
+      "totalMs": 6160
+    },
+    {
+      "query": "Paneer 200g",
+      "stores": [
+        {
+          "store": "amazon_main",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer - 200g",
+          "price": 114,
+          "elapsedMs": 1485
+        },
+        {
+          "store": "blinkit",
+          "outcome": "result",
+          "title": "Mother Dairy Paneer",
+          "price": 100,
+          "elapsedMs": 6519
+        },
+        {
+          "store": "instamart",
+          "outcome": "result",
+          "title": "Milky Mist Paneer",
+          "price": 130,
+          "elapsedMs": 7503
+        },
+        {
+          "store": "flipkart",
+          "outcome": "result",
+          "title": "Tatmods Paneer Phool 200gm (Indian Rennet) Natural & Pure Dried Paneer Phool",
+          "price": 248,
+          "elapsedMs": 7768
+        },
+        {
+          "store": "zepto",
+          "outcome": "result",
+          "title": "Milky Mist Paneer",
+          "price": 100,
+          "elapsedMs": 8790
+        }
+      ],
+      "totalMs": 8943
+    },
+    {
+      "query": "Amul Butter 500g",
+      "stores": [
+        {
+          "store": "amazon_main",
+          "outcome": "result",
+          "title": "Amul Table Butter Salted 100 Gm.",
+          "price": 62,
+          "elapsedMs": 1534
+        },
+        {
+          "store": "blinkit",
+          "outcome": "result",
+          "title": "Amul Fresh Butter Cookies",
+          "price": 85,
+          "elapsedMs": 3854
+        },
+        {
+          "store": "instamart",
+          "outcome": "result",
+          "title": "Amul Butter Chiplets",
+          "price": 80,
+          "elapsedMs": 5033
+        },
+        {
+          "store": "flipkart",
+          "outcome": "result",
+          "title": "Amul Milk Spray Powder 500G TIN Pack Of 1 Milk Powder",
+          "price": 603,
+          "elapsedMs": 5234
+        },
+        {
+          "store": "zepto",
+          "outcome": "result",
+          "title": "Amul Unsalted Cooking Butter",
+          "price": 65,
+          "elapsedMs": 6511
+        }
+      ],
+      "totalMs": 6849
+    },
+    {
+      "query": "Paneer 200g",
+      "stores": [
+        {
+          "store": "amazon_main",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer - 200g",
+          "price": 114,
+          "elapsedMs": 1682
+        },
+        {
+          "store": "flipkart",
+          "outcome": "result",
+          "title": "SRD FOODS SRDFOODS_PANEER DODI (200gm) Assorted Seeds & Nuts",
+          "price": 148,
+          "elapsedMs": 6444
+        },
+        {
+          "store": "blinkit",
+          "outcome": "result",
+          "title": "Mother Dairy Paneer",
+          "price": 100,
+          "elapsedMs": 6858
+        },
+        {
+          "store": "instamart",
+          "outcome": "result",
+          "title": "Milky Mist Paneer",
+          "price": 130,
+          "elapsedMs": 8808
+        },
+        {
+          "store": "zepto",
+          "outcome": "timeout",
+          "elapsedMs": 9182
+        }
+      ],
+      "totalMs": 9385
+    },
+    {
+      "query": "Amul Butter 500g",
+      "stores": [
+        {
+          "store": "amazon_main",
+          "outcome": "result",
+          "title": "Amul Table Butter Salted 100 Gm.",
+          "price": 62,
+          "elapsedMs": 1809
+        },
+        {
+          "store": "blinkit",
+          "outcome": "result",
+          "title": "Amul Fresh Butter Cookies",
+          "price": 85,
+          "elapsedMs": 5606
+        },
+        {
+          "store": "flipkart",
+          "outcome": "result",
+          "title": "Amul Milk Spray Powder 500G TIN Pack Of 1 Milk Powder",
+          "price": 603,
+          "elapsedMs": 6122
+        },
+        {
+          "store": "instamart",
+          "outcome": "result",
+          "title": "Amul Butter Chiplets",
+          "price": 80,
+          "elapsedMs": 6890
+        },
+        {
+          "store": "zepto",
+          "outcome": "result",
+          "title": "Amul Unsalted Cooking Butter",
+          "price": 65,
+          "elapsedMs": 8124
+        }
+      ],
+      "totalMs": 8328
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "date": "2026-10-01",
+  "soc": "Exynos 1280",
+  "model": "SM-M336BU",
+  "android": "16",
+  "buildMode": "Expo Go development via USB reverse 8082",
+  "timingCapture": "App UI readouts, rounded to 0.01s",
+  "captureWaitSeconds": 20,
+  "pack": "No amzn",
+  "stores": [
+    "instamart",
+    "zepto",
+    "blinkit",
+    "amazon_main",
+    "flipkart"
+  ],
+  "protocol": "Paired rounds: restart app, select No amzn, Paneer 200g, then Amul Butter 500g. Wait captureWaitSeconds after submission, capture total timing at the top; per-store details require Metro logs. Sessions/website caches retained; no app-data clearing or exact-query cache hits. Keep USB screen awake only during trials.",
+  "sourceHashes": [
+    {
+      "path": "mobile/src/components/BackgroundScrapers.tsx",
+      "sha256": "E20CFDB9001B08155B636C93D391542414FA53E9FBE87C5FA6F9621B7429555E"
+    },
+    {
+      "path": "mobile/src/core/ScraperScript.ts",
+      "sha256": "4F9A8771F453A58556C345DBF7603191D48F079BB2A1DB248A3E557C07BABE69"
+    },
+    {
+      "path": "mobile/src/screens/HomeScreen.tsx",
+      "sha256": "2CF36B9E0A1D02D90F7114176E58239AC771BB09C172765A3C64AA8E7D07CCF4"
+    }
+  ],
+  "trials": [
+    {
+      "round": 1,
+      "phase": "app_restart",
+      "query": "Paneer 200g",
+      "totalMs": 6320,
+      "stores": [],
+      "timingSource": "App UI rounded to 0.01s"
+    },
+    {
+      "round": 1,
+      "phase": "subsequent_query",
+      "query": "Amul Butter 500g",
+      "totalMs": 9050,
+      "stores": [],
+      "timingSource": "App UI rounded to 0.01s"
+    },
+    {
+      "round": 2,
+      "phase": "app_restart",
+      "query": "Paneer 200g",
+      "totalMs": 9160,
+      "stores": [],
+      "timingSource": "App UI rounded to 0.01s"
+    },
+    {
+      "round": 2,
+      "phase": "subsequent_query",
+      "query": "Amul Butter 500g",
+      "totalMs": 9030,
+      "stores": [],
+      "timingSource": "App UI rounded to 0.01s"
+    }
+  ]
+}

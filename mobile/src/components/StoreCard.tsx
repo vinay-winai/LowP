@@ -1,420 +1,78 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, Image, StyleSheet, TouchableOpacity, Linking, ActivityIndicator } from 'react-native';
 import { StoreResult } from '../types';
-import { ExternalLink, Sparkles, ChevronLeft, ChevronRight, Search } from 'lucide-react-native';
+import {productSearchTitle} from '../core/ProductSearch';
 
 interface StoreCardProps {
   store: StoreResult;
   isLoading: boolean;
-  onCycleCandidate?: (direction: 'next' | 'prev') => void;
+  selectionDisabled?: boolean;
+  onSelectCandidate: (index: number) => void;
+  onSearchTitle: (title: string) => void;
+  selectionMode?: 'compare' | 'title';
   onOpenLink?: (url: string, title: string, color?: string) => void;
 }
 
-export const StoreCard: React.FC<StoreCardProps> = ({
-  store,
-  isLoading,
-  onCycleCandidate,
-  onOpenLink
-}) => {
-  const hasPrice = store.isAvailable && store.priceBreakdown && store.priceBreakdown.finalPayable > 0;
-  const isBlinkit = store.platformId === 'blinkit';
-  const pillTextColor = isBlinkit ? '#111827' : '#FFFFFF';
-
-  const candidatesCount = store.candidates ? store.candidates.length : (store.item ? 1 : 0);
-  const currentIdx = store.selectedIndex || 0;
-  const hasMultipleMatches = candidatesCount > 1;
-
-  const productUrl = store.productUrl || store.globalUrl || store.searchUrl;
-  const globalUrl = store.globalUrl || store.searchUrl || store.productUrl;
-  const hasDistinctGlobal = globalUrl && productUrl && globalUrl !== productUrl;
-
-  const handleOpenProduct = () => {
-    if (productUrl && productUrl !== '#') {
-      if (onOpenLink) {
-        onOpenLink(productUrl, store.item?.title || store.platformName, store.logoColor);
-      } else {
-        Linking.openURL(productUrl).catch(() => {});
-      }
-    }
+export const StoreCard: React.FC<StoreCardProps> = ({ store, isLoading, selectionDisabled, onSelectCandidate, onSearchTitle, onOpenLink, selectionMode = 'compare' }) => {
+  const candidates = (store.candidates?.length ? store.candidates : store.item ? [store.item] : []).slice(0, 3);
+  const open = (url: string, title: string) => {
+    if (!url || url === '#') return;
+    if (onOpenLink) onOpenLink(url, title, store.logoColor);
+    else Linking.openURL(url).catch(() => {});
   };
-
-  const handleOpenSearch = () => {
-    if (globalUrl && globalUrl !== '#') {
-      if (onOpenLink) {
-        onOpenLink(globalUrl, `${store.platformName} Search`, store.logoColor);
-      } else {
-        Linking.openURL(globalUrl).catch(() => {});
-      }
-    }
-  };
-
   return (
-    <View style={[styles.card, store.isLowestPrice && styles.lowestPriceCard]}>
-      {/* Header Bar */}
-      <View style={styles.cardHeader}>
-        <View style={styles.headerLeft}>
-          <View style={[styles.storeBadge, { backgroundColor: store.logoColor }]}>
-            <Text style={[styles.storeBadgeText, { color: pillTextColor }]}>
-              {store.platformName}
-            </Text>
-          </View>
-
-          {hasMultipleMatches && (
-            <View style={styles.matchPill}>
-              <Text style={styles.matchPillText}>
-                Match {currentIdx + 1}/{candidatesCount}
-              </Text>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.headerRight}>
-          {store.isLowestPrice && hasPrice && (
-            <View style={styles.lowestPriceBadge}>
-              <Sparkles size={12} color="#92400E" />
-              <Text style={styles.lowestPriceBadgeText}>Lowest Price</Text>
-            </View>
-          )}
-
-          <View style={styles.statusIndicator}>
-            {isLoading ? (
-              <Text style={styles.searchingText}>Searching...</Text>
-            ) : store.responseTimeMs !== undefined ? (
-              <Text style={styles.responseTimeText}>{(store.responseTimeMs / 1000).toFixed(2)}s</Text>
-            ) : null}
-          </View>
-        </View>
+    <View style={styles.card}>
+      <View style={styles.header}>
+        <View style={[styles.dot, { backgroundColor: store.logoColor }]} />
+        <Text style={styles.name}>{store.platformName}</Text>
+        {isLoading ? <ActivityIndicator size="small" color="#2563EB" /> :
+          store.responseTimeMs !== undefined ? <Text style={styles.time}>{(store.responseTimeMs / 1000).toFixed(2)}s</Text> : null}
       </View>
-
-      {/* Body */}
-      {hasPrice && store.item ? (
-        <View style={styles.cardBody}>
-          <View style={styles.productRow}>
-            {store.item.image &&
-            store.item.image.startsWith('https://') ? (
-              <Image
-                source={{ uri: store.item.image }}
-                style={styles.productImage}
-                resizeMode="cover"
-              />
-            ) : (
-              // No valid remote image: render a neutral placeholder instead
-              // of firing failed/external requests (assets paths are not
-              // valid RN uris and placeholder.com is a network round-trip).
-              <View style={[styles.productImage, styles.productImagePlaceholder]}>
-                <Text style={styles.productImagePlaceholderText}>🛒</Text>
+      {candidates.map((item, index) => (
+        <View key={`${item.id}_${index}`} style={styles.row}>
+          <View style={styles.product}>
+            <TouchableOpacity disabled={selectionDisabled} accessibilityRole="button" accessibilityLabel={`${selectionMode === 'title' ? 'Use title' : 'Compare'} ${item.title}, ₹${item.price}, from ${store.platformName}`} onPress={() => onSelectCandidate(index)}>
+            {item.image?.startsWith('https://') ? <Image source={{ uri: item.image }} style={styles.image} resizeMode="contain" /> :
+              <View style={[styles.image, styles.placeholder]}><Text style={styles.muted}>Item</Text></View>}
+            </TouchableOpacity>
+            <View style={styles.details}>
+              <View style={styles.titleRow}><TouchableOpacity style={{flex: 1}} disabled={selectionDisabled} accessibilityRole="button" accessibilityLabel={`${selectionMode === 'title' ? 'Use title' : 'Compare'} ${item.title}, ₹${item.price}, from ${store.platformName}`} onPress={() => onSelectCandidate(index)}><Text style={styles.title} numberOfLines={3}>{item.title}</Text></TouchableOpacity><TouchableOpacity style={styles.titleSearch} disabled={selectionDisabled} accessibilityRole="button" accessibilityLabel={`Search for ${productSearchTitle(item)}`} onPress={() => onSearchTitle(productSearchTitle(item))}><Text style={styles.compare}>{selectionMode === 'title' ? 'Use title' : 'Search'}</Text></TouchableOpacity></View>
+              <TouchableOpacity disabled={selectionDisabled} onPress={() => onSelectCandidate(index)}>
+              {!!item.quantity && <Text style={styles.muted}>{item.quantity}</Text>}
+              {selectionMode === 'compare' && store.comparisonMatch && index === 0 && <Text style={styles.compare}>In your comparison</Text>}
+              <View style={styles.priceRow}>
+                <Text style={styles.price}>₹{item.price}</Text>
+                <Text style={styles.compare}>{selectionMode === 'title' ? (selectionDisabled ? 'Finding titles…' : 'Use this title →') : selectionDisabled ? 'Compare after search' : 'Compare this →'}</Text>
               </View>
-            )}
-            <View style={styles.productDetails}>
-              <Text style={styles.productTitle} numberOfLines={2}>
-                {store.item.title}
-              </Text>
-              <Text style={styles.productSubtitle} numberOfLines={1}>
-                {store.item.brand} • {store.item.quantity}
-              </Text>
-            </View>
-
-            {/* Side Cycle Arrows */}
-            {hasMultipleMatches && (
-              <View style={styles.sideCycleContainer}>
-                <TouchableOpacity
-                  style={styles.cycleArrowButton}
-                  onPress={() => onCycleCandidate?.('prev')}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 5 }}
-                >
-                  <ChevronLeft size={16} color="#94A3B8" />
-                </TouchableOpacity>
-
-                <View style={styles.cycleIndicatorPill}>
-                  <Text style={styles.cycleIndicatorText}>
-                    {currentIdx + 1}/{candidatesCount}
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.cycleArrowButton}
-                  onPress={() => onCycleCandidate?.('next')}
-                  hitSlop={{ top: 10, bottom: 10, left: 5, right: 10 }}
-                >
-                  <ChevronRight size={16} color="#38BDF8" />
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-
-          {/* Pricing Row */}
-          <View style={styles.pricingRow}>
-            <View style={styles.priceContainer}>
-              <Text style={styles.currencySymbol}>₹</Text>
-              <Text style={styles.priceValue}>{store.priceBreakdown!.finalPayable}</Text>
-            </View>
-
-            <View style={styles.actionButtonsRow}>
-              {hasDistinctGlobal && (
-                <TouchableOpacity style={styles.searchButton} onPress={handleOpenSearch}>
-                  <Search size={12} color="#94A3B8" />
-                  <Text style={styles.searchButtonText}>Search</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity style={styles.openButton} onPress={handleOpenProduct}>
-                <ExternalLink size={13} color="#38BDF8" />
-                <Text style={styles.openButtonText}>View</Text>
               </TouchableOpacity>
             </View>
           </View>
+          <TouchableOpacity style={styles.link} accessibilityRole="link" accessibilityLabel={`View ${item.title} on ${store.platformName}`}
+            onPress={() => open(item.productUrl || store.searchUrl || store.productUrl, item.title)}>
+            <Text style={styles.linkText}>View in store ↗</Text>
+          </TouchableOpacity>
         </View>
-      ) : (
-        <View style={styles.emptyBody}>
-          <Text style={styles.emptyText}>
-            {isLoading ? 'Fetching live store price...' : 'No matching items found in this store zone'}
-          </Text>
-          {!isLoading && globalUrl && globalUrl !== '#' && (
-            <TouchableOpacity style={styles.emptySearchButton} onPress={handleOpenSearch}>
-              <Search size={12} color="#38BDF8" />
-              <Text style={styles.emptySearchButtonText}>Search on {store.platformName}</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
+      ))}
+      {!candidates.length && <View style={styles.empty}>
+        <Text style={styles.muted}>{isLoading ? 'Finding products…' : store.statusMessage === 'Ready to search' ? 'Ready to search' : store.statusMessage === 'Sign in required' ? 'This store requires sign-in to search. Open it from Store Sync, sign in, then try again.' : 'No products returned. Try again or enable Limit searches. Check your account and delivery location.'}</Text>
+        {!isLoading && store.searchUrl && <TouchableOpacity style={styles.link} onPress={() => open(store.searchUrl!, store.platformName)}>
+          <Text style={styles.linkText}>Search in store ↗</Text>
+        </TouchableOpacity>}
+      </View>}
     </View>
   );
 };
-
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#1E293B',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#334155'
-  },
-  lowestPriceCard: {
-    borderColor: '#F59E0B',
-    borderWidth: 1.5,
-    backgroundColor: '#1E293B'
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(51, 65, 85, 0.6)'
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8
-  },
-  storeBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6
-  },
-  storeBadgeText: {
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.2
-  },
-  matchPill: {
-    backgroundColor: '#334155',
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 10
-  },
-  matchPillText: {
-    color: '#94A3B8',
-    fontSize: 10,
-    fontWeight: '700'
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8
-  },
-  lowestPriceBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#FDE68A',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12
-  },
-  lowestPriceBadgeText: {
-    color: '#92400E',
-    fontSize: 11,
-    fontWeight: '800'
-  },
-  statusIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center'
-  },
-  statusGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
-  },
-  searchingText: {
-    color: '#38BDF8',
-    fontSize: 12,
-    fontWeight: '500'
-  },
-  responseTimeText: {
-    color: '#64748B',
-    fontSize: 11,
-    fontWeight: '500'
-  },
-  outOfStockText: {
-    color: '#64748B',
-    fontSize: 12
-  },
-  cardBody: {
-    paddingTop: 12
-  },
-  productRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12
-  },
-  productImage: {
-    width: 54,
-    height: 54,
-    borderRadius: 8,
-    backgroundColor: '#0F172A'
-  },
-  productImagePlaceholder: {
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  productImagePlaceholderText: {
-    fontSize: 22
-  },
-  productDetails: {
-    flex: 1
-  },
-  productTitle: {
-    color: '#F8FAFC',
-    fontSize: 14,
-    fontWeight: '600',
-    lineHeight: 19
-  },
-  productSubtitle: {
-    color: '#94A3B8',
-    fontSize: 12,
-    marginTop: 3
-  },
-  sideCycleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0F172A',
-    borderRadius: 20,
-    paddingHorizontal: 4,
-    paddingVertical: 3,
-    borderWidth: 1,
-    borderColor: '#334155',
-    gap: 2
-  },
-  cycleArrowButton: {
-    padding: 3,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  cycleIndicatorPill: {
-    paddingHorizontal: 3
-  },
-  cycleIndicatorText: {
-    color: '#94A3B8',
-    fontSize: 11,
-    fontWeight: '700'
-  },
-  pricingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(51, 65, 85, 0.4)'
-  },
-  priceContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 2
-  },
-  currencySymbol: {
-    color: '#F8FAFC',
-    fontSize: 14,
-    fontWeight: '700'
-  },
-  priceValue: {
-    color: '#F8FAFC',
-    fontSize: 20,
-    fontWeight: '800'
-  },
-  actionButtonsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
-  },
-  searchButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)'
-  },
-  searchButtonText: {
-    color: '#94A3B8',
-    fontSize: 11,
-    fontWeight: '600'
-  },
-  openButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(56, 189, 248, 0.12)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(56, 189, 248, 0.3)'
-  },
-  openButtonText: {
-    color: '#38BDF8',
-    fontSize: 12,
-    fontWeight: '600'
-  },
-  emptyBody: {
-    paddingVertical: 14,
-    alignItems: 'center'
-  },
-  emptyText: {
-    color: '#64748B',
-    fontSize: 13,
-    textAlign: 'center'
-  },
-  emptySearchButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginTop: 8,
-    backgroundColor: 'rgba(56, 189, 248, 0.08)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(56, 189, 248, 0.2)'
-  },
-  emptySearchButtonText: {
-    color: '#38BDF8',
-    fontSize: 11,
-    fontWeight: '600'
-  }
+  titleRow: {flexDirection: 'row', alignItems: 'flex-start', gap: 6}, titleSearch: {minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center'},
+  card: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, marginBottom: 12, overflow: 'hidden' },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14, backgroundColor: '#F8FAFC' },
+  dot: { width: 8, height: 8, borderRadius: 4 }, name: { flex: 1, color: '#0F172A', fontWeight: '700', fontSize: 14 },
+  time: { color: '#64748B', fontSize: 11 }, row: { borderTopWidth: 1, borderTopColor: '#E2E8F0', padding: 14 },
+  product: { flexDirection: 'row', gap: 12, minHeight: 76 }, image: { width: 64, height: 64, borderRadius: 8, backgroundColor: '#F8FAFC' },
+  placeholder: { alignItems: 'center', justifyContent: 'center' }, details: { flex: 1 },
+  title: { color: '#0F172A', fontSize: 14, fontWeight: '500', lineHeight: 20 }, muted: { color: '#64748B', fontSize: 12, lineHeight: 18 },
+  priceRow: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 8 },
+  price: { color: '#0F172A', fontSize: 18, fontWeight: '700' }, compare: { color: '#1D4ED8', fontSize: 12, fontWeight: '600' },
+  link: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-end' }, linkText: { color: '#475569', fontSize: 12 },
+  empty: { padding: 14 }
 });

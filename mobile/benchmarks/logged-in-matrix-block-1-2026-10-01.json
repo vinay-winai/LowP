@@ -1,0 +1,797 @@
+{
+  "date": "2026-10-01",
+  "device": "SM-M336BU / Exynos 1280 / Android 16",
+  "build": "Expo Go development over USB reverse 8082",
+  "pack": "No amzn",
+  "stores": [
+    "instamart",
+    "zepto",
+    "blinkit",
+    "amazon_main",
+    "flipkart"
+  ],
+  "sourceHashes": {
+    "BackgroundScrapers": "5EA62F9DCD2A9884416229A6178605F58E410084807954A426D653129BBB942F",
+    "ScraperScript": "4F9A8771F453A58556C345DBF7603191D48F079BB2A1DB248A3E557C07BABE69",
+    "HomeScreen": "E4B78631A7C72D5DBEE19882590A8F02B1D5D0D27B7BC537B5B3D4E875CAA7D9"
+  },
+  "protocol": "One clean launch and excluded full-3 warmup completed all five stores in 6.671s after user signed into Swiggy and Zepto. No subsequent restarts. Seven configurations across three matched queries with varied order. LowP result cache cleared using the count control before every trial; cookies, delivery addresses and website caches retained. No UI dumps while a request is running; completion/timing and per-store outcomes taken from Metro logs, then UI total cross-checked. Native views retained. Count limits active pages (page mode) or only extraction (extraction mode); website JavaScript remains parallel in extraction mode. Big-store HTTP fetches remain parallel in every mode.",
+  "blocks": [
+    {
+      "query": "Paneer 200g",
+      "order": [
+        "p3",
+        "off",
+        "e1",
+        "p1",
+        "e3",
+        "p2",
+        "e2"
+      ]
+    },
+    {
+      "query": "Amul Butter 500g",
+      "order": [
+        "e2",
+        "p1",
+        "off",
+        "p3",
+        "e3",
+        "p2",
+        "e1"
+      ]
+    },
+    {
+      "query": "Basmati Rice 1kg",
+      "order": [
+        "e3",
+        "p2",
+        "p3",
+        "off",
+        "p1",
+        "e1",
+        "e2"
+      ]
+    }
+  ],
+  "trials": [
+    {
+      "block": 1,
+      "configuration": "p3",
+      "query": "Paneer 200g",
+      "storeCount": 5,
+      "limit": 3,
+      "mode": "page",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "SRD FOODS SRDFOODS_PANEER DODI (200gm) Assorted Seeds &amp; Nuts",
+          "price": 148,
+          "elapsedMs": 953
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer - 200g",
+          "price": 114,
+          "elapsedMs": 1777
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Mother Dairy Paneer",
+          "price": 100,
+          "elapsedMs": 3724
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage High Protein Paneer",
+          "price": 135,
+          "elapsedMs": 4456
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer",
+          "price": 114,
+          "elapsedMs": 5700
+        }
+      ],
+      "timings": {
+        "blinkit": {
+          "scriptElapsedMs": 2689,
+          "extractionWorkMs": 45,
+          "extractionMaxMs": 12,
+          "scanCount": 11,
+          "firstCandidateMs": 2689,
+          "scriptStartSinceNavigationMs": 917,
+          "longTaskMs": 538,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 223,
+          "responseEndMs": 394,
+          "domInteractiveMs": 1568,
+          "domContentLoadedMs": 1845,
+          "readyState": "complete"
+        },
+        "instamart": {
+          "scriptElapsedMs": 3955,
+          "extractionWorkMs": 34,
+          "extractionMaxMs": 15,
+          "scanCount": 12,
+          "firstCandidateMs": 3954,
+          "scriptStartSinceNavigationMs": 386,
+          "longTaskMs": 951,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 409,
+          "responseEndMs": 250,
+          "domInteractiveMs": 295,
+          "domContentLoadedMs": 380,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 4639,
+          "extractionWorkMs": 34,
+          "extractionMaxMs": 8,
+          "scanCount": 18,
+          "firstCandidateMs": 4639,
+          "scriptStartSinceNavigationMs": 950,
+          "longTaskMs": 615,
+          "longTaskCount": 6,
+          "longTaskMaxMs": 227,
+          "responseEndMs": 577,
+          "domInteractiveMs": 1566,
+          "domContentLoadedMs": 1567,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 48,
+        "zepto": 48,
+        "blinkit": 49
+      },
+      "totalMs": 5790,
+      "batteryTemperatureC": 37.4,
+      "uiTotal": "5.79s"
+    },
+    {
+      "block": 1,
+      "configuration": "off",
+      "query": "Paneer 200g",
+      "storeCount": 5,
+      "limit": 6,
+      "mode": "page",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "SRD FOODS SRDFOODS_PANEER DODI (200gm) Assorted Seeds &amp; Nuts",
+          "price": 148,
+          "elapsedMs": 694
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer - 200g",
+          "price": 114,
+          "elapsedMs": 1222
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Mother Dairy Paneer",
+          "price": 100,
+          "elapsedMs": 3783
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage High Protein Paneer",
+          "price": 135,
+          "elapsedMs": 4179
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer",
+          "price": 114,
+          "elapsedMs": 5021
+        }
+      ],
+      "timings": {
+        "blinkit": {
+          "scriptElapsedMs": 2945,
+          "extractionWorkMs": 30,
+          "extractionMaxMs": 10,
+          "scanCount": 12,
+          "firstCandidateMs": 2944,
+          "scriptStartSinceNavigationMs": 735,
+          "longTaskMs": 745,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 281,
+          "responseEndMs": 321,
+          "domInteractiveMs": 831,
+          "domContentLoadedMs": 1364,
+          "readyState": "complete"
+        },
+        "instamart": {
+          "scriptElapsedMs": 3434,
+          "extractionWorkMs": 33,
+          "extractionMaxMs": 18,
+          "scanCount": 11,
+          "firstCandidateMs": 3434,
+          "scriptStartSinceNavigationMs": 625,
+          "longTaskMs": 669,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 202,
+          "responseEndMs": 235,
+          "domInteractiveMs": 758,
+          "domContentLoadedMs": 816,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 4323,
+          "extractionWorkMs": 35,
+          "extractionMaxMs": 8,
+          "scanCount": 17,
+          "firstCandidateMs": 4322,
+          "scriptStartSinceNavigationMs": 612,
+          "longTaskMs": 725,
+          "longTaskCount": 6,
+          "longTaskMaxMs": 242,
+          "responseEndMs": 167,
+          "domInteractiveMs": 1381,
+          "domContentLoadedMs": 1382,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 43,
+        "zepto": 44,
+        "blinkit": 44,
+        "amazon_main": 44,
+        "flipkart": 44
+      },
+      "totalMs": 5085,
+      "batteryTemperatureC": 37.5,
+      "uiTotal": "5.08s"
+    },
+    {
+      "block": 1,
+      "configuration": "e1",
+      "query": "Paneer 200g",
+      "storeCount": 5,
+      "limit": 1,
+      "mode": "extraction",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "SRD FOODS SRDFOODS_PANEER DODI (200gm) Assorted Seeds &amp; Nuts",
+          "price": 148,
+          "elapsedMs": 626
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer - 200g",
+          "price": 114,
+          "elapsedMs": 1135
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage High Protein Paneer",
+          "price": 135,
+          "elapsedMs": 5036
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer",
+          "price": 114,
+          "elapsedMs": 5966
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Mother Dairy Paneer",
+          "price": 100,
+          "elapsedMs": 6371
+        }
+      ],
+      "timings": {
+        "instamart": {
+          "scriptElapsedMs": 4082,
+          "extractionWorkMs": 49,
+          "extractionMaxMs": 25,
+          "scanCount": 15,
+          "firstCandidateMs": 4082,
+          "scriptStartSinceNavigationMs": 833,
+          "longTaskMs": 728,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 326,
+          "responseEndMs": 278,
+          "domInteractiveMs": 1247,
+          "domContentLoadedMs": 1316,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 458,
+          "extractionWorkMs": 25,
+          "extractionMaxMs": 17,
+          "scanCount": 2,
+          "firstCandidateMs": 457,
+          "scriptStartSinceNavigationMs": 5400,
+          "longTaskMs": 207,
+          "longTaskCount": 2,
+          "longTaskMaxMs": 111,
+          "responseEndMs": 193,
+          "domInteractiveMs": 1707,
+          "domContentLoadedMs": 1710,
+          "readyState": "complete"
+        },
+        "blinkit": {
+          "scriptElapsedMs": 12,
+          "extractionWorkMs": 10,
+          "extractionMaxMs": 10,
+          "scanCount": 1,
+          "firstCandidateMs": 11,
+          "scriptStartSinceNavigationMs": 6286,
+          "longTaskMs": 0,
+          "longTaskCount": 0,
+          "longTaskMaxMs": 0,
+          "responseEndMs": 331,
+          "domInteractiveMs": 1362,
+          "domContentLoadedMs": 1673,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 42,
+        "zepto": 5301,
+        "blinkit": 6334
+      },
+      "totalMs": 6455,
+      "batteryTemperatureC": 37.5,
+      "uiTotal": "6.46s"
+    },
+    {
+      "block": 1,
+      "configuration": "p1",
+      "query": "Paneer 200g",
+      "storeCount": 5,
+      "limit": 1,
+      "mode": "page",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "SRD FOODS SRDFOODS_PANEER DODI (200gm) Assorted Seeds &amp; Nuts",
+          "price": 148,
+          "elapsedMs": 514
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer - 200g",
+          "price": 114,
+          "elapsedMs": 1315
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage High Protein Paneer",
+          "price": 135,
+          "elapsedMs": 2210
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer",
+          "price": 114,
+          "elapsedMs": 5704
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Mother Dairy Paneer",
+          "price": 100,
+          "elapsedMs": 8064
+        }
+      ],
+      "timings": {
+        "instamart": {
+          "scriptElapsedMs": 1922,
+          "extractionWorkMs": 41,
+          "extractionMaxMs": 25,
+          "scanCount": 11,
+          "firstCandidateMs": 1922,
+          "scriptStartSinceNavigationMs": 230,
+          "longTaskMs": 911,
+          "longTaskCount": 6,
+          "longTaskMaxMs": 270,
+          "responseEndMs": 182,
+          "domInteractiveMs": 246,
+          "domContentLoadedMs": 352,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 2672,
+          "extractionWorkMs": 40,
+          "extractionMaxMs": 20,
+          "scanCount": 14,
+          "firstCandidateMs": 2671,
+          "scriptStartSinceNavigationMs": 549,
+          "longTaskMs": 791,
+          "longTaskCount": 6,
+          "longTaskMaxMs": 252,
+          "responseEndMs": 235,
+          "domInteractiveMs": 711,
+          "domContentLoadedMs": 715,
+          "readyState": "complete"
+        },
+        "blinkit": {
+          "scriptElapsedMs": 1508,
+          "extractionWorkMs": 58,
+          "extractionMaxMs": 37,
+          "scanCount": 7,
+          "firstCandidateMs": 1506,
+          "scriptStartSinceNavigationMs": 389,
+          "longTaskMs": 686,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 415,
+          "responseEndMs": 327,
+          "domInteractiveMs": 553,
+          "domContentLoadedMs": 747,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 48,
+        "zepto": 2461,
+        "blinkit": 6093
+      },
+      "totalMs": 8147,
+      "batteryTemperatureC": 37.5,
+      "uiTotal": "8.15s"
+    },
+    {
+      "block": 1,
+      "configuration": "e3",
+      "query": "Paneer 200g",
+      "storeCount": 5,
+      "limit": 3,
+      "mode": "extraction",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "SRD FOODS SRDFOODS_PANEER DODI (200gm) Assorted Seeds &amp; Nuts",
+          "price": 148,
+          "elapsedMs": 558
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer - 200g",
+          "price": 114,
+          "elapsedMs": 1340
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Mother Dairy Paneer",
+          "price": 100,
+          "elapsedMs": 4585
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage High Protein Paneer",
+          "price": 135,
+          "elapsedMs": 6775
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer",
+          "price": 114,
+          "elapsedMs": 7242
+        }
+      ],
+      "timings": {
+        "blinkit": {
+          "scriptElapsedMs": 3304,
+          "extractionWorkMs": 64,
+          "extractionMaxMs": 35,
+          "scanCount": 11,
+          "firstCandidateMs": 3304,
+          "scriptStartSinceNavigationMs": 1160,
+          "longTaskMs": 699,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 235,
+          "responseEndMs": 360,
+          "domInteractiveMs": 1582,
+          "domContentLoadedMs": 2043,
+          "readyState": "complete"
+        },
+        "instamart": {
+          "scriptElapsedMs": 5628,
+          "extractionWorkMs": 48,
+          "extractionMaxMs": 17,
+          "scanCount": 16,
+          "firstCandidateMs": 5628,
+          "scriptStartSinceNavigationMs": 995,
+          "longTaskMs": 1166,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 583,
+          "responseEndMs": 274,
+          "domInteractiveMs": 1397,
+          "domContentLoadedMs": 1537,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 6137,
+          "extractionWorkMs": 41,
+          "extractionMaxMs": 13,
+          "scanCount": 15,
+          "firstCandidateMs": 6137,
+          "scriptStartSinceNavigationMs": 922,
+          "longTaskMs": 1265,
+          "longTaskCount": 11,
+          "longTaskMaxMs": 272,
+          "responseEndMs": 195,
+          "domInteractiveMs": 2088,
+          "domContentLoadedMs": 2094,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 56,
+        "zepto": 56,
+        "blinkit": 56
+      },
+      "totalMs": 7351,
+      "batteryTemperatureC": 37.5,
+      "uiTotal": "7.35s"
+    },
+    {
+      "block": 1,
+      "configuration": "p2",
+      "query": "Paneer 200g",
+      "storeCount": 5,
+      "limit": 2,
+      "mode": "page",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "SRD FOODS SRDFOODS_PANEER DODI (200gm) Assorted Seeds &amp; Nuts",
+          "price": 148,
+          "elapsedMs": 664
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer - 200g",
+          "price": 114,
+          "elapsedMs": 1473
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage High Protein Paneer",
+          "price": 135,
+          "elapsedMs": 3862
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer",
+          "price": 114,
+          "elapsedMs": 5792
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Mother Dairy Paneer",
+          "price": 100,
+          "elapsedMs": 7281
+        }
+      ],
+      "timings": {
+        "instamart": {
+          "scriptElapsedMs": 2985,
+          "extractionWorkMs": 68,
+          "extractionMaxMs": 41,
+          "scanCount": 15,
+          "firstCandidateMs": 2985,
+          "scriptStartSinceNavigationMs": 757,
+          "longTaskMs": 947,
+          "longTaskCount": 6,
+          "longTaskMaxMs": 317,
+          "responseEndMs": 241,
+          "domInteractiveMs": 872,
+          "domContentLoadedMs": 1015,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 4934,
+          "extractionWorkMs": 65,
+          "extractionMaxMs": 11,
+          "scanCount": 20,
+          "firstCandidateMs": 4933,
+          "scriptStartSinceNavigationMs": 723,
+          "longTaskMs": 1260,
+          "longTaskCount": 10,
+          "longTaskMaxMs": 318,
+          "responseEndMs": 206,
+          "domInteractiveMs": 1210,
+          "domContentLoadedMs": 1210,
+          "readyState": "complete"
+        },
+        "blinkit": {
+          "scriptElapsedMs": 2418,
+          "extractionWorkMs": 43,
+          "extractionMaxMs": 14,
+          "scanCount": 9,
+          "firstCandidateMs": 2418,
+          "scriptStartSinceNavigationMs": 682,
+          "longTaskMs": 732,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 318,
+          "responseEndMs": 475,
+          "domInteractiveMs": 1130,
+          "domContentLoadedMs": 1320,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 58,
+        "zepto": 58,
+        "blinkit": 4107
+      },
+      "totalMs": 7384,
+      "batteryTemperatureC": 37.5,
+      "uiTotal": "7.38s"
+    },
+    {
+      "block": 1,
+      "configuration": "e2",
+      "query": "Paneer 200g",
+      "storeCount": 5,
+      "limit": 2,
+      "mode": "extraction",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "SRD FOODS SRDFOODS_PANEER DODI (200gm) Assorted Seeds &amp; Nuts",
+          "price": 148,
+          "elapsedMs": 630
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer - 200g",
+          "price": 114,
+          "elapsedMs": 1310
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage High Protein Paneer",
+          "price": 135,
+          "elapsedMs": 5691
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Mother Dairy Paneer",
+          "price": 100,
+          "elapsedMs": 6106
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer",
+          "price": 114,
+          "elapsedMs": 7484
+        }
+      ],
+      "timings": {
+        "instamart": {
+          "scriptElapsedMs": 4688,
+          "extractionWorkMs": 65,
+          "extractionMaxMs": 35,
+          "scanCount": 15,
+          "firstCandidateMs": 4685,
+          "scriptStartSinceNavigationMs": 857,
+          "longTaskMs": 1007,
+          "longTaskCount": 6,
+          "longTaskMaxMs": 320,
+          "responseEndMs": 244,
+          "domInteractiveMs": 1297,
+          "domContentLoadedMs": 1431,
+          "readyState": "complete"
+        },
+        "blinkit": {
+          "scriptElapsedMs": 27,
+          "extractionWorkMs": 24,
+          "extractionMaxMs": 24,
+          "scanCount": 1,
+          "firstCandidateMs": 27,
+          "scriptStartSinceNavigationMs": 5925,
+          "longTaskMs": 0,
+          "longTaskCount": 0,
+          "longTaskMaxMs": 0,
+          "responseEndMs": 351,
+          "domInteractiveMs": 1490,
+          "domContentLoadedMs": 1932,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 6556,
+          "extractionWorkMs": 66,
+          "extractionMaxMs": 18,
+          "scanCount": 22,
+          "firstCandidateMs": 6555,
+          "scriptStartSinceNavigationMs": 818,
+          "longTaskMs": 1305,
+          "longTaskCount": 10,
+          "longTaskMaxMs": 300,
+          "responseEndMs": 224,
+          "domInteractiveMs": 2112,
+          "domContentLoadedMs": 2118,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 59,
+        "zepto": 59,
+        "blinkit": 5971
+      },
+      "totalMs": 7574,
+      "batteryTemperatureC": 37.6,
+      "uiTotal": "7.57s"
+    }
+  ],
+  "status": "checkpoint"
+}

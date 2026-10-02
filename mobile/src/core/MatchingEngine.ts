@@ -1,6 +1,35 @@
 import { ProductItem, PriceBreakdown, StoreResult } from '../types';
+import {titleParts, DESCRIPTION_WEIGHT} from './TitleText';
 
 export class MatchingEngine {
+  static extractQuantity(text: string): string {
+    const measure = (text || '').match(/(?:\b\d+\s*[x×]\s*)?\b\d+(?:\.\d+)?\s*(?:kgs?|kilograms?|grams?|gms?|g|ml|millilitres?|milliliters?|litres?|liters?|ltrs?|l)\b(?:\s*[x×]\s*\d+\b|\s*\(?pack\s+of\s+\d+\)?)?/i);
+    return measure ? measure[0].replace(/\s+/g, ' ').trim() : '';
+  }
+
+  static extractCardQuantity(title: string, html: string): string {
+    const fromTitle = this.extractQuantity(title);
+    if (fromTitle) return fromTitle;
+    // Flipkart often renders the net quantity as a separate short text node.
+    // Stay inside the product block and ignore scripts, styles and unit prices.
+    const textNodes = html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+      .matchAll(/>([^<>]{1,160})</g);
+    for (const node of textNodes) {
+      const text = node[1].replace(/&nbsp;|&#160;|&#xA0;/gi, ' ').trim();
+      const quantity = this.extractQuantity(text);
+      if (quantity && text.replace(/[()]/g, '').trim().toLowerCase() === quantity.replace(/[()]/g, '').trim().toLowerCase()) return quantity;
+    }
+    return '';
+  }
+
+  static extractDetailQuantity(html: string): string {
+    const text = html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ').replace(/&nbsp;|&#160;|&#xA0;/gi, ' ').replace(/\s+/g, ' ');
+    // A labelled specification avoids pulling a size from recommendations.
+    const labelled = text.match(/\b(?:Net Quantity|Quantity)\s*[:\-]?\s*(\d+(?:\.\d+)?\s*(?:kgs?|kilograms?|grams?|gms?|g|ml|millilitres?|milliliters?|litres?|liters?|ltrs?|l|pieces?|pcs?))\b/i);
+    return labelled ? labelled[1].trim() : '';
+  }
+
   static calculateTotalCost(item: { price: number; mrp?: number }): PriceBreakdown {
     const basePrice = Math.round(item.price);
     const mrp = Math.round(item.mrp || item.price);
@@ -46,6 +75,9 @@ export class MatchingEngine {
     // their alternate name ("searching aalugadda"). The better score wins.
     const fullText = normalize(String(itemTitle).replace(/\([^)]*\)/g, ' ') + ' ' + packSize);
     const fullTextAlt = normalize(`${itemTitle} ${packSize}`);
+    const parts = titleParts(itemTitle);
+    const nameText = normalize(parts.name.replace(/\([^)]*\)/g, ' ') + ' ' + packSize);
+    const nameTextAlt = normalize(`${parts.name} ${packSize}`);
     const q = normalize(query);
     const queryTokens = q.split(/\s+/).filter((t) => t.length > 0);
 
@@ -60,15 +92,15 @@ export class MatchingEngine {
     };
 
     queryTokens.forEach((token) => {
-      score += matchToken(fullText, token);
-      altScore += matchToken(fullTextAlt, token);
+      score += Math.max(matchToken(nameText, token), matchToken(fullText, token) * DESCRIPTION_WEIGHT);
+      altScore += Math.max(matchToken(nameTextAlt, token), matchToken(fullTextAlt, token) * DESCRIPTION_WEIGHT);
     });
     score = Math.max(score, altScore);
 
     // Exact-name preference: a product whose PRIMARY name (parentheticals
     // removed) starts with the query ("Onion (...)" for "onion") outranks
     // products that merely contain the word ("Sambar Onion (...)").
-    const strippedTitle = normalize(String(itemTitle).replace(/\([^)]*\)/g, ' '));
+    const strippedTitle = normalize(parts.name.replace(/\([^)]*\)/g, ' '));
     if (q && strippedTitle.startsWith(q)) score += 20;
 
     // Variety modifiers denote DIFFERENT products ("spring onion",
@@ -100,7 +132,7 @@ export class MatchingEngine {
     }
 
     if (queryTokens.length > 0 && fullText.includes(queryTokens[0])) {
-      score += 25;
+      score += nameText.includes(queryTokens[0]) ? 25 : 25 * DESCRIPTION_WEIGHT;
     }
 
     return score;
@@ -116,7 +148,7 @@ export class MatchingEngine {
     const sortedByLenDiff = topN
       .map((item) => ({
         item,
-        diff: Math.abs((item.title || "").trim().length - qLen)
+        diff: Math.abs(titleParts(item.title || '').name.trim().length - qLen)
       }))
       .sort((a, b) => a.diff - b.diff);
 

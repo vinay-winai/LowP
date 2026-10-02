@@ -1,0 +1,47 @@
+{
+  "date": "2026-10-01",
+  "soc": "Exynos 1280",
+  "model": "SM-M336BU",
+  "android": "16",
+  "buildMode": "Expo Go development via USB reverse 8082",
+  "timingCapture": "App UI readouts, rounded to 0.01s",
+  "pack": "No amzn",
+  "stores": [
+    "zepto"
+  ],
+  "protocol": "Five paired rounds: restart app, select No amzn, Paneer 200g, then Amul Butter 500g. Wait 12s after submission, capture total timing at the top; per-store details require Metro logs. Sessions/website caches retained; no app-data clearing or exact-query cache hits. Keep USB screen awake only during trials.",
+  "sourceHashes": [
+    {
+      "path": "mobile/src/components/BackgroundScrapers.tsx",
+      "sha256": "4307D0FDCCD02CACA1BD559294CCED04AB4D3637FA45B4910C088C1A77A9D8A1"
+    },
+    {
+      "path": "mobile/src/core/ScraperScript.ts",
+      "sha256": "6ED7D43F49A946A213E09B933FB62A7DA9C944CCBC4CE62B4EB2233115B27788"
+    },
+    {
+      "path": "mobile/src/screens/HomeScreen.tsx",
+      "sha256": "2CF36B9E0A1D02D90F7114176E58239AC771BB09C172765A3C64AA8E7D07CCF4"
+    }
+  ],
+  "trials": [
+    {
+      "round": 1,
+      "phase": "app_restart",
+      "query": "Paneer 200g",
+      "totalMs": 9140,
+      "stores": [],
+      "timingSource": "App UI rounded to 0.01s"
+    },
+    {
+      "round": 1,
+      "phase": "subsequent_query",
+      "query": "Amul Butter 500g",
+      "totalMs": 8980,
+      "stores": [],
+      "timingSource": "App UI rounded to 0.01s"
+    }
+  ],
+  "excluded": true,
+  "exclusionReason": "Pack contained Zepto only; page required login to continue searching. Not a five-store concurrency benchmark."
+}

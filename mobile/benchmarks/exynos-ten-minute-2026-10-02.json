@@ -1,0 +1,424 @@
+{
+  "date": "2026-10-02",
+  "device": "SM-M336BU Exynos 1280",
+  "pack": [
+    "amazon_tez",
+    "instamart",
+    "zepto",
+    "blinkit"
+  ],
+  "protocol": "Original source unchanged during these trials. Pack-switch Butter warm-up; then Paneer limit3/off, Butter off/limit3. Website caches and sessions retained. App result cache reset per request. All images allowed. No UI dump during loading, except the warm-up overlapped a failed Options attempt and is not a clean comparison. Battery 36.2C. Counts above store count mean all selected stores run together.",
+  "limitations": [
+    "Two queries, one run per configuration, exploratory only.",
+    "Butter off was confounded by a Swiggy login gate: CDP confirmed explicit Log in to continue shopping text after no-candidate timeout. Not a valid successful-search speed comparison.",
+    "WebView reuse retained but each search still navigates and boots the store app again.",
+    "Login fast-failure patch was implemented after this measurement set. These are not before/after timings for that patch."
+  ],
+  "trials": [
+    {
+      "label": "tenWarmup",
+      "query": "Amul Butter 500g",
+      "concurrency": 3,
+      "totalMs": 9144,
+      "outcomes": {
+        "amazon_tez": {
+          "result": "products",
+          "elapsedMs": 4459
+        },
+        "blinkit": {
+          "result": "products",
+          "elapsedMs": 7465
+        },
+        "instamart": {
+          "result": "timeout",
+          "elapsedMs": 9074
+        },
+        "zepto": {
+          "result": "timeout",
+          "elapsedMs": 9075
+        }
+      },
+      "timings": {
+        "amazon_tez": {
+          "scriptElapsedMs": 3624,
+          "extractionWorkMs": 94,
+          "extractionMaxMs": 36,
+          "scanCount": 14,
+          "firstCandidateMs": 3623,
+          "scriptStartSinceNavigationMs": 735,
+          "longTaskMs": 898,
+          "longTaskCount": 3,
+          "longTaskMaxMs": 509,
+          "responseEndMs": 574,
+          "domInteractiveMs": 922,
+          "domContentLoadedMs": 922,
+          "readyState": "complete"
+        },
+        "blinkit": {
+          "scriptElapsedMs": 1970,
+          "extractionWorkMs": 181,
+          "extractionMaxMs": 118,
+          "scanCount": 12,
+          "firstCandidateMs": 1969,
+          "scriptStartSinceNavigationMs": 713,
+          "longTaskMs": 467,
+          "longTaskCount": 3,
+          "longTaskMaxMs": 247,
+          "responseEndMs": 448,
+          "domInteractiveMs": 515,
+          "domContentLoadedMs": 708,
+          "readyState": "complete"
+        }
+      },
+      "rawMetroLog": " LOG  [LowP Mobile] Initiating parallel search for: \"Amul Butter 500g\" across 4 stores (WebView concurrency 3, mode page)\n LOG  [LowP Mobile] WebView start: amazon_tez (49ms queued)\n LOG  [LowP Mobile] WebView start: instamart (50ms queued)\n LOG  [LowP Mobile] WebView start: zepto (50ms queued)\n LOG  [LowP Mobile] Page load start: zepto (479ms)\n LOG  [LowP Mobile] Page load start: instamart (510ms)\n LOG  [LowP Mobile] Page load start: amazon_tez (586ms)\n LOG  [LowP Mobile] Page load end: zepto (980ms)\n LOG  [LowP Mobile] Page load end: instamart (1865ms)\n LOG  [LowP Mobile] Page load start: zepto (2490ms)\n LOG  [LowP Mobile] Page load end: amazon_tez (2491ms)\n LOG  [LowP Mobile] Page load start: amazon_tez (2939ms)\n LOG  [LowP Mobile] Page load end: amazon_tez (2939ms)\n LOG  [LowP Mobile] Page load start: zepto (3162ms)\n LOG  [LowP Mobile] Page load end: zepto (3162ms)\n LOG  [LowP Mobile] Page load end: zepto (3275ms)\n LOG  [LowP Mobile] Scraper timing: amazon_tez {\"scriptElapsedMs\":3624,\"extractionWorkMs\":94,\"extractionMaxMs\":36,\"scanCount\":14,\"firstCandidateMs\":3623,\"scriptStartSinceNavigationMs\":735,\"longTaskMs\":898,\"longTaskCount\":3,\"longTaskMaxMs\":509,\"responseEndMs\":574,\"domInteractiveMs\":922,\"domContentLoadedMs\":922,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] amazon_tez SUCCESS: \"Amul Unsalted Butter500 g\" at ₹320 (4459ms) [Candidates: Amul Unsalted Butter500 g | Amul Salted Pasteurised Butt | Amul Salted Pasteurised Butt]\n LOG  [LowP Mobile] amazon_tez extraction failures: [{\"f\": \"title\", \"txt\": \"₹310Add\"}, {\"f\": \"title\", \"txt\": \"₹310Add\"}, {\"f\": \"title\", \"txt\": \"₹310Add\"}, {\"f\": \"title\", \"txt\": \"₹310\"}, {\"f\": \"title\", \"txt\": \"₹310Add\"}, {\"f\": \"title\", \"txt\": \"₹310Add\"}, {\"f\": \"title\", \"txt\": \"₹310\"}, {\"f\": \"title\", \"txt\": \"₹310\"}]\n LOG  [LowP Mobile] WebView start: blinkit (4731ms queued)\n LOG  [LowP Mobile] Page load start: blinkit (5247ms)\n LOG  [LowP Mobile] Page load end: blinkit (6176ms)\n LOG  [LowP Mobile] Scraper timing: blinkit {\"scriptElapsedMs\":1970,\"extractionWorkMs\":181,\"extractionMaxMs\":118,\"scanCount\":12,\"firstCandidateMs\":1969,\"scriptStartSinceNavigationMs\":713,\"longTaskMs\":467,\"longTaskCount\":3,\"longTaskMaxMs\":247,\"responseEndMs\":448,\"domInteractiveMs\":515,\"domContentLoadedMs\":708,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] blinkit SUCCESS: \"Amul Unsalted Butter\" at ₹320 (7465ms) [Candidates: Amul Unsalted Butter | Amul Fresh Butter Cookies | Mother Dairy Salted Butter (]\n LOG  [LowP Mobile] blinkit extraction failures: [{\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}]\n LOG  [LowP Mobile] Store timeout: instamart (9074ms)\n LOG  [LowP Mobile] Store timeout: zepto (9075ms)\n LOG  [LowP Mobile] All results appeared in 9144ms (9.14s)\n"
+    },
+    {
+      "label": "tenA1",
+      "query": "Paneer 200g",
+      "concurrency": 3,
+      "totalMs": 6617,
+      "outcomes": {
+        "instamart": {
+          "result": "products",
+          "elapsedMs": 3971
+        },
+        "zepto": {
+          "result": "products",
+          "elapsedMs": 4794
+        },
+        "amazon_tez": {
+          "result": "products",
+          "elapsedMs": 5803
+        },
+        "blinkit": {
+          "result": "products",
+          "elapsedMs": 6552
+        }
+      },
+      "timings": {
+        "instamart": {
+          "scriptElapsedMs": 3418,
+          "extractionWorkMs": 47,
+          "extractionMaxMs": 19,
+          "scanCount": 15,
+          "firstCandidateMs": 3418,
+          "scriptStartSinceNavigationMs": 417,
+          "longTaskMs": 767,
+          "longTaskCount": 6,
+          "longTaskMaxMs": 264,
+          "responseEndMs": 263,
+          "domInteractiveMs": 564,
+          "domContentLoadedMs": 611,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 4277,
+          "extractionWorkMs": 25,
+          "extractionMaxMs": 10,
+          "scanCount": 21,
+          "firstCandidateMs": 4277,
+          "scriptStartSinceNavigationMs": 386,
+          "longTaskMs": 526,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 154,
+          "responseEndMs": 132,
+          "domInteractiveMs": 622,
+          "domContentLoadedMs": 624,
+          "readyState": "complete"
+        },
+        "amazon_tez": {
+          "scriptElapsedMs": 5211,
+          "extractionWorkMs": 193,
+          "extractionMaxMs": 51,
+          "scanCount": 25,
+          "firstCandidateMs": 5210,
+          "scriptStartSinceNavigationMs": 484,
+          "longTaskMs": 407,
+          "longTaskCount": 3,
+          "longTaskMaxMs": 177,
+          "responseEndMs": 654,
+          "domInteractiveMs": 832,
+          "domContentLoadedMs": 832,
+          "readyState": "complete"
+        },
+        "blinkit": {
+          "scriptElapsedMs": 1713,
+          "extractionWorkMs": 27,
+          "extractionMaxMs": 10,
+          "scanCount": 10,
+          "firstCandidateMs": 1712,
+          "scriptStartSinceNavigationMs": 561,
+          "longTaskMs": 341,
+          "longTaskCount": 3,
+          "longTaskMaxMs": 207,
+          "responseEndMs": 447,
+          "domInteractiveMs": 606,
+          "domContentLoadedMs": 709,
+          "readyState": "complete"
+        }
+      },
+      "rawMetroLog": " LOG  [LowP Mobile] Initiating parallel search for: \"Paneer 200g\" across 4 stores (WebView concurrency 3, mode page)\n LOG  [LowP Mobile] WebView start: amazon_tez (37ms queued)\n LOG  [LowP Mobile] WebView start: instamart (37ms queued)\n LOG  [LowP Mobile] WebView start: zepto (38ms queued)\n LOG  [LowP Mobile] Page load start: zepto (342ms)\n LOG  [LowP Mobile] Page load start: instamart (374ms)\n LOG  [LowP Mobile] Page load start: amazon_tez (532ms)\n LOG  [LowP Mobile] Page load start: zepto (1961ms)\n LOG  [LowP Mobile] Page load end: zepto (1961ms)\n LOG  [LowP Mobile] Page load end: zepto (1991ms)\n LOG  [LowP Mobile] Page load end: instamart (2500ms)\n LOG  [LowP Mobile] Page load end: amazon_tez (3163ms)\n LOG  [LowP Mobile] Scraper timing: instamart {\"scriptElapsedMs\":3418,\"extractionWorkMs\":47,\"extractionMaxMs\":19,\"scanCount\":15,\"firstCandidateMs\":3418,\"scriptStartSinceNavigationMs\":417,\"longTaskMs\":767,\"longTaskCount\":6,\"longTaskMaxMs\":264,\"responseEndMs\":263,\"domInteractiveMs\":564,\"domContentLoadedMs\":611,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] instamart SUCCESS: \"Amul Fresh Paneer\" at ₹95 (3971ms) [Candidates: Amul Fresh Paneer | Heritage Fresh Paneer | NOICE Fresh Malai Paneer (Ha]\n LOG  [LowP Mobile] WebView start: blinkit (4245ms queued)\n LOG  [LowP Mobile] Page load start: amazon_tez (4249ms)\n LOG  [LowP Mobile] Page load end: amazon_tez (4259ms)\n LOG  [LowP Mobile] Page load start: blinkit (4758ms)\n LOG  [LowP Mobile] Scraper timing: zepto {\"scriptElapsedMs\":4277,\"extractionWorkMs\":25,\"extractionMaxMs\":10,\"scanCount\":21,\"firstCandidateMs\":4277,\"scriptStartSinceNavigationMs\":386,\"longTaskMs\":526,\"longTaskCount\":5,\"longTaskMaxMs\":154,\"responseEndMs\":132,\"domInteractiveMs\":622,\"domContentLoadedMs\":624,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] zepto SUCCESS: \"Heritage Fresh Paneer\" at ₹114 (4794ms) [Candidates: Heritage Fresh Paneer | Amul Fresh Malai Paneer | Desi Farms Low Fat Paneer]\n LOG  [LowP Mobile] Scraper timing: amazon_tez {\"scriptElapsedMs\":5211,\"extractionWorkMs\":193,\"extractionMaxMs\":51,\"scanCount\":25,\"firstCandidateMs\":5210,\"scriptStartSinceNavigationMs\":484,\"longTaskMs\":407,\"longTaskCount\":3,\"longTaskMaxMs\":177,\"responseEndMs\":654,\"domInteractiveMs\":832,\"domContentLoadedMs\":832,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] amazon_tez SUCCESS: \"Milky Mist Paneer200 g\" at ₹110 (5803ms) [Candidates: Milky Mist Paneer200 g | Amul Fresh Paneer Rich in Pr | Gowardhan Classic Paneer Ric]\n LOG  [LowP Mobile] amazon_tez extraction failures: [{\"f\": \"title\", \"txt\": \"₹168₹250Add\"}, {\"f\": \"title\", \"txt\": \"₹168₹250Add\"}, {\"f\": \"title\", \"txt\": \"₹168₹250Add\"}, {\"f\": \"title\", \"txt\": \"₹168₹250\"}, {\"f\": \"title\", \"txt\": \"₹168₹250Add\"}, {\"f\": \"title\", \"txt\": \"₹168₹250Add\"}, {\"f\": \"title\", \"txt\": \"₹168₹250\"}, {\"f\": \"title\", \"txt\": \"₹168₹250\"}]\n LOG  [LowP Mobile] Page load end: blinkit (6293ms)\n LOG  [LowP Mobile] Scraper timing: blinkit {\"scriptElapsedMs\":1713,\"extractionWorkMs\":27,\"extractionMaxMs\":10,\"scanCount\":10,\"firstCandidateMs\":1712,\"scriptStartSinceNavigationMs\":561,\"longTaskMs\":341,\"longTaskCount\":3,\"longTaskMaxMs\":207,\"responseEndMs\":447,\"domInteractiveMs\":606,\"domContentLoadedMs\":709,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] blinkit SUCCESS: \"Milky Mist Paneer\" at ₹110 (6552ms) [Candidates: Milky Mist Paneer | Heritage Fresh Paneer | Gowardhan Classic Block Pane]\n LOG  [LowP Mobile] blinkit extraction failures: [{\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}]\n LOG  [LowP Mobile] All results appeared in 6617ms (6.62s)\n"
+    },
+    {
+      "label": "tenB1",
+      "query": "Paneer 200g",
+      "concurrency": 6,
+      "totalMs": 5630,
+      "outcomes": {
+        "blinkit": {
+          "result": "products",
+          "elapsedMs": 3183
+        },
+        "instamart": {
+          "result": "products",
+          "elapsedMs": 4210
+        },
+        "amazon_tez": {
+          "result": "products",
+          "elapsedMs": 4666
+        },
+        "zepto": {
+          "result": "products",
+          "elapsedMs": 5558
+        }
+      },
+      "timings": {
+        "blinkit": {
+          "scriptElapsedMs": 2407,
+          "extractionWorkMs": 30,
+          "extractionMaxMs": 9,
+          "scanCount": 11,
+          "firstCandidateMs": 2407,
+          "scriptStartSinceNavigationMs": 642,
+          "longTaskMs": 463,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 138,
+          "responseEndMs": 353,
+          "domInteractiveMs": 909,
+          "domContentLoadedMs": 1118,
+          "readyState": "complete"
+        },
+        "instamart": {
+          "scriptElapsedMs": 3485,
+          "extractionWorkMs": 40,
+          "extractionMaxMs": 13,
+          "scanCount": 17,
+          "firstCandidateMs": 3485,
+          "scriptStartSinceNavigationMs": 611,
+          "longTaskMs": 606,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 273,
+          "responseEndMs": 345,
+          "domInteractiveMs": 861,
+          "domContentLoadedMs": 900,
+          "readyState": "complete"
+        },
+        "amazon_tez": {
+          "scriptElapsedMs": 3853,
+          "extractionWorkMs": 142,
+          "extractionMaxMs": 71,
+          "scanCount": 16,
+          "firstCandidateMs": 3853,
+          "scriptStartSinceNavigationMs": 564,
+          "longTaskMs": 393,
+          "longTaskCount": 3,
+          "longTaskMaxMs": 172,
+          "responseEndMs": 385,
+          "domInteractiveMs": 847,
+          "domContentLoadedMs": 853,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 5141,
+          "extractionWorkMs": 27,
+          "extractionMaxMs": 7,
+          "scanCount": 21,
+          "firstCandidateMs": 5141,
+          "scriptStartSinceNavigationMs": 353,
+          "longTaskMs": 346,
+          "longTaskCount": 2,
+          "longTaskMaxMs": 222,
+          "responseEndMs": 181,
+          "domInteractiveMs": 832,
+          "domContentLoadedMs": 833,
+          "readyState": "complete"
+        }
+      },
+      "rawMetroLog": " LOG  [LowP Mobile] Initiating parallel search for: \"Paneer 200g\" across 4 stores (WebView concurrency 6, mode page)\n LOG  [LowP Mobile] WebView start: amazon_tez (47ms queued)\n LOG  [LowP Mobile] WebView start: instamart (47ms queued)\n LOG  [LowP Mobile] WebView start: zepto (47ms queued)\n LOG  [LowP Mobile] WebView start: blinkit (48ms queued)\n LOG  [LowP Mobile] Page load start: zepto (316ms)\n LOG  [LowP Mobile] Page load start: amazon_tez (492ms)\n LOG  [LowP Mobile] Page load start: instamart (541ms)\n LOG  [LowP Mobile] Page load start: blinkit (567ms)\n LOG  [LowP Mobile] Page load end: blinkit (1702ms)\n LOG  [LowP Mobile] Page load start: zepto (1954ms)\n LOG  [LowP Mobile] Page load end: zepto (1955ms)\n LOG  [LowP Mobile] Page load end: zepto (1956ms)\n LOG  [LowP Mobile] Page load end: amazon_tez (2041ms)\n LOG  [LowP Mobile] Page load end: instamart (2481ms)\n LOG  [LowP Mobile] Page load start: amazon_tez (3031ms)\n LOG  [LowP Mobile] Page load end: amazon_tez (3032ms)\n LOG  [LowP Mobile] Scraper timing: blinkit {\"scriptElapsedMs\":2407,\"extractionWorkMs\":30,\"extractionMaxMs\":9,\"scanCount\":11,\"firstCandidateMs\":2407,\"scriptStartSinceNavigationMs\":642,\"longTaskMs\":463,\"longTaskCount\":5,\"longTaskMaxMs\":138,\"responseEndMs\":353,\"domInteractiveMs\":909,\"domContentLoadedMs\":1118,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] blinkit SUCCESS: \"Milky Mist Paneer\" at ₹110 (3183ms) [Candidates: Milky Mist Paneer | Heritage Fresh Paneer | Gowardhan Classic Block Pane]\n LOG  [LowP Mobile] blinkit extraction failures: [{\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}]\n LOG  [LowP Mobile] Scraper timing: instamart {\"scriptElapsedMs\":3485,\"extractionWorkMs\":40,\"extractionMaxMs\":13,\"scanCount\":17,\"firstCandidateMs\":3485,\"scriptStartSinceNavigationMs\":611,\"longTaskMs\":606,\"longTaskCount\":4,\"longTaskMaxMs\":273,\"responseEndMs\":345,\"domInteractiveMs\":861,\"domContentLoadedMs\":900,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] instamart SUCCESS: \"Amul Fresh Paneer\" at ₹95 (4210ms) [Candidates: Amul Fresh Paneer | Heritage Fresh Paneer | NOICE Fresh Malai Paneer (Ha]\n LOG  [LowP Mobile] Scraper timing: amazon_tez {\"scriptElapsedMs\":3853,\"extractionWorkMs\":142,\"extractionMaxMs\":71,\"scanCount\":16,\"firstCandidateMs\":3853,\"scriptStartSinceNavigationMs\":564,\"longTaskMs\":393,\"longTaskCount\":3,\"longTaskMaxMs\":172,\"responseEndMs\":385,\"domInteractiveMs\":847,\"domContentLoadedMs\":853,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] amazon_tez SUCCESS: \"Milky Mist Paneer200 g\" at ₹110 (4666ms) [Candidates: Milky Mist Paneer200 g | Amul Fresh Paneer Rich in Pr | Gowardhan Classic Paneer Ric]\n LOG  [LowP Mobile] amazon_tez extraction failures: [{\"f\": \"title\", \"txt\": \"₹104₹117Add\"}, {\"f\": \"title\", \"txt\": \"₹104₹117Add\"}, {\"f\": \"title\", \"txt\": \"₹104₹117Add\"}, {\"f\": \"title\", \"txt\": \"₹104₹117\"}, {\"f\": \"title\", \"txt\": \"₹104₹117Add\"}, {\"f\": \"title\", \"txt\": \"₹104₹117Add\"}, {\"f\": \"title\", \"txt\": \"₹104₹117\"}, {\"f\": \"title\", \"txt\": \"₹104₹117\"}]\n LOG  [LowP Mobile] Scraper timing: zepto {\"scriptElapsedMs\":5141,\"extractionWorkMs\":27,\"extractionMaxMs\":7,\"scanCount\":21,\"firstCandidateMs\":5141,\"scriptStartSinceNavigationMs\":353,\"longTaskMs\":346,\"longTaskCount\":2,\"longTaskMaxMs\":222,\"responseEndMs\":181,\"domInteractiveMs\":832,\"domContentLoadedMs\":833,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] zepto SUCCESS: \"Heritage Fresh Paneer\" at ₹114 (5558ms) [Candidates: Heritage Fresh Paneer | Amul Fresh Malai Paneer | Desi Farms Low Fat Paneer]\n LOG  [LowP Mobile] All results appeared in 5630ms (5.63s)\n"
+    },
+    {
+      "label": "tenB2",
+      "query": "Amul Butter 500g",
+      "concurrency": 6,
+      "totalMs": 8984,
+      "outcomes": {
+        "blinkit": {
+          "result": "products",
+          "elapsedMs": 2619
+        },
+        "amazon_tez": {
+          "result": "products",
+          "elapsedMs": 4631
+        },
+        "zepto": {
+          "result": "products",
+          "elapsedMs": 5031
+        },
+        "instamart": {
+          "result": "no_candidates",
+          "elapsedMs": 8910
+        }
+      },
+      "timings": {
+        "blinkit": {
+          "scriptElapsedMs": 1785,
+          "extractionWorkMs": 20,
+          "extractionMaxMs": 8,
+          "scanCount": 9,
+          "firstCandidateMs": 1784,
+          "scriptStartSinceNavigationMs": 708,
+          "longTaskMs": 330,
+          "longTaskCount": 3,
+          "longTaskMaxMs": 204,
+          "responseEndMs": 425,
+          "domInteractiveMs": 518,
+          "domContentLoadedMs": 1080,
+          "readyState": "complete"
+        },
+        "amazon_tez": {
+          "scriptElapsedMs": 3851,
+          "extractionWorkMs": 116,
+          "extractionMaxMs": 34,
+          "scanCount": 20,
+          "firstCandidateMs": 3851,
+          "scriptStartSinceNavigationMs": 685,
+          "longTaskMs": 338,
+          "longTaskCount": 3,
+          "longTaskMaxMs": 133,
+          "responseEndMs": 668,
+          "domInteractiveMs": 1520,
+          "domContentLoadedMs": 1526,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 3619,
+          "extractionWorkMs": 29,
+          "extractionMaxMs": 9,
+          "scanCount": 20,
+          "firstCandidateMs": 3618,
+          "scriptStartSinceNavigationMs": 1136,
+          "longTaskMs": 368,
+          "longTaskCount": 2,
+          "longTaskMaxMs": 190,
+          "responseEndMs": 619,
+          "domInteractiveMs": 1633,
+          "domContentLoadedMs": 1634,
+          "readyState": "complete"
+        },
+        "instamart": {
+          "scriptElapsedMs": 8564,
+          "extractionWorkMs": 26,
+          "extractionMaxMs": 4,
+          "scanCount": 47,
+          "firstCandidateMs": null,
+          "scriptStartSinceNavigationMs": 281,
+          "longTaskMs": 149,
+          "longTaskCount": 2,
+          "longTaskMaxMs": 89,
+          "responseEndMs": 232,
+          "domInteractiveMs": 236,
+          "domContentLoadedMs": 275,
+          "readyState": "complete"
+        }
+      },
+      "rawMetroLog": " LOG  [LowP Mobile] Initiating parallel search for: \"Amul Butter 500g\" across 4 stores (WebView concurrency 6, mode page)\n LOG  [LowP Mobile] WebView start: amazon_tez (47ms queued)\n LOG  [LowP Mobile] WebView start: instamart (47ms queued)\n LOG  [LowP Mobile] WebView start: zepto (47ms queued)\n LOG  [LowP Mobile] WebView start: blinkit (47ms queued)\n LOG  [LowP Mobile] Page load start: instamart (304ms)\n LOG  [LowP Mobile] Page load start: amazon_tez (587ms)\n LOG  [LowP Mobile] Page load start: blinkit (590ms)\n LOG  [LowP Mobile] Page load start: zepto (1028ms)\n LOG  [LowP Mobile] Page load end: instamart (2037ms)\n LOG  [LowP Mobile] Page load end: blinkit (2171ms)\n LOG  [LowP Mobile] Scraper timing: blinkit {\"scriptElapsedMs\":1785,\"extractionWorkMs\":20,\"extractionMaxMs\":8,\"scanCount\":9,\"firstCandidateMs\":1784,\"scriptStartSinceNavigationMs\":708,\"longTaskMs\":330,\"longTaskCount\":3,\"longTaskMaxMs\":204,\"responseEndMs\":425,\"domInteractiveMs\":518,\"domContentLoadedMs\":1080,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] blinkit SUCCESS: \"Amul Unsalted Butter\" at ₹320 (2619ms) [Candidates: Amul Unsalted Butter | Amul Fresh Butter Cookies | Mother Dairy Salted Butter (]\n LOG  [LowP Mobile] blinkit extraction failures: [{\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}]\n LOG  [LowP Mobile] Page load start: zepto (2928ms)\n LOG  [LowP Mobile] Page load end: zepto (2929ms)\n LOG  [LowP Mobile] Page load end: zepto (2931ms)\n LOG  [LowP Mobile] Page load end: amazon_tez (3427ms)\n LOG  [LowP Mobile] Page load start: amazon_tez (3455ms)\n LOG  [LowP Mobile] Page load end: amazon_tez (3456ms)\n LOG  [LowP Mobile] Scraper timing: amazon_tez {\"scriptElapsedMs\":3851,\"extractionWorkMs\":116,\"extractionMaxMs\":34,\"scanCount\":20,\"firstCandidateMs\":3851,\"scriptStartSinceNavigationMs\":685,\"longTaskMs\":338,\"longTaskCount\":3,\"longTaskMaxMs\":133,\"responseEndMs\":668,\"domInteractiveMs\":1520,\"domContentLoadedMs\":1526,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] amazon_tez SUCCESS: \"Amul Unsalted Butter500 g\" at ₹320 (4631ms) [Candidates: Amul Unsalted Butter500 g | Amul Salted Pasteurised Butt | Amul Salted Pasteurised Butt]\n LOG  [LowP Mobile] amazon_tez extraction failures: [{\"f\": \"title\", \"txt\": \"₹310Add\"}, {\"f\": \"title\", \"txt\": \"₹310Add\"}, {\"f\": \"title\", \"txt\": \"₹310Add\"}, {\"f\": \"title\", \"txt\": \"₹310\"}, {\"f\": \"title\", \"txt\": \"₹310Add\"}, {\"f\": \"title\", \"txt\": \"₹310Add\"}, {\"f\": \"title\", \"txt\": \"₹310\"}, {\"f\": \"title\", \"txt\": \"₹310\"}]\n LOG  [LowP Mobile] Scraper timing: zepto {\"scriptElapsedMs\":3619,\"extractionWorkMs\":29,\"extractionMaxMs\":9,\"scanCount\":20,\"firstCandidateMs\":3618,\"scriptStartSinceNavigationMs\":1136,\"longTaskMs\":368,\"longTaskCount\":2,\"longTaskMaxMs\":190,\"responseEndMs\":619,\"domInteractiveMs\":1633,\"domContentLoadedMs\":1634,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] zepto SUCCESS: \"Amul Unsalted Cooking Butter\" at ₹320 (5031ms) [Candidates: Amul Unsalted Cooking Butter | Amul Salted Butter (Chiplets | Nutralite Doodhshakti Probio]\n LOG  [LowP Mobile] Scraper timing: instamart {\"scriptElapsedMs\":8564,\"extractionWorkMs\":26,\"extractionMaxMs\":4,\"scanCount\":47,\"firstCandidateMs\":null,\"scriptStartSinceNavigationMs\":281,\"longTaskMs\":149,\"longTaskCount\":2,\"longTaskMaxMs\":89,\"responseEndMs\":232,\"domInteractiveMs\":236,\"domContentLoadedMs\":275,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] instamart returned 0 candidates (8910ms) {\"attempts\": 47, \"domNodes\": 240, \"failures\": [], \"reason\": \"extraction_timeout\", \"timing\": {\"domContentLoadedMs\": 275, \"domInteractiveMs\": 236, \"extractionMaxMs\": 4, \"extractionWorkMs\": 26, \"firstCandidateMs\": null, \"longTaskCount\": 2, \"longTaskMaxMs\": 89, \"longTaskMs\": 149, \"readyState\": \"complete\", \"responseEndMs\": 232, \"scanCount\": 47, \"scriptElapsedMs\": 8564, \"scriptStartSinceNavigationMs\": 281}, \"title\": \"Instamart\", \"url\": \"https://www.swiggy.com/instamart/search?custom_back=true&query=Amul%20Butter%20500g\"}\n LOG  [LowP Mobile] All results appeared in 8984ms (8.98s)\n"
+    },
+    {
+      "label": "tenA2",
+      "query": "Amul Butter 500g",
+      "concurrency": 3,
+      "totalMs": 6847,
+      "outcomes": {
+        "instamart": {
+          "result": "products",
+          "elapsedMs": 3443
+        },
+        "amazon_tez": {
+          "result": "products",
+          "elapsedMs": 3879
+        },
+        "zepto": {
+          "result": "products",
+          "elapsedMs": 5041
+        },
+        "blinkit": {
+          "result": "products",
+          "elapsedMs": 6771
+        }
+      },
+      "timings": {
+        "instamart": {
+          "scriptElapsedMs": 2709,
+          "extractionWorkMs": 32,
+          "extractionMaxMs": 15,
+          "scanCount": 12,
+          "firstCandidateMs": 2709,
+          "scriptStartSinceNavigationMs": 608,
+          "longTaskMs": 652,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 212,
+          "responseEndMs": 418,
+          "domInteractiveMs": 735,
+          "domContentLoadedMs": 844,
+          "readyState": "complete"
+        },
+        "amazon_tez": {
+          "scriptElapsedMs": 3016,
+          "extractionWorkMs": 138,
+          "extractionMaxMs": 58,
+          "scanCount": 15,
+          "firstCandidateMs": 3016,
+          "scriptStartSinceNavigationMs": 676,
+          "longTaskMs": 339,
+          "longTaskCount": 3,
+          "longTaskMaxMs": 130,
+          "responseEndMs": 553,
+          "domInteractiveMs": 974,
+          "domContentLoadedMs": 974,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 4477,
+          "extractionWorkMs": 28,
+          "extractionMaxMs": 9,
+          "scanCount": 19,
+          "firstCandidateMs": 4477,
+          "scriptStartSinceNavigationMs": 447,
+          "longTaskMs": 537,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 186,
+          "responseEndMs": 218,
+          "domInteractiveMs": 886,
+          "domContentLoadedMs": 887,
+          "readyState": "complete"
+        },
+        "blinkit": {
+          "scriptElapsedMs": 2075,
+          "extractionWorkMs": 32,
+          "extractionMaxMs": 10,
+          "scanCount": 12,
+          "firstCandidateMs": 2074,
+          "scriptStartSinceNavigationMs": 777,
+          "longTaskMs": 450,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 212,
+          "responseEndMs": 648,
+          "domInteractiveMs": 820,
+          "domContentLoadedMs": 1049,
+          "readyState": "complete"
+        }
+      },
+      "rawMetroLog": " LOG  [LowP Mobile] Initiating parallel search for: \"Amul Butter 500g\" across 4 stores (WebView concurrency 3, mode page)\n LOG  [LowP Mobile] WebView start: amazon_tez (37ms queued)\n LOG  [LowP Mobile] WebView start: instamart (37ms queued)\n LOG  [LowP Mobile] WebView start: zepto (38ms queued)\n LOG  [LowP Mobile] Page load start: zepto (446ms)\n LOG  [LowP Mobile] Page load start: instamart (520ms)\n LOG  [LowP Mobile] Page load start: amazon_tez (595ms)\n LOG  [LowP Mobile] Page load start: zepto (1218ms)\n LOG  [LowP Mobile] Page load end: zepto (1219ms)\n LOG  [LowP Mobile] Page load end: zepto (1282ms)\n LOG  [LowP Mobile] Page load end: amazon_tez (1733ms)\n LOG  [LowP Mobile] Page load end: instamart (2373ms)\n LOG  [LowP Mobile] Page load start: amazon_tez (2484ms)\n LOG  [LowP Mobile] Page load end: amazon_tez (2484ms)\n LOG  [LowP Mobile] Scraper timing: instamart {\"scriptElapsedMs\":2709,\"extractionWorkMs\":32,\"extractionMaxMs\":15,\"scanCount\":12,\"firstCandidateMs\":2709,\"scriptStartSinceNavigationMs\":608,\"longTaskMs\":652,\"longTaskCount\":5,\"longTaskMaxMs\":212,\"responseEndMs\":418,\"domInteractiveMs\":735,\"domContentLoadedMs\":844,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] instamart SUCCESS: \"Amul Butter Unsalted Box\" at ₹320 (3443ms) [Candidates: Amul Butter Unsalted Box | Amul Unsalted Butter & Maggi | Amul Unsalted Butter]\n LOG  [LowP Mobile] instamart extraction failures: [{\"f\": \"price\", \"txt\": \"8 MINSAmul Processed Cheese SlicesSmooth and creamy cheese s\"}]\n LOG  [LowP Mobile] WebView start: blinkit (3856ms queued)\n LOG  [LowP Mobile] Scraper timing: amazon_tez {\"scriptElapsedMs\":3016,\"extractionWorkMs\":138,\"extractionMaxMs\":58,\"scanCount\":15,\"firstCandidateMs\":3016,\"scriptStartSinceNavigationMs\":676,\"longTaskMs\":339,\"longTaskCount\":3,\"longTaskMaxMs\":130,\"responseEndMs\":553,\"domInteractiveMs\":974,\"domContentLoadedMs\":974,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] amazon_tez SUCCESS: \"Amul Unsalted Butter500 g\" at ₹320 (3879ms) [Candidates: Amul Unsalted Butter500 g | Amul Salted Pasteurised Butt | Amul Salted Pasteurised Butt]\n LOG  [LowP Mobile] amazon_tez extraction failures: [{\"f\": \"title\", \"txt\": \"₹310Add\"}, {\"f\": \"title\", \"txt\": \"₹310Add\"}, {\"f\": \"title\", \"txt\": \"₹310Add\"}, {\"f\": \"title\", \"txt\": \"₹310\"}, {\"f\": \"title\", \"txt\": \"₹310Add\"}, {\"f\": \"title\", \"txt\": \"₹310Add\"}, {\"f\": \"title\", \"txt\": \"₹310\"}, {\"f\": \"title\", \"txt\": \"₹310\"}]\n LOG  [LowP Mobile] Page load start: blinkit (4607ms)\n LOG  [LowP Mobile] Scraper timing: zepto {\"scriptElapsedMs\":4477,\"extractionWorkMs\":28,\"extractionMaxMs\":9,\"scanCount\":19,\"firstCandidateMs\":4477,\"scriptStartSinceNavigationMs\":447,\"longTaskMs\":537,\"longTaskCount\":5,\"longTaskMaxMs\":186,\"responseEndMs\":218,\"domInteractiveMs\":886,\"domContentLoadedMs\":887,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] zepto SUCCESS: \"Amul Unsalted Cooking Butter\" at ₹320 (5041ms) [Candidates: Amul Unsalted Cooking Butter | Amul Salted Butter (Chiplets | Nutralite Doodhshakti Probio]\n LOG  [LowP Mobile] Page load end: blinkit (5579ms)\n LOG  [LowP Mobile] Scraper timing: blinkit {\"scriptElapsedMs\":2075,\"extractionWorkMs\":32,\"extractionMaxMs\":10,\"scanCount\":12,\"firstCandidateMs\":2074,\"scriptStartSinceNavigationMs\":777,\"longTaskMs\":450,\"longTaskCount\":4,\"longTaskMaxMs\":212,\"responseEndMs\":648,\"domInteractiveMs\":820,\"domContentLoadedMs\":1049,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] blinkit SUCCESS: \"Amul Unsalted Butter\" at ₹320 (6771ms) [Candidates: Amul Unsalted Butter | Amul Fresh Butter Cookies | Mother Dairy Salted Butter (]\n LOG  [LowP Mobile] blinkit extraction failures: [{\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}]\n LOG  [LowP Mobile] All results appeared in 6847ms (6.85s)\n"
+    }
+  ]
+}

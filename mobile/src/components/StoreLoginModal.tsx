@@ -1,17 +1,20 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Modal,
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator
+  ActivityIndicator,
+  TextInput,
+  Alert
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { PlatformId } from '../types';
-import { X, RefreshCw, ArrowLeft, ShieldCheck } from 'lucide-react-native';
-import { StoreSession, SESSION_LABELS, isStoreSessionUrl, readSessionMessage, sessionObserverScript } from '../core/StoreSession';
+import { X, RefreshCw, ArrowLeft } from 'lucide-react-native';
+import { StoreSession, StoreLocation, SESSION_LABELS, isStoreSessionUrl, readSessionMessage, sessionObserverScript, locationObserverScript, readLocationMessage } from '../core/StoreSession';
+import {addressHelperScript, readAddressHelpMessage, addressHelpLabel, addressPin, normalizePinInput, isValidPin} from '../core/StoreAddress';
 
 interface StoreLoginModalProps {
   visible: boolean;
@@ -19,6 +22,10 @@ interface StoreLoginModalProps {
   onClose: () => void;
   session: StoreSession;
   onSessionChange: (platformId: PlatformId, session: StoreSession) => void;
+  purpose?: 'account' | 'address';
+  addressQuery?: string;
+  locationIsSet?: boolean;
+  onLocationChange: (id: PlatformId, location: StoreLocation) => void;
 }
 
 const STORE_CONFIG: Record<
@@ -62,7 +69,11 @@ export const StoreLoginModal: React.FC<StoreLoginModalProps> = ({
   platformId,
   onClose,
   session,
-  onSessionChange
+  onSessionChange,
+  purpose = 'account',
+  addressQuery = '',
+  locationIsSet = false,
+  onLocationChange
 }) => {
   const [loading, setLoading] = useState(false);
   const [canGoBack, setCanGoBack] = useState(false);
@@ -70,11 +81,40 @@ export const StoreLoginModal: React.FC<StoreLoginModalProps> = ({
   const navigationToken = useRef('');
   const navigationUrl = useRef('');
   const observedToken = useRef('');
+  const [address, setAddress] = useState(addressPin(addressQuery));
+  const [addressMessage, setAddressMessage] = useState('Each store has its own matches. Choose the correct location in the store below.');
+  const addressAttempted = useRef(false);
+  const addressOperationToken = useRef('');
+  const addressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const addressPages = useRef<Partial<Record<PlatformId, string>>>({});
+  const initialPage = useMemo(() => platformId ? (purpose === 'address' && platformId !== 'flipkart' && platformId !== 'instamart' ? addressPages.current[platformId] || STORE_CONFIG[platformId].url : STORE_CONFIG[platformId].url) : '', [visible, platformId, purpose]);
+  useEffect(() => {
+    if (addressTimer.current) clearTimeout(addressTimer.current);
+    addressOperationToken.current = '';
+    if (visible) {setAddress(addressPin(addressQuery)); addressAttempted.current = false; setAddressMessage('Each store has its own matches. Choose the correct location in the store below.');}
+    return () => {addressOperationToken.current = ''; if (addressTimer.current) clearTimeout(addressTimer.current);};
+  }, [visible, platformId, purpose, addressQuery]);
+  const fillAddress = () => {
+    if (!platformId || !navigationToken.current || !isStoreSessionUrl(platformId, navigationUrl.current)) return;
+    const query = address;
+    if (!isValidPin(query)) {setAddressMessage('Enter a valid six-digit PIN code.'); Alert.alert('Enter the PIN code', 'Enter a valid six-digit PIN code to search for the store location.'); return;}
+    addressAttempted.current = true;
+    const token = `address:${platformId}:${Date.now()}:${Math.random()}`;
+    addressOperationToken.current = token;
+    if (addressTimer.current) clearTimeout(addressTimer.current);
+    addressTimer.current = setTimeout(() => {
+      if (addressOperationToken.current !== token) return;
+      addressOperationToken.current = '';
+      webViewRef.current?.injectJavaScript('window.__lowpAddressHelper?.dispose(); true;');
+      setAddressMessage(addressHelpLabel(platformId, 'manual'));
+    }, 8000);
+    setAddressMessage('Opening the store’s location search…');
+    webViewRef.current?.injectJavaScript(addressHelperScript(platformId, addressOperationToken.current, query));
+  };
 
   if (!visible || !platformId || !STORE_CONFIG[platformId]) return null;
 
   const config = STORE_CONFIG[platformId];
-
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <SafeAreaView style={styles.container}>
@@ -86,12 +126,12 @@ export const StoreLoginModal: React.FC<StoreLoginModalProps> = ({
                 style={styles.backButton}
                 onPress={() => webViewRef.current?.goBack()}
               >
-                <ArrowLeft size={20} color="#F8FAFC" />
+                <ArrowLeft size={20} color="#0F172A" />
               </TouchableOpacity>
             )}
             <View style={[styles.storeIndicator, { backgroundColor: config.color }]} />
             <Text style={styles.title} numberOfLines={1}>
-              Connect {config.name}
+              {purpose === 'address' ? locationIsSet ? 'Reset location ·' : 'Set location ·' : 'Connect'} {config.name}
             </Text>
           </View>
 
@@ -102,24 +142,23 @@ export const StoreLoginModal: React.FC<StoreLoginModalProps> = ({
               style={styles.iconButton}
               onPress={() => webViewRef.current?.reload()}
             >
-              <RefreshCw size={18} color="#94A3B8" />
+              <RefreshCw size={18} color="#64748B" />
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.doneButton}
-              onPress={() => {
-                onClose();
-              }}
-            >
-              <ShieldCheck size={16} color="#10B981" />
-              <Text style={styles.doneButtonText}>Done</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.iconButton} onPress={onClose}>
-              <X size={20} color="#94A3B8" />
+            <TouchableOpacity accessibilityLabel="Close store" style={styles.iconButton} onPress={onClose}>
+              <X size={20} color="#64748B" />
             </TouchableOpacity>
           </View>
         </View>
+
+        {purpose === 'address' && <View style={styles.addressHelp}>
+          <View style={styles.addressRow}><TextInput accessibilityLabel="PIN code search for this store" style={styles.addressInput}
+            value={address} onChangeText={value => {addressOperationToken.current = ''; if (addressTimer.current) clearTimeout(addressTimer.current); webViewRef.current?.injectJavaScript('window.__lowpAddressHelper?.dispose(); true;'); setAddress(normalizePinInput(value)); setAddressMessage('Tap Fill address to search for this PIN code in the store.');}} maxLength={6} keyboardType="number-pad" placeholder="6-digit PIN code" placeholderTextColor="#94A3B8" />
+            <TouchableOpacity accessibilityLabel="Fill store address search" disabled={loading} style={styles.fillButton} onPress={fillAddress}>
+              <Text style={{color: loading ? '#94A3B8' : '#1D4ED8', fontWeight: '600', fontSize: 12}}>Fill address</Text>
+            </TouchableOpacity>
+          </View><Text style={styles.addressHint} accessibilityLiveRegion="polite">{addressMessage}</Text>
+        </View>}
 
         {/* Security Banner */}
         <View style={styles.securityBanner}>
@@ -142,7 +181,7 @@ export const StoreLoginModal: React.FC<StoreLoginModalProps> = ({
           <WebView
             key={platformId}
             ref={webViewRef}
-            source={{ uri: config.url }}
+            source={{ uri: initialPage || config.url }}
             style={styles.webView}
             javaScriptEnabled={true}
             domStorageEnabled={true}
@@ -152,9 +191,14 @@ export const StoreLoginModal: React.FC<StoreLoginModalProps> = ({
             setSupportMultipleWindows={false}
             javaScriptCanOpenWindowsAutomatically={true}
             onNavigationStateChange={(navState) => {
+              if (isStoreSessionUrl(platformId, navState.url)) {
+                navigationUrl.current = navState.url;
+                if (purpose === 'address') addressPages.current[platformId] = navState.url;
+              }
               setCanGoBack(navState.canGoBack);
               setLoading(navState.loading);
               if (!navState.loading && isStoreSessionUrl(platformId, navState.url)) {
+                webViewRef.current?.injectJavaScript(locationObserverScript(platformId, navigationToken.current, true));
                 webViewRef.current?.injectJavaScript(sessionObserverScript(platformId, navigationToken.current));
               }
             }}
@@ -163,35 +207,45 @@ export const StoreLoginModal: React.FC<StoreLoginModalProps> = ({
               navigationUrl.current = event.nativeEvent.url;
               observedToken.current = '';
               setLoading(true);
-              onSessionChange(platformId, { status: 'checking', evidence: 'none', checkedAt: Date.now() });
+              if (purpose === 'account') onSessionChange(platformId, { status: 'checking', evidence: 'none', checkedAt: Date.now() });
               // Android emits load-start for some SPA transitions without a matching
               // load-end. Refresh the observer in the surviving document as well.
               if (isStoreSessionUrl(platformId, event.nativeEvent.url)) {
+                webViewRef.current?.injectJavaScript(locationObserverScript(platformId, navigationToken.current, true));
                 webViewRef.current?.injectJavaScript(sessionObserverScript(platformId, navigationToken.current));
               }
             }}
             onLoadEnd={(event) => {
               setLoading(false);
               if (event.nativeEvent.url !== navigationUrl.current) return;
-              if (observedToken.current !== navigationToken.current) {
+              if (purpose !== 'address' && observedToken.current !== navigationToken.current) {
                 onSessionChange(platformId, { status: 'unknown', evidence: 'none', checkedAt: Date.now() });
               }
               if (isStoreSessionUrl(platformId, event.nativeEvent.url)) {
                 webViewRef.current?.injectJavaScript(sessionObserverScript(platformId, navigationToken.current));
+                if (purpose === 'address' && !addressAttempted.current) fillAddress();
               }
             }}
             onMessage={(event) => {
+              const location = readLocationMessage(event.nativeEvent.data, platformId, navigationToken.current, event.nativeEvent.url);
+              if(location) {onLocationChange(platformId,location); return;}
+              const addressResult = readAddressHelpMessage(event.nativeEvent.data, platformId, addressOperationToken.current, event.nativeEvent.url);
+              if (addressResult) {if (addressTimer.current) clearTimeout(addressTimer.current); addressOperationToken.current = ''; setAddressMessage(addressHelpLabel(platformId, addressResult)); return;}
               const observation = readSessionMessage(event.nativeEvent.data, platformId,
                 navigationToken.current, event.nativeEvent.url);
               if (observation) {
                 observedToken.current = navigationToken.current;
-                onSessionChange(platformId, observation);
+                const conflicting = observation.status === 'unknown' && JSON.parse(event.nativeEvent.data).conflicting === true;
+                if (purpose !== 'address' || observation.status !== 'unknown' || conflicting) onSessionChange(platformId, observation);
               }
             }}
             onError={() => {
               setLoading(false);
               navigationToken.current = '';
-              onSessionChange(platformId, { status: 'unknown', evidence: 'none', checkedAt: Date.now() });
+              addressOperationToken.current = '';
+              if (addressTimer.current) clearTimeout(addressTimer.current);
+              if (purpose === 'account') onSessionChange(platformId, { status: 'unknown', evidence: 'none', checkedAt: Date.now() });
+              else setAddressMessage('Could not load this store. Reload it to try setting the location again.');
             }}
           />
         </View>
@@ -201,9 +255,14 @@ export const StoreLoginModal: React.FC<StoreLoginModalProps> = ({
 };
 
 const styles = StyleSheet.create({
+  addressHelp: {paddingHorizontal: 16, paddingVertical: 10, gap: 6, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0'},
+  addressRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  addressInput: {flex: 1, minHeight: 44, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 8, paddingHorizontal: 10, color: '#0F172A', fontSize: 13},
+  fillButton: {minHeight: 44, paddingHorizontal: 8, justifyContent: 'center'},
+  addressHint: {color: '#64748B', fontSize: 12, lineHeight: 18},
   container: {
     flex: 1,
-    backgroundColor: '#0F172A'
+    backgroundColor: '#F8FAFC'
   },
   header: {
     flexDirection: 'row',
@@ -212,8 +271,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#334155',
-    backgroundColor: '#1E293B'
+    borderBottomColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF'
   },
   headerLeft: {
     flexDirection: 'row',
@@ -230,7 +289,7 @@ const styles = StyleSheet.create({
     borderRadius: 5
   },
   title: {
-    color: '#F8FAFC',
+    color: '#0F172A',
     fontSize: 16,
     fontWeight: '700',
     flexShrink: 1
@@ -244,38 +303,25 @@ const styles = StyleSheet.create({
     marginRight: 2
   },
   iconButton: {
-    padding: 6
-  },
-  doneButton: {
-    flexDirection: 'row',
+    minWidth: 44,
+    minHeight: 44,
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)'
-  },
-  doneButtonText: {
-    color: '#10B981',
-    fontSize: 13,
-    fontWeight: '700'
+    justifyContent: 'center'
   },
   securityBanner: {
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#334155'
+    borderBottomColor: '#E2E8F0'
   },
   securityText: {
-    color: '#94A3B8',
+    color: '#64748B',
     fontSize: 12,
     lineHeight: 16
   },
   sessionText: {
-    color: '#CBD5E1',
+    color: '#475569',
     fontSize: 12,
     lineHeight: 18,
     marginTop: 6

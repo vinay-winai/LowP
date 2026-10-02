@@ -1,755 +1,106 @@
-import React from 'react';
-import {
-  View,
-  Text,
-  Modal,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Linking,
-  Share
-} from 'react-native';
-import {
-  PlatformId,
-  StrategyMatrixRow
-} from '../types';
-import {
-  X,
-  Sparkles,
-  Trash2,
-  ExternalLink,
-  Share2,
-  TrendingDown,
-  ShoppingBag,
-  CheckCircle2
-} from 'lucide-react-native';
+import React, { useState } from 'react';
+import { View, Text, Modal, StyleSheet, TouchableOpacity, ScrollView, Linking, Share, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { StrategyMatrixRow, PlatformId } from '../types';
+import { ComparisonEdit, parseComparisonPrice, refreshComparison } from '../core/ProductComparison';
+import { StoreOffers, comparisonBaskets, calculateOffer } from '../core/StoreOffers';
 
-const STORES: { id: PlatformId; name: string; color: string }[] = [
-  { id: 'amazon_tez', name: 'Amazon Tez', color: '#FF9900' },
-  { id: 'instamart', name: 'Instamart', color: '#FC8019' },
-  { id: 'zepto', name: 'Zepto', color: '#7C3AED' },
-  { id: 'blinkit', name: 'Blinkit', color: '#F8CB46' },
-  { id: 'amazon_main', name: 'Amazon.in', color: '#FF9900' },
-  { id: 'flipkart', name: 'Flipkart', color: '#2874F0' }
-];
-
-interface StrategyMatrixModalProps {
-  visible: boolean;
-  rows: StrategyMatrixRow[];
-  onClose: () => void;
-  onRemoveRow: (rowId: string) => void;
-  onClearAll: () => void;
+interface Props { visible: boolean; rows: StrategyMatrixRow[]; offers: StoreOffers; onClose: () => void; onRemoveRow: (id: string) => void; onClearAll: () => void; onEditCell: (rowId: string, platform: PlatformId, edit: ComparisonEdit) => void; }
+function OfferBreakdown({basket}: {basket: ReturnType<typeof calculateOffer>}) {
+  return <View>
+    {!!basket.discount && <Text style={styles.match}>{basket.cardPercent}% card discount applied · ₹{basket.discount} subtracted</Text>}
+    {!!basket.cashback && <Text style={styles.match}>₹{basket.reachedThreshold} milestone reached · ₹{basket.cashback} cashback subtracted</Text>}
+    {(basket.discount > 0 || basket.cashback > 0) && <Text style={styles.note}>Product subtotal ₹{basket.subtotal} · Pay ₹{basket.payable} · Cost after cashback ₹{basket.effectiveTotal}</Text>}
+    {basket.next && <Text style={styles.note}>₹{basket.next.remaining} more to reach ₹{basket.next.threshold} for an additional ₹{basket.next.additional} cashback.</Text>}
+  </View>;
 }
-
-export const StrategyMatrixModal: React.FC<StrategyMatrixModalProps> = ({
-  visible,
-  rows,
-  onClose,
-  onRemoveRow,
-  onClearAll
-}) => {
-  if (!visible) return null;
-
-  // 1. Calculate Single Store Totals
-  const storeTotals: Record<PlatformId, { total: number; availableCount: number; missingCount: number }> = {
-    amazon_tez: { total: 0, availableCount: 0, missingCount: 0 },
-    instamart: { total: 0, availableCount: 0, missingCount: 0 },
-    zepto: { total: 0, availableCount: 0, missingCount: 0 },
-    blinkit: { total: 0, availableCount: 0, missingCount: 0 },
-    amazon_main: { total: 0, availableCount: 0, missingCount: 0 },
-    flipkart: { total: 0, availableCount: 0, missingCount: 0 }
-  };
-
-  let optimalSplitTotal = 0;
-  let totalMrpSum = 0;
-
-  rows.forEach((row) => {
-    optimalSplitTotal += row.cheapestPrice > 0 ? row.cheapestPrice : 0;
-
-    STORES.forEach((s) => {
-      const cell = row.stores[s.id];
-      if (cell && cell.isAvailable && cell.price > 0) {
-        storeTotals[s.id].total += cell.price;
-        storeTotals[s.id].availableCount += 1;
-        totalMrpSum += cell.mrp || cell.price;
-      } else {
-        storeTotals[s.id].missingCount += 1;
-      }
-    });
-  });
-
-  // Find Best Single Store (with all or most items available)
-  let bestSingleStoreId: PlatformId | null = null;
-  let minSingleTotal = Infinity;
-
-  STORES.forEach((s) => {
-    const st = storeTotals[s.id];
-    if (st.availableCount > 0 && st.missingCount === 0) {
-      if (st.total < minSingleTotal) {
-        minSingleTotal = st.total;
-        bestSingleStoreId = s.id;
-      }
-    }
-  });
-
-  // If no store has 100% of items, find store with lowest partial total
-  if (!bestSingleStoreId) {
-    let maxItems = -1;
-    STORES.forEach((s) => {
-      const st = storeTotals[s.id];
-      if (st.availableCount > maxItems || (st.availableCount === maxItems && st.total < minSingleTotal)) {
-        maxItems = st.availableCount;
-        minSingleTotal = st.total;
-        bestSingleStoreId = s.id;
-      }
-    });
-  }
-
-  const bestSingleStore = STORES.find((s) => s.id === bestSingleStoreId);
-  const arbitrageSavings = minSingleTotal < Infinity && optimalSplitTotal > 0 && minSingleTotal > optimalSplitTotal
-    ? minSingleTotal - optimalSplitTotal
-    : 0;
-
-  const handleShareSummary = async () => {
-    if (rows.length === 0) return;
-
-    let text = `🛒 *LowP Strategy Matrix Summary* (${rows.length} items)\n\n`;
-    rows.forEach((row, idx) => {
-      const cheapestStore = STORES.find((s) => s.id === row.cheapestStoreId);
-      text += `${idx + 1}. *${row.query}*: ₹${row.cheapestPrice} on ${cheapestStore?.name || 'Best Store'}\n`;
-    });
-
-    text += `\n⚡ *Optimal Split Total*: ₹${optimalSplitTotal}`;
-    if (bestSingleStore) {
-      text += `\n🏬 *Best Single Store*: ${bestSingleStore.name} (₹${minSingleTotal})`;
-    }
-    if (arbitrageSavings > 0) {
-      text += `\n💰 *Arbitrage Savings*: Save ₹${arbitrageSavings} (${((arbitrageSavings / minSingleTotal) * 100).toFixed(1)}%) with multi-store split!`;
-    }
-    text += `\n\nCompared real-time with LowP`;
-
-    try {
-      await Share.share({ message: text });
-    } catch (e) {}
-  };
-
-  const handleOpenLink = (url?: string) => {
-    if (url && url !== '#') {
-      Linking.openURL(url).catch(() => {});
-    }
-  };
-
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={false}
-      onRequestClose={onClose}
-    >
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <View style={styles.iconCircle}>
-              <ShoppingBag size={20} color="#10B981" />
-            </View>
-            <View>
-              <Text style={styles.headerTitle}>Strategy Matrix</Text>
-              <Text style={styles.headerSubtitle}>
-                {rows.length} {rows.length === 1 ? 'Item' : 'Items'} in Basket • Multi-Store Arbitrage
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.headerRight}>
-            {rows.length > 0 && (
-              <TouchableOpacity
-                style={styles.shareBtn}
-                onPress={handleShareSummary}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Share2 size={16} color="#38BDF8" />
-              </TouchableOpacity>
-            )}
-
-            {rows.length > 0 && (
-              <TouchableOpacity
-                style={styles.clearBtn}
-                onPress={onClearAll}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Trash2 size={16} color="#EF4444" />
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              style={styles.closeBtn}
-              onPress={onClose}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <X size={20} color="#94A3B8" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {rows.length === 0 ? (
-          <View style={styles.emptyState}>
-            <ShoppingBag size={48} color="#475569" />
-            <Text style={styles.emptyTitle}>Your Basket is Empty</Text>
-            <Text style={styles.emptySub}>
-              Search for items (e.g. Paneer 200g, Amul Butter 500g, Maggi) and tap "+ Add to Cart" to build your multi-store comparison matrix!
-            </Text>
-            <TouchableOpacity style={styles.emptyActionBtn} onPress={onClose}>
-              <Text style={styles.emptyActionBtnText}>Search Groceries</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-            {/* Strategy Summary Cards */}
-            <View style={styles.summaryRow}>
-              {/* Optimal Split Card */}
-              <View style={[styles.summaryCard, styles.optimalCard]}>
-                <View style={styles.summaryCardHeader}>
-                  <Sparkles size={14} color="#10B981" />
-                  <Text style={styles.optimalCardTitle}>Optimal Split Total</Text>
-                </View>
-                <Text style={styles.optimalPrice}>₹{optimalSplitTotal}</Text>
-                {arbitrageSavings > 0 ? (
-                  <View style={styles.savingsTag}>
-                    <TrendingDown size={12} color="#10B981" />
-                    <Text style={styles.savingsTagText}>
-                      Save ₹{arbitrageSavings} ({((arbitrageSavings / minSingleTotal) * 100).toFixed(0)}%) vs single store
-                    </Text>
-                  </View>
-                ) : (
-                  <Text style={styles.summaryCardSub}>Cheapest multi-store combination</Text>
-                )}
-              </View>
-
-              {/* Best Single Store Card */}
-              {bestSingleStore && (
-                <View style={styles.summaryCard}>
-                  <View style={styles.summaryCardHeader}>
-                    <CheckCircle2 size={14} color="#38BDF8" />
-                    <Text style={styles.summaryCardTitle}>Best Single Store</Text>
-                  </View>
-                  <Text style={styles.summaryCardPrice}>₹{minSingleTotal}</Text>
-                  <Text style={[styles.storePillText, { color: bestSingleStore.color, fontWeight: '700' }]}>
-                    {bestSingleStore.name}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {/* Matrix Table */}
-            <View style={styles.matrixWrapper}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={true}>
-                <View>
-                  {/* Table Column Headers */}
-                  <View style={styles.tableHeaderRow}>
-                    <View style={[styles.cell, styles.itemHeaderCell]}>
-                      <Text style={styles.tableHeaderText}>Search Item</Text>
-                    </View>
-                    {STORES.map((s) => (
-                      <View key={s.id} style={[styles.cell, styles.storeHeaderCell]}>
-                        <View style={[styles.storeDot, { backgroundColor: s.color }]} />
-                        <Text style={[styles.storeHeaderText, { color: s.color }]} numberOfLines={1}>
-                          {s.name}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-
-                  {/* Table Body (Rows) */}
-                  {rows.map((row, rowIdx) => (
-                    <View
-                      key={row.id}
-                      style={[
-                        styles.tableRow,
-                        rowIdx % 2 === 1 && styles.tableRowAlt
-                      ]}
-                    >
-                      {/* Item Title Cell */}
-                      <View style={[styles.cell, styles.itemCell]}>
-                        <View style={styles.itemTitleContainer}>
-                          <Text style={styles.itemQueryText} numberOfLines={2}>
-                            {row.query}
-                          </Text>
-                          <TouchableOpacity
-                            style={styles.rowDeleteBtn}
-                            onPress={() => onRemoveRow(row.id)}
-                            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                          >
-                            <Trash2 size={13} color="#64748B" />
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-
-                      {/* Store Cells */}
-                      {STORES.map((s) => {
-                        const cell = row.stores[s.id];
-                        const isCheapest = cell && cell.isCheapestInRow && cell.price > 0;
-
-                        return (
-                          <TouchableOpacity
-                            key={s.id}
-                            style={[
-                              styles.cell,
-                              styles.storeCell,
-                              isCheapest && styles.cheapestCell
-                            ]}
-                            onPress={() => handleOpenLink(cell?.productUrl)}
-                            activeOpacity={0.7}
-                          >
-                            {cell && cell.isAvailable && cell.price > 0 ? (
-                              <View style={styles.cellContent}>
-                                {isCheapest && (
-                                  <View style={styles.cheapestBadge}>
-                                    <Text style={styles.cheapestBadgeText}>🏆 Lowest</Text>
-                                  </View>
-                                )}
-                                <Text
-                                  style={[
-                                    styles.cellPrice,
-                                    isCheapest && styles.cheapestCellPrice
-                                  ]}
-                                >
-                                  ₹{cell.price}
-                                </Text>
-
-                                {cell.item?.title ? (
-                                  <Text style={styles.cellItemTitle} numberOfLines={1}>
-                                    {cell.item.title}
-                                  </Text>
-                                ) : null}
-
-                                <View style={styles.cellFooter}>
-                                  <ExternalLink size={10} color="#64748B" />
-                                </View>
-                              </View>
-                            ) : (
-                              <View style={styles.unavailableCell}>
-                                <Text style={styles.unavailableText}>—</Text>
-                                <Text style={styles.unavailableSub}>Out of Stock</Text>
-                              </View>
-                            )}
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  ))}
-
-                  {/* Table Footer: Column Totals */}
-                  <View style={styles.tableFooterRow}>
-                    <View style={[styles.cell, styles.itemHeaderCell]}>
-                      <Text style={styles.footerLabel}>Basket Total</Text>
-                      <Text style={styles.footerSub}>Single Store</Text>
-                    </View>
-
-                    {STORES.map((s) => {
-                      const st = storeTotals[s.id];
-                      const isBestStore = s.id === bestSingleStoreId;
-
-                      return (
-                        <View
-                          key={s.id}
-                          style={[
-                            styles.cell,
-                            styles.footerStoreCell,
-                            isBestStore && styles.bestStoreFooterCell
-                          ]}
-                        >
-                          {isBestStore && (
-                            <View style={styles.bestStoreBadge}>
-                              <Text style={styles.bestStoreBadgeText}>Best Single</Text>
-                            </View>
-                          )}
-                          <Text
-                            style={[
-                              styles.footerPrice,
-                              isBestStore && styles.bestStoreFooterPrice
-                            ]}
-                          >
-                            ₹{st.total}
-                          </Text>
-                          <Text style={styles.footerItemCount}>
-                            {st.availableCount}/{rows.length} items
-                          </Text>
-                        </View>
-                      );
-                    })}
-                  </View>
-                </View>
-              </ScrollView>
-            </View>
-
-            {/* Bottom Actions */}
-            <View style={styles.bottomActions}>
-              <TouchableOpacity style={styles.continueShoppingBtn} onPress={onClose}>
-                <Text style={styles.continueShoppingText}>+ Add More Items to Basket</Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        )}
+export const StrategyMatrixModal: React.FC<Props> = ({ visible, rows: savedRows, offers, onClose, onRemoveRow, onClearAll, onEditCell }) => {
+  const rows = savedRows.map(refreshComparison);
+  const [editor, setEditor] = useState<{rowId: string; platform: PlatformId; mode: 'swap' | 'price'} | null>(null);
+  const [priceInput, setPriceInput] = useState('');
+  const [priceError, setPriceError] = useState('');
+  const editingRow = rows.find(row => row.id === editor?.rowId);
+  const editingCell = editor && editingRow ? editingRow.stores[editor.platform] : null;
+  const {complete, incomplete} = comparisonBaskets(rows, offers);
+  return <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <View style={{ flex: 1 }}><Text style={styles.heading}>Price comparison</Text><Text style={styles.muted}>{rows.length} selected {rows.length === 1 ? 'product' : 'products'}</Text></View>
+        <TouchableOpacity style={styles.button} accessibilityLabel="Close price comparison" onPress={onClose}><Text style={styles.blue}>Done</Text></TouchableOpacity>
       </View>
-    </Modal>
-  );
+      <ScrollView contentContainerStyle={styles.content}>
+        {!rows.length ? <View style={styles.card}><Text style={styles.title}>Choose a product first</Text><Text style={styles.note}>Search, then tap one of the products in a store. Similar products from the other stores will appear here.</Text></View> : <>
+          <View style={styles.card}><Text style={styles.title}>Complete store baskets</Text>
+            {!complete.length && <Text style={styles.note}>No store has every selected item included in its total.</Text>}
+            {complete.map((basket, index) => <View key={basket.id} style={[styles.cell, index === 0 && styles.best]}><View style={styles.cellHeader}><Text style={styles.store}>{basket.name}{index === 0 ? ' · Lowest total' : ''}</Text><Text style={styles.price}>₹{basket.effectiveTotal}</Text></View><OfferBreakdown basket={basket} /></View>)}
+            <Text style={styles.note}>Product prices only. Delivery fees and checkout offers may differ. Check each match before buying.</Text>
+          </View>
+          {!!incomplete.length && <View style={styles.card}><Text style={styles.title}>Incomplete stores</Text>{incomplete.map(basket => <View key={basket.id} style={styles.cell}><View style={styles.cellHeader}><Text style={styles.store}>{basket.name} · {basket.count}/{rows.length} items included</Text><Text style={styles.price}>₹{basket.effectiveTotal}</Text></View><Text style={styles.muted}>Partial total after offers</Text><OfferBreakdown basket={basket} />{basket.missing.map((item, index) => <Text key={index} style={styles.note}>{item.excluded ? 'Excluded: ' : 'Missing: '}{item.title}{item.excluded ? ' · Price differs by more than 20%' : ''}</Text>)}</View>)}</View>}
+          {rows.map(row => <View key={row.id} style={styles.card}>
+            <View style={styles.rowHeader}><View style={{ flex: 1 }}><Text style={styles.title}>{row.query}</Text><Text style={styles.muted}>Selected from {row.anchorStoreId ? row.stores[row.anchorStoreId]?.platformName : 'search results'}</Text></View>
+              <TouchableOpacity style={styles.button} accessibilityLabel={`Remove ${row.query}`} onPress={() => onRemoveRow(row.id)}><Text style={styles.muted}>Remove</Text></TouchableOpacity></View>
+            {Object.values(row.stores).map(cell => <View key={cell.platformId} style={[styles.cell, cell.isCheapestInRow && styles.best]}>
+              <TouchableOpacity disabled={!cell.candidates?.length} accessibilityRole="button"
+                accessibilityLabel={`${cell.item ? 'Change' : 'Choose'} product for ${cell.platformName}`}
+                onPress={() => setEditor({rowId: row.id, platform: cell.platformId, mode: 'swap'})}>
+                <View style={styles.cellHeader}><Text style={styles.store}>{cell.platformName}</Text><Text style={styles.price}>{cell.isAvailable ? `₹${cell.price}` : '—'}</Text></View>
+                <Text style={styles.muted}>{cell.item ? `${cell.item.title}${cell.item.quantity ? ` · ${cell.item.quantity}` : ''}` : 'No item selected'}</Text>
+                {cell.isAvailable && <Text style={styles.match}>{cell.manuallySelected ? 'Selected by you' : cell.platformId === row.anchorStoreId ? 'Your selection' : 'Suggested match'}{cell.comparisonKind === 'different_pack' ? ' · Different pack size' : cell.comparisonKind === 'size_unknown' ? ' · Size not verified' : ''}{cell.isCheapestInRow ? ' · Lowest included price' : ''}</Text>}
+                {cell.isAvailable && cell.isComparable === false && <Text style={styles.note}>Price differs by {Number((cell.priceDifferencePercent || 0).toFixed(1))}% from your selected item · Excluded from totals</Text>}
+                {cell.includeInTotals && <Text style={styles.match}>Included in totals by you</Text>}
+                {cell.originalPrice !== undefined && <Text style={styles.muted}>Edited price · Store price ₹{cell.originalPrice}</Text>}
+              </TouchableOpacity>
+              <View style={styles.actions}>
+                {!!cell.candidates?.length && <TouchableOpacity style={styles.action} accessibilityLabel={`Swap item for ${cell.platformName}`} onPress={() => setEditor({rowId: row.id, platform: cell.platformId, mode: 'swap'})}><Text style={styles.blue}>{cell.item ? 'Swap item' : 'Choose item'}</Text></TouchableOpacity>}
+                {cell.isAvailable && <>
+                  {cell.isComparable === false && <TouchableOpacity style={styles.action} accessibilityLabel={`Include ${cell.platformName} item in totals`} onPress={() => onEditCell(row.id, cell.platformId, {kind: 'include'})}><Text style={styles.blue}>Include in totals</Text></TouchableOpacity>}
+                  <TouchableOpacity style={styles.action} accessibilityLabel={`Edit price for ${cell.platformName}`} onPress={() => { setPriceInput(String(cell.price)); setPriceError(''); setEditor({rowId: row.id, platform: cell.platformId, mode: 'price'}); }}><Text style={styles.blue}>Edit price</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.action} accessibilityLabel={`Remove item from ${cell.platformName}`} onPress={() => onEditCell(row.id, cell.platformId, {kind: 'remove'})}><Text style={styles.muted}>Remove item</Text></TouchableOpacity>
+                  {cell.productUrl && cell.productUrl !== '#' && <TouchableOpacity style={styles.action} accessibilityRole="link" accessibilityLabel={`View ${cell.item?.title || cell.platformName} in store`} onPress={() => Linking.openURL(cell.productUrl).catch(() => {})}><Text style={styles.blue}>View in store ↗</Text></TouchableOpacity>}
+                </>}
+              </View>
+            </View>)}
+          </View>)}
+          <TouchableOpacity style={styles.button} onPress={() => Share.share({ message: rows.map(row => `${row.query}\n${Object.values(row.stores).map(cell => `${cell.platformName}: ${cell.isAvailable ? `₹${cell.price} — ${cell.item?.title}` : 'No close match'}`).join('\n')}`).join('\n\n') + '\n\nProduct prices only; check matches and checkout fees.' }).catch(() => {})}><Text style={styles.blue}>Share comparison</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.button} onPress={onClearAll}><Text style={styles.muted}>Clear all comparisons</Text></TouchableOpacity>
+        </>}
+      </ScrollView>
+      <Modal visible={visible && !!editor && !!editingCell} transparent animationType="fade" onRequestClose={() => setEditor(null)}>
+        <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <View style={styles.editor}>
+            <View style={styles.rowHeader}><Text style={[styles.title, {flex: 1}]}>{editor?.mode === 'swap' ? 'Choose a product' : 'Edit product price'}</Text><TouchableOpacity style={styles.button} accessibilityLabel="Cancel comparison edit" onPress={() => setEditor(null)}><Text style={styles.blue}>Cancel</Text></TouchableOpacity></View>
+            <Text style={styles.muted}>{editingCell?.platformName}</Text>
+            {editor?.mode === 'swap' ? <ScrollView>
+              {editingCell?.candidates?.slice(0, 3).map((item, index) => {
+                const selected = !!editingCell.item && editingCell.item.title === item.title && editingCell.item.quantity === item.quantity && (!editingCell.item.id || editingCell.item.id === item.id);
+                return <TouchableOpacity key={index} style={[styles.choice, selected && styles.best]} accessibilityState={{selected}} accessibilityLabel={`Use ${item.title}, ₹${item.price}${selected ? ', current selection' : ''}`} onPress={() => { if (editor) onEditCell(editor.rowId, editor.platform, {kind: 'swap', index}); setEditor(null); }}>
+                  <Text style={styles.title}>{item.title}</Text><Text style={styles.muted}>{item.quantity || 'Size not listed'}</Text><Text style={styles.price}>₹{item.price}</Text>{selected && <Text style={styles.match}>Current selection</Text>}
+                </TouchableOpacity>;
+              })}
+            </ScrollView> : <>
+              <Text style={[styles.note, {marginBottom: 12}]}>{editingCell?.item?.title}</Text>
+              <TextInput style={styles.priceInput} accessibilityLabel="Comparison product price" keyboardType="decimal-pad" value={priceInput} onChangeText={value => {setPriceInput(value); setPriceError('');}} autoFocus selectTextOnFocus />
+              {!!priceError && <Text style={styles.error}>{priceError}</Text>}
+              <TouchableOpacity style={styles.save} accessibilityLabel="Save comparison price" onPress={() => { const price = parseComparisonPrice(priceInput); if (price === null) {setPriceError('Enter a price above zero, with up to two decimal places.'); return;} if (editor) onEditCell(editor.rowId, editor.platform, {kind: 'price', price}); setEditor(null); }}><Text style={styles.footerText}>Save price</Text></TouchableOpacity>
+            </>}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+      <TouchableOpacity style={styles.footer} onPress={onClose}><Text style={styles.footerText}>Search another product</Text></TouchableOpacity>
+    </SafeAreaView>
+  </Modal>;
 };
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0B1120'
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#0F172A',
-    borderBottomWidth: 1,
-    borderBottomColor: '#1E293B'
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10
-  },
-  iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#F8FAFC'
-  },
-  headerSubtitle: {
-    fontSize: 11,
-    color: '#94A3B8'
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12
-  },
-  shareBtn: {
-    padding: 6,
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-    borderRadius: 8
-  },
-  clearBtn: {
-    padding: 6,
-    backgroundColor: 'rgba(239, 68, 68, 0.15)',
-    borderRadius: 8
-  },
-  closeBtn: {
-    padding: 6,
-    backgroundColor: '#1E293B',
-    borderRadius: 8
-  },
-  scrollContainer: {
-    flex: 1,
-    padding: 14
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 14
-  },
-  summaryCard: {
-    flex: 1,
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#334155'
-  },
-  optimalCard: {
-    borderColor: '#10B981',
-    backgroundColor: 'rgba(16, 185, 129, 0.08)'
-  },
-  summaryCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginBottom: 4
-  },
-  optimalCardTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#10B981',
-    textTransform: 'uppercase'
-  },
-  summaryCardTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#38BDF8',
-    textTransform: 'uppercase'
-  },
-  optimalPrice: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#10B981'
-  },
-  summaryCardPrice: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#F8FAFC'
-  },
-  summaryCardSub: {
-    fontSize: 10,
-    color: '#94A3B8',
-    marginTop: 2
-  },
-  savingsTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    marginTop: 4
-  },
-  savingsTagText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#10B981'
-  },
-  storePillText: {
-    fontSize: 12,
-    marginTop: 2
-  },
-  matrixWrapper: {
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#334155',
-    overflow: 'hidden',
-    marginBottom: 16
-  },
-  tableHeaderRow: {
-    flexDirection: 'row',
-    backgroundColor: '#0F172A',
-    borderBottomWidth: 1,
-    borderBottomColor: '#334155'
-  },
-  tableRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#334155',
-    backgroundColor: '#1E293B'
-  },
-  tableRowAlt: {
-    backgroundColor: '#172033'
-  },
-  tableFooterRow: {
-    flexDirection: 'row',
-    backgroundColor: '#0F172A',
-    borderTopWidth: 2,
-    borderTopColor: '#334155'
-  },
-  cell: {
-    padding: 10,
-    justifyContent: 'center'
-  },
-  itemHeaderCell: {
-    width: 140,
-    borderRightWidth: 1,
-    borderRightColor: '#334155'
-  },
-  storeHeaderCell: {
-    width: 125,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRightWidth: 1,
-    borderRightColor: '#334155'
-  },
-  storeDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4
-  },
-  tableHeaderText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#94A3B8',
-    textTransform: 'uppercase'
-  },
-  storeHeaderText: {
-    fontSize: 12,
-    fontWeight: '800'
-  },
-  itemCell: {
-    width: 140,
-    borderRightWidth: 1,
-    borderRightColor: '#334155'
-  },
-  itemTitleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 4
-  },
-  itemQueryText: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#F8FAFC'
-  },
-  rowDeleteBtn: {
-    padding: 4
-  },
-  storeCell: {
-    width: 125,
-    borderRightWidth: 1,
-    borderRightColor: '#334155'
-  },
-  cheapestCell: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderColor: '#10B981'
-  },
-  cellContent: {
-    gap: 2
-  },
-  cheapestBadge: {
-    backgroundColor: '#10B981',
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
-    marginBottom: 2
-  },
-  cheapestBadgeText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#0F172A',
-    textTransform: 'uppercase'
-  },
-  cellPrice: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#F8FAFC'
-  },
-  cheapestCellPrice: {
-    color: '#10B981'
-  },
-  cellItemTitle: {
-    fontSize: 10,
-    color: '#94A3B8'
-  },
-  cellFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 2
-  },
-  unavailableCell: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2
-  },
-  unavailableText: {
-    fontSize: 14,
-    color: '#64748B'
-  },
-  unavailableSub: {
-    fontSize: 9,
-    color: '#475569'
-  },
-  footerLabel: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#F8FAFC'
-  },
-  footerSub: {
-    fontSize: 10,
-    color: '#64748B'
-  },
-  footerStoreCell: {
-    width: 125,
-    borderRightWidth: 1,
-    borderRightColor: '#334155',
-    alignItems: 'flex-start'
-  },
-  bestStoreFooterCell: {
-    backgroundColor: 'rgba(16, 185, 129, 0.12)'
-  },
-  bestStoreBadge: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#10B981',
-    marginBottom: 2
-  },
-  bestStoreBadgeText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#10B981',
-    textTransform: 'uppercase'
-  },
-  footerPrice: {
-    fontSize: 15,
-    fontWeight: '900',
-    color: '#F8FAFC'
-  },
-  bestStoreFooterPrice: {
-    color: '#10B981'
-  },
-  footerItemCount: {
-    fontSize: 10,
-    color: '#94A3B8',
-    marginTop: 1
-  },
-  bottomActions: {
-    marginTop: 6,
-    marginBottom: 24
-  },
-  continueShoppingBtn: {
-    backgroundColor: '#10B981',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center'
-  },
-  continueShoppingText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#0F172A'
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    gap: 12
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#F8FAFC',
-    marginTop: 8
-  },
-  emptySub: {
-    fontSize: 13,
-    color: '#94A3B8',
-    textAlign: 'center',
-    lineHeight: 18
-  },
-  emptyActionBtn: {
-    marginTop: 12,
-    backgroundColor: '#10B981',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 10
-  },
-  emptyActionBtnText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#0F172A'
-  }
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 }, action: { minHeight: 44, justifyContent: 'center' },
+  overlay: { flex: 1, justifyContent: 'center', padding: 20, backgroundColor: 'rgba(15,23,42,0.35)' },
+  editor: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, maxHeight: '80%' }, choice: { borderTopWidth: 1, borderTopColor: '#E2E8F0', padding: 12, gap: 6 },
+  priceInput: { color: '#0F172A', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 8, padding: 12, fontSize: 20 }, error: { color: '#B91C1C', marginTop: 8 }, save: { backgroundColor: '#2563EB', borderRadius: 8, padding: 14, alignItems: 'center', marginTop: 16 },
+  container: { flex: 1, backgroundColor: '#F8FAFC' }, header: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
+  heading: { fontSize: 20, fontWeight: '700', color: '#0F172A' }, muted: { fontSize: 12, color: '#64748B', lineHeight: 18 }, blue: { color: '#1D4ED8', fontWeight: '600', fontSize: 14 },
+  content: { padding: 16, paddingBottom: 24 }, card: { padding: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, marginBottom: 14 },
+  title: { fontSize: 16, color: '#0F172A', fontWeight: '600', lineHeight: 23 }, total: { fontSize: 28, color: '#0F172A', fontWeight: '700', marginVertical: 6 }, note: { fontSize: 12, color: '#475569', lineHeight: 19, marginTop: 8 },
+  rowHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 }, button: { minHeight: 44, paddingHorizontal: 8, justifyContent: 'center', alignItems: 'center' },
+  cell: { padding: 12, borderTopWidth: 1, borderTopColor: '#E2E8F0', gap: 5 }, best: { backgroundColor: '#F0FDF4' },
+  cellHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, store: { flex: 1, fontSize: 13, fontWeight: '600', color: '#0F172A' }, price: { fontSize: 17, fontWeight: '700', color: '#0F172A' },
+  match: { color: '#166534', fontSize: 11, lineHeight: 17 }, footer: { margin: 16, padding: 14, borderRadius: 10, alignItems: 'center', backgroundColor: '#2563EB' }, footerText: { color: '#FFFFFF', fontWeight: '600', fontSize: 14 }
 });

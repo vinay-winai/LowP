@@ -1,0 +1,780 @@
+{
+  "date": "2026-10-01",
+  "device": "SM-M336BU / Exynos 1280",
+  "configuration": "Limit parallel searches enabled by default: 3 active WebViews, maximum 6 mounted; toggle off allows 6 active. Big-store HTTP fetches always run in parallel.",
+  "trials": {
+    "two": [
+      {
+        "query": "Paneer 200g",
+        "selectedStoreCount": 5,
+        "maxActivePages": 2,
+        "stores": [
+          {
+            "store": "flipkart",
+            "outcome": "result",
+            "title": "SRD FOODS SRDFOODS_PANEER DODI (200gm) Assorted Seeds &amp; Nuts",
+            "price": 148,
+            "elapsedMs": 942
+          },
+          {
+            "store": "amazon_main",
+            "outcome": "result",
+            "title": "Heritage Fresh Paneer - 200g",
+            "price": 114,
+            "elapsedMs": 1454
+          },
+          {
+            "store": "instamart",
+            "outcome": "result",
+            "title": "Milky Mist Paneer",
+            "price": 130,
+            "elapsedMs": 3706
+          },
+          {
+            "store": "blinkit",
+            "outcome": "result",
+            "title": "Rosier Malai Paneer",
+            "price": 115,
+            "elapsedMs": 6304
+          },
+          {
+            "store": "zepto",
+            "outcome": "no_candidates",
+            "elapsedMs": 9067
+          }
+        ],
+        "timings": {
+          "instamart": {
+            "scriptElapsedMs": 2878,
+            "extractionWorkMs": 41,
+            "extractionMaxMs": 19,
+            "scanCount": 16,
+            "firstCandidateMs": 2877,
+            "scriptStartSinceNavigationMs": 585,
+            "responseEndMs": 517,
+            "domInteractiveMs": 540,
+            "domContentLoadedMs": 1265,
+            "readyState": "complete"
+          },
+          "blinkit": {
+            "scriptElapsedMs": 1709,
+            "extractionWorkMs": 25,
+            "extractionMaxMs": 11,
+            "scanCount": 8,
+            "firstCandidateMs": 1708,
+            "scriptStartSinceNavigationMs": 591,
+            "responseEndMs": 550,
+            "domInteractiveMs": 790,
+            "domContentLoadedMs": 1019,
+            "readyState": "complete"
+          },
+          "zepto": {
+            "scriptElapsedMs": 8557,
+            "extractionWorkMs": 42,
+            "extractionMaxMs": 3,
+            "scanCount": 47,
+            "firstCandidateMs": null,
+            "scriptStartSinceNavigationMs": 315,
+            "responseEndMs": 263,
+            "domInteractiveMs": 484,
+            "domContentLoadedMs": 485,
+            "readyState": "complete"
+          }
+        },
+        "starts": {
+          "instamart": 62,
+          "zepto": 62,
+          "blinkit": 3946
+        },
+        "totalMs": 9160
+      },
+      {
+        "query": "Amul Butter 500g",
+        "selectedStoreCount": 5,
+        "maxActivePages": 2,
+        "stores": [
+          {
+            "store": "flipkart",
+            "outcome": "result",
+            "title": "amlamrut Amla Pachak 500gm Salty and tangy Mouth Freshener",
+            "price": 400,
+            "elapsedMs": 533
+          },
+          {
+            "store": "amazon_main",
+            "outcome": "result",
+            "title": "Amul Table Butter Salted 500 Gm",
+            "price": 310,
+            "elapsedMs": 1481
+          },
+          {
+            "store": "zepto",
+            "outcome": "result",
+            "title": "Amul Unsalted Cooking Butter",
+            "price": 320,
+            "elapsedMs": 3013
+          },
+          {
+            "store": "blinkit",
+            "outcome": "result",
+            "title": "Amul Fresh Butter Cookies",
+            "price": 85,
+            "elapsedMs": 4964
+          },
+          {
+            "store": "instamart",
+            "outcome": "no_candidates",
+            "elapsedMs": 9028
+          }
+        ],
+        "timings": {
+          "zepto": {
+            "scriptElapsedMs": 2591,
+            "extractionWorkMs": 22,
+            "extractionMaxMs": 9,
+            "scanCount": 13,
+            "firstCandidateMs": 2590,
+            "scriptStartSinceNavigationMs": 299,
+            "responseEndMs": 150,
+            "domInteractiveMs": 582,
+            "domContentLoadedMs": 585,
+            "readyState": "complete"
+          },
+          "blinkit": {
+            "scriptElapsedMs": 1182,
+            "extractionWorkMs": 26,
+            "extractionMaxMs": 9,
+            "scanCount": 8,
+            "firstCandidateMs": 1181,
+            "scriptStartSinceNavigationMs": 441,
+            "responseEndMs": 385,
+            "domInteractiveMs": 576,
+            "domContentLoadedMs": 713,
+            "readyState": "complete"
+          },
+          "instamart": {
+            "scriptElapsedMs": 8561,
+            "extractionWorkMs": 31,
+            "extractionMaxMs": 3,
+            "scanCount": 54,
+            "firstCandidateMs": null,
+            "scriptStartSinceNavigationMs": 407,
+            "responseEndMs": 186,
+            "domInteractiveMs": 491,
+            "domContentLoadedMs": 564,
+            "readyState": "complete"
+          }
+        },
+        "starts": {
+          "instamart": 44,
+          "zepto": 44,
+          "blinkit": 3319
+        },
+        "totalMs": 9098
+      }
+    ],
+    "three": [
+      {
+        "query": "Paneer 200g",
+        "selectedStoreCount": 5,
+        "maxActivePages": 3,
+        "stores": [
+          {
+            "store": "flipkart",
+            "outcome": "result",
+            "title": "SRD FOODS SRDFOODS_PANEER DODI (200gm) Assorted Seeds &amp; Nuts",
+            "price": 148,
+            "elapsedMs": 658
+          },
+          {
+            "store": "amazon_main",
+            "outcome": "result",
+            "title": "Heritage Fresh Paneer - 200g",
+            "price": 114,
+            "elapsedMs": 1632
+          },
+          {
+            "store": "blinkit",
+            "outcome": "result",
+            "title": "Rosier Malai Paneer",
+            "price": 115,
+            "elapsedMs": 4137
+          },
+          {
+            "store": "instamart",
+            "outcome": "result",
+            "title": "Milky Mist Paneer",
+            "price": 130,
+            "elapsedMs": 4571
+          },
+          {
+            "store": "zepto",
+            "outcome": "result",
+            "title": "Amul Fresh Malai Paneer",
+            "price": 105,
+            "elapsedMs": 6235
+          }
+        ],
+        "timings": {
+          "blinkit": {
+            "scriptElapsedMs": 3010,
+            "extractionWorkMs": 48,
+            "extractionMaxMs": 13,
+            "scanCount": 12,
+            "firstCandidateMs": 3010,
+            "scriptStartSinceNavigationMs": 839,
+            "longTaskMs": 784,
+            "longTaskCount": 4,
+            "longTaskMaxMs": 415,
+            "responseEndMs": 496,
+            "domInteractiveMs": 861,
+            "domContentLoadedMs": 1187,
+            "readyState": "complete"
+          },
+          "instamart": {
+            "scriptElapsedMs": 3805,
+            "extractionWorkMs": 41,
+            "extractionMaxMs": 14,
+            "scanCount": 16,
+            "firstCandidateMs": 3805,
+            "scriptStartSinceNavigationMs": 397,
+            "longTaskMs": 1135,
+            "longTaskCount": 8,
+            "longTaskMaxMs": 230,
+            "responseEndMs": 365,
+            "domInteractiveMs": 416,
+            "domContentLoadedMs": 833,
+            "readyState": "complete"
+          },
+          "zepto": {
+            "scriptElapsedMs": 3395,
+            "extractionWorkMs": 31,
+            "extractionMaxMs": 13,
+            "scanCount": 17,
+            "firstCandidateMs": 3394,
+            "scriptStartSinceNavigationMs": 336,
+            "longTaskMs": 542,
+            "longTaskCount": 2,
+            "longTaskMaxMs": 307,
+            "responseEndMs": 161,
+            "domInteractiveMs": 505,
+            "domContentLoadedMs": 507,
+            "readyState": "complete"
+          }
+        },
+        "starts": {
+          "instamart": 54,
+          "zepto": 55,
+          "blinkit": 55
+        },
+        "totalMs": 6315
+      },
+      {
+        "query": "Amul Butter 500g",
+        "selectedStoreCount": 5,
+        "maxActivePages": 3,
+        "stores": [
+          {
+            "store": "flipkart",
+            "outcome": "result",
+            "title": "amlamrut Amla Pachak 500gm Salty and tangy Mouth Freshener",
+            "price": 400,
+            "elapsedMs": 622
+          },
+          {
+            "store": "amazon_main",
+            "outcome": "result",
+            "title": "Amul Table Butter Salted 500 Gm",
+            "price": 310,
+            "elapsedMs": 1599
+          },
+          {
+            "store": "blinkit",
+            "outcome": "result",
+            "title": "Amul Fresh Butter Cookies",
+            "price": 85,
+            "elapsedMs": 2321
+          },
+          {
+            "store": "instamart",
+            "outcome": "result",
+            "title": "Amul Pasteurised Butter",
+            "price": 63,
+            "elapsedMs": 3397
+          },
+          {
+            "store": "zepto",
+            "outcome": "no_candidates",
+            "elapsedMs": 8982
+          }
+        ],
+        "timings": {
+          "blinkit": {
+            "scriptElapsedMs": 1713,
+            "extractionWorkMs": 25,
+            "extractionMaxMs": 10,
+            "scanCount": 9,
+            "firstCandidateMs": 1713,
+            "scriptStartSinceNavigationMs": 486,
+            "longTaskMs": 508,
+            "longTaskCount": 5,
+            "longTaskMaxMs": 203,
+            "responseEndMs": 321,
+            "domInteractiveMs": 678,
+            "domContentLoadedMs": 905,
+            "readyState": "complete"
+          },
+          "instamart": {
+            "scriptElapsedMs": 2836,
+            "extractionWorkMs": 31,
+            "extractionMaxMs": 12,
+            "scanCount": 15,
+            "firstCandidateMs": 2836,
+            "scriptStartSinceNavigationMs": 445,
+            "longTaskMs": 606,
+            "longTaskCount": 5,
+            "longTaskMaxMs": 235,
+            "responseEndMs": 196,
+            "domInteractiveMs": 616,
+            "domContentLoadedMs": 669,
+            "readyState": "complete"
+          },
+          "zepto": {
+            "scriptElapsedMs": 8558,
+            "extractionWorkMs": 46,
+            "extractionMaxMs": 3,
+            "scanCount": 51,
+            "firstCandidateMs": null,
+            "scriptStartSinceNavigationMs": 355,
+            "longTaskMs": 127,
+            "longTaskCount": 1,
+            "longTaskMaxMs": 127,
+            "responseEndMs": 118,
+            "domInteractiveMs": 919,
+            "domContentLoadedMs": 924,
+            "readyState": "complete"
+          }
+        },
+        "starts": {
+          "instamart": 50,
+          "zepto": 50,
+          "blinkit": 50
+        },
+        "totalMs": 9052
+      },
+      {
+        "query": "Paneer 200g",
+        "selectedStoreCount": 5,
+        "maxActivePages": 3,
+        "stores": [
+          {
+            "store": "flipkart",
+            "outcome": "result",
+            "title": "SRD FOODS SRDFOODS_PANEER DODI (200gm) Assorted Seeds &amp; Nuts",
+            "price": 148,
+            "elapsedMs": 831
+          },
+          {
+            "store": "amazon_main",
+            "outcome": "result",
+            "title": "Heritage Fresh Paneer - 200g",
+            "price": 114,
+            "elapsedMs": 1318
+          },
+          {
+            "store": "blinkit",
+            "outcome": "result",
+            "title": "Rosier Malai Paneer",
+            "price": 115,
+            "elapsedMs": 3736
+          },
+          {
+            "store": "zepto",
+            "outcome": "result",
+            "title": "Amul Fresh Malai Paneer",
+            "price": 105,
+            "elapsedMs": 4828
+          },
+          {
+            "store": "instamart",
+            "outcome": "native_timeout",
+            "elapsedMs": 9078
+          }
+        ],
+        "timings": {
+          "blinkit": {
+            "scriptElapsedMs": 2880,
+            "extractionWorkMs": 49,
+            "extractionMaxMs": 33,
+            "scanCount": 11,
+            "firstCandidateMs": 2879,
+            "scriptStartSinceNavigationMs": 558,
+            "longTaskMs": 752,
+            "longTaskCount": 3,
+            "longTaskMaxMs": 488,
+            "responseEndMs": 457,
+            "domInteractiveMs": 1273,
+            "domContentLoadedMs": 1515,
+            "readyState": "complete"
+          },
+          "zepto": {
+            "scriptElapsedMs": 4172,
+            "extractionWorkMs": 40,
+            "extractionMaxMs": 25,
+            "scanCount": 17,
+            "firstCandidateMs": 4171,
+            "scriptStartSinceNavigationMs": 454,
+            "longTaskMs": 414,
+            "longTaskCount": 3,
+            "longTaskMaxMs": 181,
+            "responseEndMs": 429,
+            "domInteractiveMs": 815,
+            "domContentLoadedMs": 817,
+            "readyState": "complete"
+          }
+        },
+        "starts": {
+          "instamart": 59,
+          "zepto": 59,
+          "blinkit": 59
+        },
+        "totalMs": 9159
+      },
+      {
+        "query": "Amul Butter 500g",
+        "selectedStoreCount": 5,
+        "maxActivePages": 3,
+        "stores": [
+          {
+            "store": "amazon_main",
+            "outcome": "result",
+            "title": "Amul Table Butter Salted 500 Gm",
+            "price": 310,
+            "elapsedMs": 1622
+          },
+          {
+            "store": "flipkart",
+            "outcome": "result",
+            "title": "amlamrut Amla Pachak 500gm Salty and tangy Mouth Freshener",
+            "price": 400,
+            "elapsedMs": 2046
+          },
+          {
+            "store": "blinkit",
+            "outcome": "result",
+            "title": "Amul Fresh Butter Cookies",
+            "price": 85,
+            "elapsedMs": 2702
+          },
+          {
+            "store": "instamart",
+            "outcome": "result",
+            "title": "Amul Pasteurised Butter",
+            "price": 63,
+            "elapsedMs": 3121
+          },
+          {
+            "store": "zepto",
+            "outcome": "no_candidates",
+            "elapsedMs": 8960
+          }
+        ],
+        "timings": {
+          "blinkit": {
+            "scriptElapsedMs": 2094,
+            "extractionWorkMs": 24,
+            "extractionMaxMs": 14,
+            "scanCount": 11,
+            "firstCandidateMs": 2094,
+            "scriptStartSinceNavigationMs": 476,
+            "longTaskMs": 330,
+            "longTaskCount": 4,
+            "longTaskMaxMs": 131,
+            "responseEndMs": 340,
+            "domInteractiveMs": 899,
+            "domContentLoadedMs": 1014,
+            "readyState": "complete"
+          },
+          "instamart": {
+            "scriptElapsedMs": 2473,
+            "extractionWorkMs": 29,
+            "extractionMaxMs": 12,
+            "scanCount": 12,
+            "firstCandidateMs": 2473,
+            "scriptStartSinceNavigationMs": 370,
+            "longTaskMs": 617,
+            "longTaskCount": 4,
+            "longTaskMaxMs": 322,
+            "responseEndMs": 143,
+            "domInteractiveMs": 532,
+            "domContentLoadedMs": 571,
+            "readyState": "interactive"
+          },
+          "zepto": {
+            "scriptElapsedMs": 8554,
+            "extractionWorkMs": 35,
+            "extractionMaxMs": 3,
+            "scanCount": 52,
+            "firstCandidateMs": null,
+            "scriptStartSinceNavigationMs": 330,
+            "longTaskMs": 193,
+            "longTaskCount": 1,
+            "longTaskMaxMs": 193,
+            "responseEndMs": 106,
+            "domInteractiveMs": 520,
+            "domContentLoadedMs": 521,
+            "readyState": "complete"
+          }
+        },
+        "starts": {
+          "instamart": 55,
+          "zepto": 56,
+          "blinkit": 56
+        },
+        "totalMs": 9032
+      }
+    ],
+    "toggleOff": [
+      {
+        "query": "Basmati Rice 1kg",
+        "selectedStoreCount": 5,
+        "maxActivePages": 6,
+        "stores": [
+          {
+            "store": "flipkart",
+            "outcome": "result",
+            "title": "Taj Mahal Fiesta Blue 1kg Basmati Rice (Long Grain, Steam)",
+            "price": 176,
+            "elapsedMs": 792
+          },
+          {
+            "store": "amazon_main",
+            "outcome": "result",
+            "title": "Kohinoor Pulao Basmati Rice, 1 kg | Long-Grain Basmati (Cooked grain up to 18 mm) | Aromatic & Flavorful Rice | Ideal for Pulao",
+            "price": 146,
+            "elapsedMs": 1829
+          },
+          {
+            "store": "blinkit",
+            "outcome": "result",
+            "title": "Daawat Super Basmati Rice (Extra Long Grain)",
+            "price": 172,
+            "elapsedMs": 4179
+          },
+          {
+            "store": "instamart",
+            "outcome": "result",
+            "title": "India Gate Basmati Rice Feast Rozzana",
+            "price": 96,
+            "elapsedMs": 4563
+          },
+          {
+            "store": "zepto",
+            "outcome": "no_candidates",
+            "elapsedMs": 8939
+          }
+        ],
+        "timings": {
+          "blinkit": {
+            "scriptElapsedMs": 3264,
+            "extractionWorkMs": 32,
+            "extractionMaxMs": 11,
+            "scanCount": 14,
+            "firstCandidateMs": 3264,
+            "scriptStartSinceNavigationMs": 782,
+            "longTaskMs": 539,
+            "longTaskCount": 4,
+            "longTaskMaxMs": 219,
+            "responseEndMs": 657,
+            "domInteractiveMs": 1453,
+            "domContentLoadedMs": 1733,
+            "readyState": "complete"
+          },
+          "instamart": {
+            "scriptElapsedMs": 3951,
+            "extractionWorkMs": 50,
+            "extractionMaxMs": 24,
+            "scanCount": 17,
+            "firstCandidateMs": 3950,
+            "scriptStartSinceNavigationMs": 487,
+            "longTaskMs": 947,
+            "longTaskCount": 6,
+            "longTaskMaxMs": 383,
+            "responseEndMs": 303,
+            "domInteractiveMs": 550,
+            "domContentLoadedMs": 606,
+            "readyState": "complete"
+          },
+          "zepto": {
+            "scriptElapsedMs": 8556,
+            "extractionWorkMs": 52,
+            "extractionMaxMs": 4,
+            "scanCount": 46,
+            "firstCandidateMs": null,
+            "scriptStartSinceNavigationMs": 312,
+            "longTaskMs": 197,
+            "longTaskCount": 2,
+            "longTaskMaxMs": 141,
+            "responseEndMs": 133,
+            "domInteractiveMs": 625,
+            "domContentLoadedMs": 626,
+            "readyState": "complete"
+          }
+        },
+        "starts": {
+          "instamart": 53,
+          "zepto": 53,
+          "blinkit": 53,
+          "amazon_main": 53,
+          "flipkart": 53
+        },
+        "totalMs": 9037
+      }
+    ],
+    "toggleOn": [
+      {
+        "query": "Basmati Rice 1kg",
+        "selectedStoreCount": 5,
+        "maxActivePages": 3,
+        "stores": [
+          {
+            "store": "flipkart",
+            "outcome": "result",
+            "title": "Taj Mahal Fiesta Blue 1kg Basmati Rice (Long Grain, Steam)",
+            "price": 176,
+            "elapsedMs": 532
+          },
+          {
+            "store": "amazon_main",
+            "outcome": "result",
+            "title": "Kohinoor Pulao Basmati Rice, 1 kg | Long-Grain Basmati (Cooked grain up to 18 mm) | Aromatic & Flavorful Rice | Ideal for Pulao",
+            "price": 146,
+            "elapsedMs": 1423
+          },
+          {
+            "store": "blinkit",
+            "outcome": "result",
+            "title": "Daawat Super Basmati Rice (Extra Long Grain)",
+            "price": 172,
+            "elapsedMs": 2913
+          },
+          {
+            "store": "zepto",
+            "outcome": "result",
+            "title": "Daawat Delight Basmati Rice | Long Grain",
+            "price": 125,
+            "elapsedMs": 3439
+          },
+          {
+            "store": "instamart",
+            "outcome": "no_candidates",
+            "elapsedMs": 9062
+          }
+        ],
+        "timings": {
+          "blinkit": {
+            "scriptElapsedMs": 2216,
+            "extractionWorkMs": 37,
+            "extractionMaxMs": 8,
+            "scanCount": 12,
+            "firstCandidateMs": 2215,
+            "scriptStartSinceNavigationMs": 601,
+            "longTaskMs": 534,
+            "longTaskCount": 4,
+            "longTaskMaxMs": 206,
+            "responseEndMs": 384,
+            "domInteractiveMs": 733,
+            "domContentLoadedMs": 937,
+            "readyState": "complete"
+          },
+          "zepto": {
+            "scriptElapsedMs": 2951,
+            "extractionWorkMs": 46,
+            "extractionMaxMs": 25,
+            "scanCount": 14,
+            "firstCandidateMs": 2951,
+            "scriptStartSinceNavigationMs": 404,
+            "longTaskMs": 448,
+            "longTaskCount": 2,
+            "longTaskMaxMs": 240,
+            "responseEndMs": 140,
+            "domInteractiveMs": 595,
+            "domContentLoadedMs": 596,
+            "readyState": "complete"
+          },
+          "instamart": {
+            "scriptElapsedMs": 8561,
+            "extractionWorkMs": 110,
+            "extractionMaxMs": 5,
+            "scanCount": 51,
+            "firstCandidateMs": null,
+            "scriptStartSinceNavigationMs": 416,
+            "longTaskMs": 125,
+            "longTaskCount": 2,
+            "longTaskMaxMs": 65,
+            "responseEndMs": 175,
+            "domInteractiveMs": 520,
+            "domContentLoadedMs": 580,
+            "readyState": "complete"
+          }
+        },
+        "starts": {
+          "instamart": 64,
+          "zepto": 64,
+          "blinkit": 64
+        },
+        "totalMs": 9155
+      }
+    ],
+    "bigPack": [
+      {
+        "query": "Basmati Rice 1kg",
+        "selectedStoreCount": 2,
+        "maxActivePages": 3,
+        "stores": [
+          {
+            "store": "flipkart",
+            "outcome": "result",
+            "title": "Taj Mahal Fiesta Blue 1kg Basmati Rice (Long Grain, Steam)",
+            "price": 176,
+            "elapsedMs": 653
+          },
+          {
+            "store": "amazon_main",
+            "outcome": "result",
+            "title": "India Gate Basmati Rice Super, 1kg",
+            "price": 177,
+            "elapsedMs": 1170
+          }
+        ],
+        "timings": {
+          "amazon_main": {
+            "scriptElapsedMs": 469,
+            "extractionWorkMs": 77,
+            "extractionMaxMs": 74,
+            "scanCount": 3,
+            "firstCandidateMs": 468,
+            "scriptStartSinceNavigationMs": 258,
+            "longTaskMs": 0,
+            "longTaskCount": 0,
+            "longTaskMaxMs": 0,
+            "responseEndMs": 0,
+            "domInteractiveMs": 0,
+            "domContentLoadedMs": 0,
+            "readyState": "loading"
+          }
+        },
+        "starts": {
+          "amazon_main": 36,
+          "flipkart": 37
+        },
+        "totalMs": 1233
+      }
+    ]
+  },
+  "limitations": [
+    "Exploratory development trials, not a controlled speedup estimate. Logged-out stores intermittently rendered login gates; HTTP success availability differs from earlier baseline.",
+    "Extraction timing measures runExtraction calls only. Long-task measurements cover tasks >=50ms observed after scraper injection; they are not a complete CPU trace and include any overlapping scraper work.",
+    "Two-page sample: one pair. Three-page sample: two pairs. Toggle rice check: one off/on pair with warmed website caches. Partial Fast Refresh runs excluded."
+  ]
+}

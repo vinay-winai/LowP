@@ -1,0 +1,2271 @@
+{
+  "date": "2026-10-01",
+  "device": "SM-M336BU / Exynos 1280 / Android 16",
+  "build": "Expo Go development over USB reverse 8082",
+  "pack": "No amzn",
+  "stores": [
+    "instamart",
+    "zepto",
+    "blinkit",
+    "amazon_main",
+    "flipkart"
+  ],
+  "sourceHashes": {
+    "BackgroundScrapers": "5EA62F9DCD2A9884416229A6178605F58E410084807954A426D653129BBB942F",
+    "ScraperScript": "4F9A8771F453A58556C345DBF7603191D48F079BB2A1DB248A3E557C07BABE69",
+    "HomeScreen": "E4B78631A7C72D5DBEE19882590A8F02B1D5D0D27B7BC537B5B3D4E875CAA7D9"
+  },
+  "protocol": "One clean launch and excluded full-3 warmup completed all five stores in 6.671s after user signed into Swiggy and Zepto. No subsequent restarts. Seven configurations across three matched queries with varied order. LowP result cache cleared using the count control before every trial; cookies, delivery addresses and website caches retained. No UI dumps while a request is running; completion/timing and per-store outcomes taken from Metro logs, then UI total cross-checked. Native views retained. Count limits active pages (page mode) or only extraction (extraction mode); website JavaScript remains parallel in extraction mode. Big-store HTTP fetches remain parallel in every mode.",
+  "blocks": [
+    {
+      "query": "Paneer 200g",
+      "order": [
+        "p3",
+        "off",
+        "e1",
+        "p1",
+        "e3",
+        "p2",
+        "e2"
+      ]
+    },
+    {
+      "query": "Amul Butter 500g",
+      "order": [
+        "e2",
+        "p1",
+        "off",
+        "p3",
+        "e3",
+        "p2",
+        "e1"
+      ]
+    },
+    {
+      "query": "Basmati Rice 1kg",
+      "order": [
+        "e3",
+        "p2",
+        "p3",
+        "off",
+        "p1",
+        "e1",
+        "e2"
+      ]
+    }
+  ],
+  "trials": [
+    {
+      "block": 1,
+      "configuration": "p3",
+      "query": "Paneer 200g",
+      "storeCount": 5,
+      "limit": 3,
+      "mode": "page",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "SRD FOODS SRDFOODS_PANEER DODI (200gm) Assorted Seeds &amp; Nuts",
+          "price": 148,
+          "elapsedMs": 953
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer - 200g",
+          "price": 114,
+          "elapsedMs": 1777
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Mother Dairy Paneer",
+          "price": 100,
+          "elapsedMs": 3724
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage High Protein Paneer",
+          "price": 135,
+          "elapsedMs": 4456
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer",
+          "price": 114,
+          "elapsedMs": 5700
+        }
+      ],
+      "timings": {
+        "blinkit": {
+          "scriptElapsedMs": 2689,
+          "extractionWorkMs": 45,
+          "extractionMaxMs": 12,
+          "scanCount": 11,
+          "firstCandidateMs": 2689,
+          "scriptStartSinceNavigationMs": 917,
+          "longTaskMs": 538,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 223,
+          "responseEndMs": 394,
+          "domInteractiveMs": 1568,
+          "domContentLoadedMs": 1845,
+          "readyState": "complete"
+        },
+        "instamart": {
+          "scriptElapsedMs": 3955,
+          "extractionWorkMs": 34,
+          "extractionMaxMs": 15,
+          "scanCount": 12,
+          "firstCandidateMs": 3954,
+          "scriptStartSinceNavigationMs": 386,
+          "longTaskMs": 951,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 409,
+          "responseEndMs": 250,
+          "domInteractiveMs": 295,
+          "domContentLoadedMs": 380,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 4639,
+          "extractionWorkMs": 34,
+          "extractionMaxMs": 8,
+          "scanCount": 18,
+          "firstCandidateMs": 4639,
+          "scriptStartSinceNavigationMs": 950,
+          "longTaskMs": 615,
+          "longTaskCount": 6,
+          "longTaskMaxMs": 227,
+          "responseEndMs": 577,
+          "domInteractiveMs": 1566,
+          "domContentLoadedMs": 1567,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 48,
+        "zepto": 48,
+        "blinkit": 49
+      },
+      "totalMs": 5790,
+      "batteryTemperatureC": 37.4,
+      "uiTotal": "5.79s"
+    },
+    {
+      "block": 1,
+      "configuration": "off",
+      "query": "Paneer 200g",
+      "storeCount": 5,
+      "limit": 6,
+      "mode": "page",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "SRD FOODS SRDFOODS_PANEER DODI (200gm) Assorted Seeds &amp; Nuts",
+          "price": 148,
+          "elapsedMs": 694
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer - 200g",
+          "price": 114,
+          "elapsedMs": 1222
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Mother Dairy Paneer",
+          "price": 100,
+          "elapsedMs": 3783
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage High Protein Paneer",
+          "price": 135,
+          "elapsedMs": 4179
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer",
+          "price": 114,
+          "elapsedMs": 5021
+        }
+      ],
+      "timings": {
+        "blinkit": {
+          "scriptElapsedMs": 2945,
+          "extractionWorkMs": 30,
+          "extractionMaxMs": 10,
+          "scanCount": 12,
+          "firstCandidateMs": 2944,
+          "scriptStartSinceNavigationMs": 735,
+          "longTaskMs": 745,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 281,
+          "responseEndMs": 321,
+          "domInteractiveMs": 831,
+          "domContentLoadedMs": 1364,
+          "readyState": "complete"
+        },
+        "instamart": {
+          "scriptElapsedMs": 3434,
+          "extractionWorkMs": 33,
+          "extractionMaxMs": 18,
+          "scanCount": 11,
+          "firstCandidateMs": 3434,
+          "scriptStartSinceNavigationMs": 625,
+          "longTaskMs": 669,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 202,
+          "responseEndMs": 235,
+          "domInteractiveMs": 758,
+          "domContentLoadedMs": 816,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 4323,
+          "extractionWorkMs": 35,
+          "extractionMaxMs": 8,
+          "scanCount": 17,
+          "firstCandidateMs": 4322,
+          "scriptStartSinceNavigationMs": 612,
+          "longTaskMs": 725,
+          "longTaskCount": 6,
+          "longTaskMaxMs": 242,
+          "responseEndMs": 167,
+          "domInteractiveMs": 1381,
+          "domContentLoadedMs": 1382,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 43,
+        "zepto": 44,
+        "blinkit": 44,
+        "amazon_main": 44,
+        "flipkart": 44
+      },
+      "totalMs": 5085,
+      "batteryTemperatureC": 37.5,
+      "uiTotal": "5.08s"
+    },
+    {
+      "block": 1,
+      "configuration": "e1",
+      "query": "Paneer 200g",
+      "storeCount": 5,
+      "limit": 1,
+      "mode": "extraction",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "SRD FOODS SRDFOODS_PANEER DODI (200gm) Assorted Seeds &amp; Nuts",
+          "price": 148,
+          "elapsedMs": 626
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer - 200g",
+          "price": 114,
+          "elapsedMs": 1135
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage High Protein Paneer",
+          "price": 135,
+          "elapsedMs": 5036
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer",
+          "price": 114,
+          "elapsedMs": 5966
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Mother Dairy Paneer",
+          "price": 100,
+          "elapsedMs": 6371
+        }
+      ],
+      "timings": {
+        "instamart": {
+          "scriptElapsedMs": 4082,
+          "extractionWorkMs": 49,
+          "extractionMaxMs": 25,
+          "scanCount": 15,
+          "firstCandidateMs": 4082,
+          "scriptStartSinceNavigationMs": 833,
+          "longTaskMs": 728,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 326,
+          "responseEndMs": 278,
+          "domInteractiveMs": 1247,
+          "domContentLoadedMs": 1316,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 458,
+          "extractionWorkMs": 25,
+          "extractionMaxMs": 17,
+          "scanCount": 2,
+          "firstCandidateMs": 457,
+          "scriptStartSinceNavigationMs": 5400,
+          "longTaskMs": 207,
+          "longTaskCount": 2,
+          "longTaskMaxMs": 111,
+          "responseEndMs": 193,
+          "domInteractiveMs": 1707,
+          "domContentLoadedMs": 1710,
+          "readyState": "complete"
+        },
+        "blinkit": {
+          "scriptElapsedMs": 12,
+          "extractionWorkMs": 10,
+          "extractionMaxMs": 10,
+          "scanCount": 1,
+          "firstCandidateMs": 11,
+          "scriptStartSinceNavigationMs": 6286,
+          "longTaskMs": 0,
+          "longTaskCount": 0,
+          "longTaskMaxMs": 0,
+          "responseEndMs": 331,
+          "domInteractiveMs": 1362,
+          "domContentLoadedMs": 1673,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 42,
+        "zepto": 5301,
+        "blinkit": 6334
+      },
+      "totalMs": 6455,
+      "batteryTemperatureC": 37.5,
+      "uiTotal": "6.46s"
+    },
+    {
+      "block": 1,
+      "configuration": "p1",
+      "query": "Paneer 200g",
+      "storeCount": 5,
+      "limit": 1,
+      "mode": "page",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "SRD FOODS SRDFOODS_PANEER DODI (200gm) Assorted Seeds &amp; Nuts",
+          "price": 148,
+          "elapsedMs": 514
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer - 200g",
+          "price": 114,
+          "elapsedMs": 1315
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage High Protein Paneer",
+          "price": 135,
+          "elapsedMs": 2210
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer",
+          "price": 114,
+          "elapsedMs": 5704
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Mother Dairy Paneer",
+          "price": 100,
+          "elapsedMs": 8064
+        }
+      ],
+      "timings": {
+        "instamart": {
+          "scriptElapsedMs": 1922,
+          "extractionWorkMs": 41,
+          "extractionMaxMs": 25,
+          "scanCount": 11,
+          "firstCandidateMs": 1922,
+          "scriptStartSinceNavigationMs": 230,
+          "longTaskMs": 911,
+          "longTaskCount": 6,
+          "longTaskMaxMs": 270,
+          "responseEndMs": 182,
+          "domInteractiveMs": 246,
+          "domContentLoadedMs": 352,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 2672,
+          "extractionWorkMs": 40,
+          "extractionMaxMs": 20,
+          "scanCount": 14,
+          "firstCandidateMs": 2671,
+          "scriptStartSinceNavigationMs": 549,
+          "longTaskMs": 791,
+          "longTaskCount": 6,
+          "longTaskMaxMs": 252,
+          "responseEndMs": 235,
+          "domInteractiveMs": 711,
+          "domContentLoadedMs": 715,
+          "readyState": "complete"
+        },
+        "blinkit": {
+          "scriptElapsedMs": 1508,
+          "extractionWorkMs": 58,
+          "extractionMaxMs": 37,
+          "scanCount": 7,
+          "firstCandidateMs": 1506,
+          "scriptStartSinceNavigationMs": 389,
+          "longTaskMs": 686,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 415,
+          "responseEndMs": 327,
+          "domInteractiveMs": 553,
+          "domContentLoadedMs": 747,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 48,
+        "zepto": 2461,
+        "blinkit": 6093
+      },
+      "totalMs": 8147,
+      "batteryTemperatureC": 37.5,
+      "uiTotal": "8.15s"
+    },
+    {
+      "block": 1,
+      "configuration": "e3",
+      "query": "Paneer 200g",
+      "storeCount": 5,
+      "limit": 3,
+      "mode": "extraction",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "SRD FOODS SRDFOODS_PANEER DODI (200gm) Assorted Seeds &amp; Nuts",
+          "price": 148,
+          "elapsedMs": 558
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer - 200g",
+          "price": 114,
+          "elapsedMs": 1340
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Mother Dairy Paneer",
+          "price": 100,
+          "elapsedMs": 4585
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage High Protein Paneer",
+          "price": 135,
+          "elapsedMs": 6775
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer",
+          "price": 114,
+          "elapsedMs": 7242
+        }
+      ],
+      "timings": {
+        "blinkit": {
+          "scriptElapsedMs": 3304,
+          "extractionWorkMs": 64,
+          "extractionMaxMs": 35,
+          "scanCount": 11,
+          "firstCandidateMs": 3304,
+          "scriptStartSinceNavigationMs": 1160,
+          "longTaskMs": 699,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 235,
+          "responseEndMs": 360,
+          "domInteractiveMs": 1582,
+          "domContentLoadedMs": 2043,
+          "readyState": "complete"
+        },
+        "instamart": {
+          "scriptElapsedMs": 5628,
+          "extractionWorkMs": 48,
+          "extractionMaxMs": 17,
+          "scanCount": 16,
+          "firstCandidateMs": 5628,
+          "scriptStartSinceNavigationMs": 995,
+          "longTaskMs": 1166,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 583,
+          "responseEndMs": 274,
+          "domInteractiveMs": 1397,
+          "domContentLoadedMs": 1537,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 6137,
+          "extractionWorkMs": 41,
+          "extractionMaxMs": 13,
+          "scanCount": 15,
+          "firstCandidateMs": 6137,
+          "scriptStartSinceNavigationMs": 922,
+          "longTaskMs": 1265,
+          "longTaskCount": 11,
+          "longTaskMaxMs": 272,
+          "responseEndMs": 195,
+          "domInteractiveMs": 2088,
+          "domContentLoadedMs": 2094,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 56,
+        "zepto": 56,
+        "blinkit": 56
+      },
+      "totalMs": 7351,
+      "batteryTemperatureC": 37.5,
+      "uiTotal": "7.35s"
+    },
+    {
+      "block": 1,
+      "configuration": "p2",
+      "query": "Paneer 200g",
+      "storeCount": 5,
+      "limit": 2,
+      "mode": "page",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "SRD FOODS SRDFOODS_PANEER DODI (200gm) Assorted Seeds &amp; Nuts",
+          "price": 148,
+          "elapsedMs": 664
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer - 200g",
+          "price": 114,
+          "elapsedMs": 1473
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage High Protein Paneer",
+          "price": 135,
+          "elapsedMs": 3862
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer",
+          "price": 114,
+          "elapsedMs": 5792
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Mother Dairy Paneer",
+          "price": 100,
+          "elapsedMs": 7281
+        }
+      ],
+      "timings": {
+        "instamart": {
+          "scriptElapsedMs": 2985,
+          "extractionWorkMs": 68,
+          "extractionMaxMs": 41,
+          "scanCount": 15,
+          "firstCandidateMs": 2985,
+          "scriptStartSinceNavigationMs": 757,
+          "longTaskMs": 947,
+          "longTaskCount": 6,
+          "longTaskMaxMs": 317,
+          "responseEndMs": 241,
+          "domInteractiveMs": 872,
+          "domContentLoadedMs": 1015,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 4934,
+          "extractionWorkMs": 65,
+          "extractionMaxMs": 11,
+          "scanCount": 20,
+          "firstCandidateMs": 4933,
+          "scriptStartSinceNavigationMs": 723,
+          "longTaskMs": 1260,
+          "longTaskCount": 10,
+          "longTaskMaxMs": 318,
+          "responseEndMs": 206,
+          "domInteractiveMs": 1210,
+          "domContentLoadedMs": 1210,
+          "readyState": "complete"
+        },
+        "blinkit": {
+          "scriptElapsedMs": 2418,
+          "extractionWorkMs": 43,
+          "extractionMaxMs": 14,
+          "scanCount": 9,
+          "firstCandidateMs": 2418,
+          "scriptStartSinceNavigationMs": 682,
+          "longTaskMs": 732,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 318,
+          "responseEndMs": 475,
+          "domInteractiveMs": 1130,
+          "domContentLoadedMs": 1320,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 58,
+        "zepto": 58,
+        "blinkit": 4107
+      },
+      "totalMs": 7384,
+      "batteryTemperatureC": 37.5,
+      "uiTotal": "7.38s"
+    },
+    {
+      "block": 1,
+      "configuration": "e2",
+      "query": "Paneer 200g",
+      "storeCount": 5,
+      "limit": 2,
+      "mode": "extraction",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "SRD FOODS SRDFOODS_PANEER DODI (200gm) Assorted Seeds &amp; Nuts",
+          "price": 148,
+          "elapsedMs": 630
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer - 200g",
+          "price": 114,
+          "elapsedMs": 1310
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage High Protein Paneer",
+          "price": 135,
+          "elapsedMs": 5691
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Mother Dairy Paneer",
+          "price": 100,
+          "elapsedMs": 6106
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Heritage Fresh Paneer",
+          "price": 114,
+          "elapsedMs": 7484
+        }
+      ],
+      "timings": {
+        "instamart": {
+          "scriptElapsedMs": 4688,
+          "extractionWorkMs": 65,
+          "extractionMaxMs": 35,
+          "scanCount": 15,
+          "firstCandidateMs": 4685,
+          "scriptStartSinceNavigationMs": 857,
+          "longTaskMs": 1007,
+          "longTaskCount": 6,
+          "longTaskMaxMs": 320,
+          "responseEndMs": 244,
+          "domInteractiveMs": 1297,
+          "domContentLoadedMs": 1431,
+          "readyState": "complete"
+        },
+        "blinkit": {
+          "scriptElapsedMs": 27,
+          "extractionWorkMs": 24,
+          "extractionMaxMs": 24,
+          "scanCount": 1,
+          "firstCandidateMs": 27,
+          "scriptStartSinceNavigationMs": 5925,
+          "longTaskMs": 0,
+          "longTaskCount": 0,
+          "longTaskMaxMs": 0,
+          "responseEndMs": 351,
+          "domInteractiveMs": 1490,
+          "domContentLoadedMs": 1932,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 6556,
+          "extractionWorkMs": 66,
+          "extractionMaxMs": 18,
+          "scanCount": 22,
+          "firstCandidateMs": 6555,
+          "scriptStartSinceNavigationMs": 818,
+          "longTaskMs": 1305,
+          "longTaskCount": 10,
+          "longTaskMaxMs": 300,
+          "responseEndMs": 224,
+          "domInteractiveMs": 2112,
+          "domContentLoadedMs": 2118,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 59,
+        "zepto": 59,
+        "blinkit": 5971
+      },
+      "totalMs": 7574,
+      "batteryTemperatureC": 37.6,
+      "uiTotal": "7.57s"
+    },
+    {
+      "block": 2,
+      "configuration": "e2",
+      "query": "Amul Butter 500g",
+      "storeCount": 5,
+      "limit": 2,
+      "mode": "extraction",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "Velva Nut PEANUT BUTTER",
+          "price": 190,
+          "elapsedMs": 626
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Amul Table Butter Salted 500 Gm",
+          "price": 310,
+          "elapsedMs": 1768
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Unsalted Butter",
+          "price": 65,
+          "elapsedMs": 5751
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Fresh Butter Cookies",
+          "price": 85,
+          "elapsedMs": 6190
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Unsalted Cooking Butter",
+          "price": 320,
+          "elapsedMs": 7578
+        }
+      ],
+      "timings": {
+        "instamart": {
+          "scriptElapsedMs": 4620,
+          "extractionWorkMs": 49,
+          "extractionMaxMs": 21,
+          "scanCount": 16,
+          "firstCandidateMs": 4620,
+          "scriptStartSinceNavigationMs": 1002,
+          "longTaskMs": 1165,
+          "longTaskCount": 7,
+          "longTaskMaxMs": 422,
+          "responseEndMs": 242,
+          "domInteractiveMs": 1739,
+          "domContentLoadedMs": 1909,
+          "readyState": "complete"
+        },
+        "blinkit": {
+          "scriptElapsedMs": 19,
+          "extractionWorkMs": 17,
+          "extractionMaxMs": 17,
+          "scanCount": 1,
+          "firstCandidateMs": 18,
+          "scriptStartSinceNavigationMs": 6026,
+          "longTaskMs": 0,
+          "longTaskCount": 0,
+          "longTaskMaxMs": 0,
+          "responseEndMs": 472,
+          "domInteractiveMs": 1210,
+          "domContentLoadedMs": 1718,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 6548,
+          "extractionWorkMs": 53,
+          "extractionMaxMs": 11,
+          "scanCount": 24,
+          "firstCandidateMs": 6547,
+          "scriptStartSinceNavigationMs": 913,
+          "longTaskMs": 1170,
+          "longTaskCount": 8,
+          "longTaskMaxMs": 311,
+          "responseEndMs": 229,
+          "domInteractiveMs": 2106,
+          "domContentLoadedMs": 2109,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 55,
+        "zepto": 56,
+        "blinkit": 6035
+      },
+      "totalMs": 7679,
+      "batteryTemperatureC": 37.6,
+      "uiTotal": "7.68s"
+    },
+    {
+      "block": 2,
+      "configuration": "p1",
+      "query": "Amul Butter 500g",
+      "storeCount": 5,
+      "limit": 1,
+      "mode": "page",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "Velva Nut PEANUT BUTTER",
+          "price": 190,
+          "elapsedMs": 633
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Amul Table Butter Salted 500 Gm",
+          "price": 310,
+          "elapsedMs": 1352
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Unsalted Butter",
+          "price": 65,
+          "elapsedMs": 2345
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Unsalted Cooking Butter",
+          "price": 320,
+          "elapsedMs": 5970
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Fresh Butter Cookies",
+          "price": 85,
+          "elapsedMs": 8307
+        }
+      ],
+      "timings": {
+        "instamart": {
+          "scriptElapsedMs": 2009,
+          "extractionWorkMs": 40,
+          "extractionMaxMs": 16,
+          "scanCount": 9,
+          "firstCandidateMs": 2008,
+          "scriptStartSinceNavigationMs": 272,
+          "longTaskMs": 1167,
+          "longTaskCount": 6,
+          "longTaskMaxMs": 357,
+          "responseEndMs": 242,
+          "domInteractiveMs": 296,
+          "domContentLoadedMs": 366,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 2703,
+          "extractionWorkMs": 45,
+          "extractionMaxMs": 23,
+          "scanCount": 12,
+          "firstCandidateMs": 2702,
+          "scriptStartSinceNavigationMs": 581,
+          "longTaskMs": 1051,
+          "longTaskCount": 11,
+          "longTaskMaxMs": 258,
+          "responseEndMs": 251,
+          "domInteractiveMs": 761,
+          "domContentLoadedMs": 762,
+          "readyState": "complete"
+        },
+        "blinkit": {
+          "scriptElapsedMs": 1484,
+          "extractionWorkMs": 28,
+          "extractionMaxMs": 12,
+          "scanCount": 8,
+          "firstCandidateMs": 1483,
+          "scriptStartSinceNavigationMs": 372,
+          "longTaskMs": 555,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 266,
+          "responseEndMs": 316,
+          "domInteractiveMs": 677,
+          "domContentLoadedMs": 811,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 51,
+        "zepto": 2613,
+        "blinkit": 6357
+      },
+      "totalMs": 8413,
+      "batteryTemperatureC": 37.7,
+      "uiTotal": "8.41s"
+    },
+    {
+      "block": 2,
+      "configuration": "off",
+      "query": "Amul Butter 500g",
+      "storeCount": 5,
+      "limit": 6,
+      "mode": "page",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "Velva Nut PEANUT BUTTER",
+          "price": 190,
+          "elapsedMs": 624
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Amul Table Butter Salted 500 Gm",
+          "price": 310,
+          "elapsedMs": 1381
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Fresh Butter Cookies",
+          "price": 85,
+          "elapsedMs": 4380
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Unsalted Butter",
+          "price": 65,
+          "elapsedMs": 5604
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Unsalted Cooking Butter",
+          "price": 320,
+          "elapsedMs": 7076
+        }
+      ],
+      "timings": {
+        "blinkit": {
+          "scriptElapsedMs": 3115,
+          "extractionWorkMs": 48,
+          "extractionMaxMs": 17,
+          "scanCount": 11,
+          "firstCandidateMs": 3115,
+          "scriptStartSinceNavigationMs": 1132,
+          "longTaskMs": 721,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 189,
+          "responseEndMs": 346,
+          "domInteractiveMs": 1511,
+          "domContentLoadedMs": 1990,
+          "readyState": "complete"
+        },
+        "instamart": {
+          "scriptElapsedMs": 4496,
+          "extractionWorkMs": 49,
+          "extractionMaxMs": 16,
+          "scanCount": 17,
+          "firstCandidateMs": 4495,
+          "scriptStartSinceNavigationMs": 981,
+          "longTaskMs": 971,
+          "longTaskCount": 7,
+          "longTaskMaxMs": 280,
+          "responseEndMs": 254,
+          "domInteractiveMs": 1394,
+          "domContentLoadedMs": 1480,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 5951,
+          "extractionWorkMs": 68,
+          "extractionMaxMs": 30,
+          "scanCount": 23,
+          "firstCandidateMs": 5949,
+          "scriptStartSinceNavigationMs": 938,
+          "longTaskMs": 977,
+          "longTaskCount": 9,
+          "longTaskMaxMs": 269,
+          "responseEndMs": 203,
+          "domInteractiveMs": 1366,
+          "domContentLoadedMs": 1368,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 66,
+        "zepto": 67,
+        "blinkit": 67,
+        "amazon_main": 67,
+        "flipkart": 67
+      },
+      "totalMs": 7176,
+      "batteryTemperatureC": 37.7,
+      "uiTotal": "7.18s"
+    },
+    {
+      "block": 2,
+      "configuration": "p3",
+      "query": "Amul Butter 500g",
+      "storeCount": 5,
+      "limit": 3,
+      "mode": "page",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "Velva Nut PEANUT BUTTER",
+          "price": 190,
+          "elapsedMs": 743
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Amul Table Butter Salted 500 Gm",
+          "price": 310,
+          "elapsedMs": 1368
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Fresh Butter Cookies",
+          "price": 85,
+          "elapsedMs": 3940
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Unsalted Butter",
+          "price": 65,
+          "elapsedMs": 5188
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Unsalted Cooking Butter",
+          "price": 320,
+          "elapsedMs": 6590
+        }
+      ],
+      "timings": {
+        "blinkit": {
+          "scriptElapsedMs": 2881,
+          "extractionWorkMs": 48,
+          "extractionMaxMs": 11,
+          "scanCount": 12,
+          "firstCandidateMs": 2880,
+          "scriptStartSinceNavigationMs": 852,
+          "longTaskMs": 859,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 318,
+          "responseEndMs": 402,
+          "domInteractiveMs": 1026,
+          "domContentLoadedMs": 1548,
+          "readyState": "complete"
+        },
+        "instamart": {
+          "scriptElapsedMs": 4248,
+          "extractionWorkMs": 40,
+          "extractionMaxMs": 16,
+          "scanCount": 16,
+          "firstCandidateMs": 4247,
+          "scriptStartSinceNavigationMs": 788,
+          "longTaskMs": 953,
+          "longTaskCount": 7,
+          "longTaskMaxMs": 271,
+          "responseEndMs": 263,
+          "domInteractiveMs": 889,
+          "domContentLoadedMs": 1002,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 5658,
+          "extractionWorkMs": 71,
+          "extractionMaxMs": 26,
+          "scanCount": 22,
+          "firstCandidateMs": 5656,
+          "scriptStartSinceNavigationMs": 771,
+          "longTaskMs": 903,
+          "longTaskCount": 7,
+          "longTaskMaxMs": 281,
+          "responseEndMs": 229,
+          "domInteractiveMs": 1667,
+          "domContentLoadedMs": 1668,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 58,
+        "zepto": 58,
+        "blinkit": 59
+      },
+      "totalMs": 6690,
+      "batteryTemperatureC": 37.7,
+      "uiTotal": "6.69s"
+    },
+    {
+      "block": 2,
+      "configuration": "e3",
+      "query": "Amul Butter 500g",
+      "storeCount": 5,
+      "limit": 3,
+      "mode": "extraction",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "Velva Nut PEANUT BUTTER",
+          "price": 190,
+          "elapsedMs": 588
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Amul Table Butter Salted 500 Gm",
+          "price": 310,
+          "elapsedMs": 1490
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Fresh Butter Cookies",
+          "price": 85,
+          "elapsedMs": 5050
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Unsalted Butter",
+          "price": 65,
+          "elapsedMs": 5436
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Unsalted Cooking Butter",
+          "price": 320,
+          "elapsedMs": 7054
+        }
+      ],
+      "timings": {
+        "blinkit": {
+          "scriptElapsedMs": 3686,
+          "extractionWorkMs": 43,
+          "extractionMaxMs": 12,
+          "scanCount": 14,
+          "firstCandidateMs": 3686,
+          "scriptStartSinceNavigationMs": 1243,
+          "longTaskMs": 725,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 307,
+          "responseEndMs": 310,
+          "domInteractiveMs": 1671,
+          "domContentLoadedMs": 1998,
+          "readyState": "complete"
+        },
+        "instamart": {
+          "scriptElapsedMs": 4892,
+          "extractionWorkMs": 45,
+          "extractionMaxMs": 18,
+          "scanCount": 17,
+          "firstCandidateMs": 4892,
+          "scriptStartSinceNavigationMs": 295,
+          "longTaskMs": 864,
+          "longTaskCount": 7,
+          "longTaskMaxMs": 260,
+          "responseEndMs": 243,
+          "domInteractiveMs": 1254,
+          "domContentLoadedMs": 1362,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 5720,
+          "extractionWorkMs": 54,
+          "extractionMaxMs": 12,
+          "scanCount": 19,
+          "firstCandidateMs": 5719,
+          "scriptStartSinceNavigationMs": 1173,
+          "longTaskMs": 932,
+          "longTaskCount": 7,
+          "longTaskMaxMs": 324,
+          "responseEndMs": 370,
+          "domInteractiveMs": 2031,
+          "domContentLoadedMs": 2032,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 56,
+        "zepto": 57,
+        "blinkit": 57
+      },
+      "totalMs": 7163,
+      "batteryTemperatureC": 37.8,
+      "uiTotal": "7.16s"
+    },
+    {
+      "block": 2,
+      "configuration": "p2",
+      "query": "Amul Butter 500g",
+      "storeCount": 5,
+      "limit": 2,
+      "mode": "page",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "Velva Nut PEANUT BUTTER",
+          "price": 190,
+          "elapsedMs": 757
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Amul Table Butter Salted 500 Gm",
+          "price": 310,
+          "elapsedMs": 1457
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Unsalted Butter",
+          "price": 65,
+          "elapsedMs": 4650
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Unsalted Cooking Butter",
+          "price": 320,
+          "elapsedMs": 5393
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Fresh Butter Cookies",
+          "price": 85,
+          "elapsedMs": 7090
+        }
+      ],
+      "timings": {
+        "instamart": {
+          "scriptElapsedMs": 3742,
+          "extractionWorkMs": 58,
+          "extractionMaxMs": 30,
+          "scanCount": 16,
+          "firstCandidateMs": 3741,
+          "scriptStartSinceNavigationMs": 776,
+          "longTaskMs": 1035,
+          "longTaskCount": 7,
+          "longTaskMaxMs": 289,
+          "responseEndMs": 211,
+          "domInteractiveMs": 812,
+          "domContentLoadedMs": 873,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 4578,
+          "extractionWorkMs": 53,
+          "extractionMaxMs": 18,
+          "scanCount": 19,
+          "firstCandidateMs": 4578,
+          "scriptStartSinceNavigationMs": 655,
+          "longTaskMs": 1275,
+          "longTaskCount": 12,
+          "longTaskMaxMs": 263,
+          "responseEndMs": 174,
+          "domInteractiveMs": 857,
+          "domContentLoadedMs": 858,
+          "readyState": "complete"
+        },
+        "blinkit": {
+          "scriptElapsedMs": 1409,
+          "extractionWorkMs": 53,
+          "extractionMaxMs": 35,
+          "scanCount": 7,
+          "firstCandidateMs": 1408,
+          "scriptStartSinceNavigationMs": 574,
+          "longTaskMs": 594,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 186,
+          "responseEndMs": 517,
+          "domInteractiveMs": 612,
+          "domContentLoadedMs": 835,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 56,
+        "zepto": 56,
+        "blinkit": 5052
+      },
+      "totalMs": 7177,
+      "batteryTemperatureC": 37.8,
+      "uiTotal": "7.18s"
+    },
+    {
+      "block": 2,
+      "configuration": "e1",
+      "query": "Amul Butter 500g",
+      "storeCount": 5,
+      "limit": 1,
+      "mode": "extraction",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "Velva Nut PEANUT BUTTER",
+          "price": 190,
+          "elapsedMs": 621
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Amul Table Butter Salted 500 Gm",
+          "price": 310,
+          "elapsedMs": 1501
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Unsalted Butter",
+          "price": 65,
+          "elapsedMs": 6136
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Unsalted Cooking Butter",
+          "price": 320,
+          "elapsedMs": 7690
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Amul Fresh Butter Cookies",
+          "price": 85,
+          "elapsedMs": 8093
+        }
+      ],
+      "timings": {
+        "instamart": {
+          "scriptElapsedMs": 5016,
+          "extractionWorkMs": 52,
+          "extractionMaxMs": 23,
+          "scanCount": 17,
+          "firstCandidateMs": 5015,
+          "scriptStartSinceNavigationMs": 989,
+          "longTaskMs": 1010,
+          "longTaskCount": 7,
+          "longTaskMaxMs": 331,
+          "responseEndMs": 234,
+          "domInteractiveMs": 2170,
+          "domContentLoadedMs": 2352,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 1084,
+          "extractionWorkMs": 32,
+          "extractionMaxMs": 18,
+          "scanCount": 3,
+          "firstCandidateMs": 1083,
+          "scriptStartSinceNavigationMs": 6431,
+          "longTaskMs": 648,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 290,
+          "responseEndMs": 176,
+          "domInteractiveMs": 2143,
+          "domContentLoadedMs": 2145,
+          "readyState": "complete"
+        },
+        "blinkit": {
+          "scriptElapsedMs": 28,
+          "extractionWorkMs": 26,
+          "extractionMaxMs": 26,
+          "scanCount": 1,
+          "firstCandidateMs": 28,
+          "scriptStartSinceNavigationMs": 8001,
+          "longTaskMs": 0,
+          "longTaskCount": 0,
+          "longTaskMaxMs": 0,
+          "responseEndMs": 339,
+          "domInteractiveMs": 1482,
+          "domContentLoadedMs": 2112,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 49,
+        "zepto": 6460,
+        "blinkit": 8049
+      },
+      "totalMs": 8191,
+      "batteryTemperatureC": 37.8,
+      "uiTotal": "8.19s"
+    },
+    {
+      "block": 3,
+      "configuration": "e3",
+      "query": "Basmati Rice 1kg",
+      "storeCount": 5,
+      "limit": 3,
+      "mode": "extraction",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "Healthy Rice Villa Tasty Basmati Fried Rice 1Kg Basmati Rice (Long Grain, Steam)",
+          "price": 192,
+          "elapsedMs": 755
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Kohinoor Pulao Basmati Rice, 1 kg | Long-Grain Basmati (Cooked grain up to 18 mm) | Aromatic & Flavorful Rice | Ideal for Pulao",
+          "price": 146,
+          "elapsedMs": 1951
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Daawat Super Basmati Rice (Extra Long Grain)",
+          "price": 172,
+          "elapsedMs": 4513
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "India Gate Daily Premium Basmati Rice",
+          "price": 99,
+          "elapsedMs": 6114
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Daawat Delight Basmati Rice | Long Grain",
+          "price": 126,
+          "elapsedMs": 8402
+        }
+      ],
+      "timings": {
+        "blinkit": {
+          "scriptElapsedMs": 3322,
+          "extractionWorkMs": 36,
+          "extractionMaxMs": 13,
+          "scanCount": 11,
+          "firstCandidateMs": 3321,
+          "scriptStartSinceNavigationMs": 1045,
+          "longTaskMs": 764,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 257,
+          "responseEndMs": 567,
+          "domInteractiveMs": 1399,
+          "domContentLoadedMs": 1734,
+          "readyState": "complete"
+        },
+        "instamart": {
+          "scriptElapsedMs": 4934,
+          "extractionWorkMs": 49,
+          "extractionMaxMs": 24,
+          "scanCount": 17,
+          "firstCandidateMs": 4934,
+          "scriptStartSinceNavigationMs": 1041,
+          "longTaskMs": 1158,
+          "longTaskCount": 7,
+          "longTaskMaxMs": 405,
+          "responseEndMs": 237,
+          "domInteractiveMs": 1779,
+          "domContentLoadedMs": 1961,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 7404,
+          "extractionWorkMs": 64,
+          "extractionMaxMs": 18,
+          "scanCount": 28,
+          "firstCandidateMs": 7403,
+          "scriptStartSinceNavigationMs": 839,
+          "longTaskMs": 1435,
+          "longTaskCount": 11,
+          "longTaskMaxMs": 290,
+          "responseEndMs": 162,
+          "domInteractiveMs": 1754,
+          "domContentLoadedMs": 1762,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 63,
+        "zepto": 63,
+        "blinkit": 63
+      },
+      "totalMs": 8500,
+      "batteryTemperatureC": 37.9,
+      "uiTotal": "8.50s"
+    },
+    {
+      "block": 3,
+      "configuration": "p2",
+      "query": "Basmati Rice 1kg",
+      "storeCount": 5,
+      "limit": 2,
+      "mode": "page",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "Healthy Rice Villa Tasty Basmati Fried Rice 1Kg Basmati Rice (Long Grain, Steam)",
+          "price": 192,
+          "elapsedMs": 631
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Kohinoor Pulao Basmati Rice, 1 kg | Long-Grain Basmati (Cooked grain up to 18 mm) | Aromatic & Flavorful Rice | Ideal for Pulao",
+          "price": 146,
+          "elapsedMs": 1588
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "India Gate Daily Premium Basmati Rice",
+          "price": 99,
+          "elapsedMs": 4589
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Daawat Delight Basmati Rice | Long Grain",
+          "price": 126,
+          "elapsedMs": 6509
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Daawat Super Basmati Rice (Extra Long Grain)",
+          "price": 172,
+          "elapsedMs": 7795
+        }
+      ],
+      "timings": {
+        "instamart": {
+          "scriptElapsedMs": 3701,
+          "extractionWorkMs": 48,
+          "extractionMaxMs": 16,
+          "scanCount": 14,
+          "firstCandidateMs": 3700,
+          "scriptStartSinceNavigationMs": 773,
+          "longTaskMs": 1456,
+          "longTaskCount": 8,
+          "longTaskMaxMs": 538,
+          "responseEndMs": 332,
+          "domInteractiveMs": 837,
+          "domContentLoadedMs": 986,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 5637,
+          "extractionWorkMs": 56,
+          "extractionMaxMs": 13,
+          "scanCount": 22,
+          "firstCandidateMs": 5636,
+          "scriptStartSinceNavigationMs": 726,
+          "longTaskMs": 1417,
+          "longTaskCount": 12,
+          "longTaskMaxMs": 277,
+          "responseEndMs": 219,
+          "domInteractiveMs": 1064,
+          "domContentLoadedMs": 1065,
+          "readyState": "complete"
+        },
+        "blinkit": {
+          "scriptElapsedMs": 1811,
+          "extractionWorkMs": 30,
+          "extractionMaxMs": 13,
+          "scanCount": 7,
+          "firstCandidateMs": 1810,
+          "scriptStartSinceNavigationMs": 981,
+          "longTaskMs": 517,
+          "longTaskCount": 3,
+          "longTaskMaxMs": 230,
+          "responseEndMs": 465,
+          "domInteractiveMs": 682,
+          "domContentLoadedMs": 893,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 59,
+        "zepto": 59,
+        "blinkit": 4895
+      },
+      "totalMs": 7899,
+      "batteryTemperatureC": 37.9,
+      "uiTotal": "7.90s"
+    },
+    {
+      "block": 3,
+      "configuration": "p3",
+      "query": "Basmati Rice 1kg",
+      "storeCount": 5,
+      "limit": 3,
+      "mode": "page",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "Healthy Rice Villa Tasty Basmati Fried Rice 1Kg Basmati Rice (Long Grain, Steam)",
+          "price": 192,
+          "elapsedMs": 601
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Kohinoor Pulao Basmati Rice, 1 kg | Long-Grain Basmati (Cooked grain up to 18 mm) | Aromatic & Flavorful Rice | Ideal for Pulao",
+          "price": 146,
+          "elapsedMs": 1472
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Daawat Super Basmati Rice (Extra Long Grain)",
+          "price": 172,
+          "elapsedMs": 3966
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "India Gate Daily Premium Basmati Rice",
+          "price": 99,
+          "elapsedMs": 5386
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Daawat Delight Basmati Rice | Long Grain",
+          "price": 126,
+          "elapsedMs": 6055
+        }
+      ],
+      "timings": {
+        "blinkit": {
+          "scriptElapsedMs": 2877,
+          "extractionWorkMs": 58,
+          "extractionMaxMs": 14,
+          "scanCount": 11,
+          "firstCandidateMs": 2876,
+          "scriptStartSinceNavigationMs": 952,
+          "longTaskMs": 803,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 213,
+          "responseEndMs": 436,
+          "domInteractiveMs": 1137,
+          "domContentLoadedMs": 1469,
+          "readyState": "complete"
+        },
+        "instamart": {
+          "scriptElapsedMs": 4488,
+          "extractionWorkMs": 66,
+          "extractionMaxMs": 33,
+          "scanCount": 15,
+          "firstCandidateMs": 4487,
+          "scriptStartSinceNavigationMs": 762,
+          "longTaskMs": 716,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 274,
+          "responseEndMs": 269,
+          "domInteractiveMs": 1062,
+          "domContentLoadedMs": 1116,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 5068,
+          "extractionWorkMs": 61,
+          "extractionMaxMs": 40,
+          "scanCount": 15,
+          "firstCandidateMs": 5068,
+          "scriptStartSinceNavigationMs": 869,
+          "longTaskMs": 1211,
+          "longTaskCount": 9,
+          "longTaskMaxMs": 298,
+          "responseEndMs": 274,
+          "domInteractiveMs": 1503,
+          "domContentLoadedMs": 1504,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 57,
+        "zepto": 57,
+        "blinkit": 57
+      },
+      "totalMs": 6164,
+      "batteryTemperatureC": 37.9,
+      "uiTotal": "6.16s"
+    },
+    {
+      "block": 3,
+      "configuration": "off",
+      "query": "Basmati Rice 1kg",
+      "storeCount": 5,
+      "limit": 6,
+      "mode": "page",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "Healthy Rice Villa Tasty Basmati Fried Rice 1Kg Basmati Rice (Long Grain, Steam)",
+          "price": 192,
+          "elapsedMs": 787
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Kohinoor Pulao Basmati Rice, 1 kg | Long-Grain Basmati (Cooked grain up to 18 mm) | Aromatic & Flavorful Rice | Ideal for Pulao",
+          "price": 146,
+          "elapsedMs": 1734
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Daawat Super Basmati Rice (Extra Long Grain)",
+          "price": 172,
+          "elapsedMs": 4768
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "India Gate Daily Premium Basmati Rice",
+          "price": 99,
+          "elapsedMs": 6036
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Daawat Delight Basmati Rice | Long Grain",
+          "price": 126,
+          "elapsedMs": 8042
+        }
+      ],
+      "timings": {
+        "blinkit": {
+          "scriptElapsedMs": 3201,
+          "extractionWorkMs": 57,
+          "extractionMaxMs": 19,
+          "scanCount": 12,
+          "firstCandidateMs": 3200,
+          "scriptStartSinceNavigationMs": 1343,
+          "longTaskMs": 758,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 268,
+          "responseEndMs": 446,
+          "domInteractiveMs": 1962,
+          "domContentLoadedMs": 2336,
+          "readyState": "complete"
+        },
+        "instamart": {
+          "scriptElapsedMs": 4636,
+          "extractionWorkMs": 63,
+          "extractionMaxMs": 21,
+          "scanCount": 16,
+          "firstCandidateMs": 4636,
+          "scriptStartSinceNavigationMs": 1160,
+          "longTaskMs": 972,
+          "longTaskCount": 6,
+          "longTaskMaxMs": 314,
+          "responseEndMs": 274,
+          "domInteractiveMs": 1497,
+          "domContentLoadedMs": 1582,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 6727,
+          "extractionWorkMs": 56,
+          "extractionMaxMs": 14,
+          "scanCount": 23,
+          "firstCandidateMs": 6723,
+          "scriptStartSinceNavigationMs": 1113,
+          "longTaskMs": 1347,
+          "longTaskCount": 13,
+          "longTaskMaxMs": 260,
+          "responseEndMs": 194,
+          "domInteractiveMs": 2359,
+          "domContentLoadedMs": 2360,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 116,
+        "zepto": 117,
+        "blinkit": 118,
+        "amazon_main": 119,
+        "flipkart": 120
+      },
+      "totalMs": 8151,
+      "batteryTemperatureC": 37.9,
+      "uiTotal": "8.15s"
+    },
+    {
+      "block": 3,
+      "configuration": "p1",
+      "query": "Basmati Rice 1kg",
+      "storeCount": 5,
+      "limit": 1,
+      "mode": "page",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "Healthy Rice Villa Tasty Basmati Fried Rice 1Kg Basmati Rice (Long Grain, Steam)",
+          "price": 192,
+          "elapsedMs": 725
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Kohinoor Pulao Basmati Rice, 1 kg | Long-Grain Basmati (Cooked grain up to 18 mm) | Aromatic & Flavorful Rice | Ideal for Pulao",
+          "price": 146,
+          "elapsedMs": 1712
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "India Gate Daily Premium Basmati Rice",
+          "price": 99,
+          "elapsedMs": 2808
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Daawat Delight Basmati Rice | Long Grain",
+          "price": 126,
+          "elapsedMs": 7004
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Daawat Super Basmati Rice (Extra Long Grain)",
+          "price": 172,
+          "elapsedMs": 9558
+        }
+      ],
+      "timings": {
+        "instamart": {
+          "scriptElapsedMs": 2444,
+          "extractionWorkMs": 73,
+          "extractionMaxMs": 37,
+          "scanCount": 11,
+          "firstCandidateMs": 2443,
+          "scriptStartSinceNavigationMs": 298,
+          "longTaskMs": 1294,
+          "longTaskCount": 8,
+          "longTaskMaxMs": 324,
+          "responseEndMs": 241,
+          "domInteractiveMs": 349,
+          "domContentLoadedMs": 523,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 3220,
+          "extractionWorkMs": 58,
+          "extractionMaxMs": 24,
+          "scanCount": 13,
+          "firstCandidateMs": 3219,
+          "scriptStartSinceNavigationMs": 685,
+          "longTaskMs": 1291,
+          "longTaskCount": 10,
+          "longTaskMaxMs": 350,
+          "responseEndMs": 254,
+          "domInteractiveMs": 864,
+          "domContentLoadedMs": 866,
+          "readyState": "complete"
+        },
+        "blinkit": {
+          "scriptElapsedMs": 1652,
+          "extractionWorkMs": 37,
+          "extractionMaxMs": 15,
+          "scanCount": 9,
+          "firstCandidateMs": 1651,
+          "scriptStartSinceNavigationMs": 512,
+          "longTaskMs": 663,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 261,
+          "responseEndMs": 436,
+          "domInteractiveMs": 632,
+          "domContentLoadedMs": 829,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 53,
+        "zepto": 3071,
+        "blinkit": 7251
+      },
+      "totalMs": 9668,
+      "batteryTemperatureC": 37.9,
+      "uiTotal": "9.67s"
+    },
+    {
+      "block": 3,
+      "configuration": "e1",
+      "query": "Basmati Rice 1kg",
+      "storeCount": 5,
+      "limit": 1,
+      "mode": "extraction",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "Healthy Rice Villa Tasty Basmati Fried Rice 1Kg Basmati Rice (Long Grain, Steam)",
+          "price": 192,
+          "elapsedMs": 638
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Kohinoor Pulao Basmati Rice, 1 kg | Long-Grain Basmati (Cooked grain up to 18 mm) | Aromatic & Flavorful Rice | Ideal for Pulao",
+          "price": 146,
+          "elapsedMs": 1685
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "India Gate Daily Premium Basmati Rice",
+          "price": 99,
+          "elapsedMs": 5547
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Daawat Delight Basmati Rice | Long Grain",
+          "price": 126,
+          "elapsedMs": 7037
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Daawat Super Basmati Rice (Extra Long Grain)",
+          "price": 172,
+          "elapsedMs": 7616
+        }
+      ],
+      "timings": {
+        "instamart": {
+          "scriptElapsedMs": 4464,
+          "extractionWorkMs": 62,
+          "extractionMaxMs": 27,
+          "scanCount": 17,
+          "firstCandidateMs": 4463,
+          "scriptStartSinceNavigationMs": 962,
+          "longTaskMs": 833,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 334,
+          "responseEndMs": 237,
+          "domInteractiveMs": 1442,
+          "domContentLoadedMs": 1535,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 1065,
+          "extractionWorkMs": 32,
+          "extractionMaxMs": 18,
+          "scanCount": 4,
+          "firstCandidateMs": 1065,
+          "scriptStartSinceNavigationMs": 5829,
+          "longTaskMs": 532,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 285,
+          "responseEndMs": 198,
+          "domInteractiveMs": 2082,
+          "domContentLoadedMs": 2083,
+          "readyState": "complete"
+        },
+        "blinkit": {
+          "scriptElapsedMs": 55,
+          "extractionWorkMs": 50,
+          "extractionMaxMs": 50,
+          "scanCount": 1,
+          "firstCandidateMs": 53,
+          "scriptStartSinceNavigationMs": 7385,
+          "longTaskMs": 0,
+          "longTaskCount": 0,
+          "longTaskMaxMs": 0,
+          "responseEndMs": 424,
+          "domInteractiveMs": 1569,
+          "domContentLoadedMs": 2012,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 56,
+        "zepto": 5901,
+        "blinkit": 7437
+      },
+      "totalMs": 7711,
+      "batteryTemperatureC": 38,
+      "uiTotal": "7.71s"
+    },
+    {
+      "block": 3,
+      "configuration": "e2",
+      "query": "Basmati Rice 1kg",
+      "storeCount": 5,
+      "limit": 2,
+      "mode": "extraction",
+      "stores": [
+        {
+          "store": "flipkart",
+          "path": "http",
+          "outcome": "result",
+          "title": "Healthy Rice Villa Tasty Basmati Fried Rice 1Kg Basmati Rice (Long Grain, Steam)",
+          "price": 192,
+          "elapsedMs": 657
+        },
+        {
+          "store": "amazon_main",
+          "path": "http",
+          "outcome": "result",
+          "title": "Kohinoor Pulao Basmati Rice, 1 kg | Long-Grain Basmati (Cooked grain up to 18 mm) | Aromatic & Flavorful Rice | Ideal for Pulao",
+          "price": 146,
+          "elapsedMs": 1700
+        },
+        {
+          "store": "instamart",
+          "path": "webview",
+          "outcome": "result",
+          "title": "India Gate Daily Premium Basmati Rice",
+          "price": 99,
+          "elapsedMs": 6767
+        },
+        {
+          "store": "zepto",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Daawat Delight Basmati Rice | Long Grain",
+          "price": 126,
+          "elapsedMs": 7317
+        },
+        {
+          "store": "blinkit",
+          "path": "webview",
+          "outcome": "result",
+          "title": "Daawat Super Basmati Rice (Extra Long Grain)",
+          "price": 172,
+          "elapsedMs": 7595
+        }
+      ],
+      "timings": {
+        "instamart": {
+          "scriptElapsedMs": 5642,
+          "extractionWorkMs": 67,
+          "extractionMaxMs": 30,
+          "scanCount": 18,
+          "firstCandidateMs": 5641,
+          "scriptStartSinceNavigationMs": 995,
+          "longTaskMs": 979,
+          "longTaskCount": 7,
+          "longTaskMaxMs": 401,
+          "responseEndMs": 334,
+          "domInteractiveMs": 1326,
+          "domContentLoadedMs": 1394,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 6178,
+          "extractionWorkMs": 53,
+          "extractionMaxMs": 33,
+          "scanCount": 17,
+          "firstCandidateMs": 6177,
+          "scriptStartSinceNavigationMs": 800,
+          "longTaskMs": 1278,
+          "longTaskCount": 12,
+          "longTaskMaxMs": 277,
+          "responseEndMs": 167,
+          "domInteractiveMs": 1966,
+          "domContentLoadedMs": 1970,
+          "readyState": "complete"
+        },
+        "blinkit": {
+          "scriptElapsedMs": 25,
+          "extractionWorkMs": 23,
+          "extractionMaxMs": 23,
+          "scanCount": 1,
+          "firstCandidateMs": 25,
+          "scriptStartSinceNavigationMs": 7250,
+          "longTaskMs": 0,
+          "longTaskCount": 0,
+          "longTaskMaxMs": 0,
+          "responseEndMs": 493,
+          "domInteractiveMs": 1401,
+          "domContentLoadedMs": 1949,
+          "readyState": "complete"
+        }
+      },
+      "starts": {
+        "instamart": 57,
+        "zepto": 57,
+        "blinkit": 7303
+      },
+      "totalMs": 7722,
+      "batteryTemperatureC": 38,
+      "uiTotal": "7.72s"
+    }
+  ],
+  "status": "complete"
+}

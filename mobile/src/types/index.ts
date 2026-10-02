@@ -41,6 +41,7 @@ export interface StoreResult {
   item: ProductItem | null;
   candidates?: ProductItem[];
   selectedIndex?: number;
+  comparisonMatch?: boolean;
   priceBreakdown: PriceBreakdown | null;
   productUrl: string;
   globalUrl?: string;
@@ -64,7 +65,14 @@ export interface MatrixStoreCell {
   platformId: PlatformId;
   platformName: string;
   isAvailable: boolean;
+  isComparable?: boolean;
+  includeInTotals?: boolean;
+  priceDifferencePercent?: number;
+  comparisonKind?: 'same_pack' | 'different_pack' | 'size_unknown';
   item: ProductItem | null;
+  candidates?: ProductItem[];
+  manuallySelected?: boolean;
+  originalPrice?: number;
   price: number;
   mrp: number;
   productUrl: string;
@@ -74,6 +82,10 @@ export interface MatrixStoreCell {
 export interface StrategyMatrixRow {
   id: string;
   query: string;
+  searchQuery?: string;
+  anchorStoreId?: PlatformId;
+  anchorItem?: ProductItem;
+  selectionKey?: string;
   addedAt: number;
   stores: Record<PlatformId, MatrixStoreCell>;
   cheapestPrice: number;

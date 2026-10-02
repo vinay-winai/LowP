@@ -1,0 +1,399 @@
+{
+  "date": "2026-10-02",
+  "device": "Samsung SM-M336BU / Exynos 1280",
+  "runtime": "Expo Go development over USB, Metro 8083 offline",
+  "pack": [
+    "instamart",
+    "zepto",
+    "blinkit",
+    "amazon_main",
+    "flipkart"
+  ],
+  "configuration": {
+    "activePages": 3,
+    "mode": "page"
+  },
+  "protocol": "One initial Paneer warm-up (8838ms), then normal Paneer, blocked Paneer, blocked Butter, normal Butter. Same app/source, no restart or edits during trials. LowP query cache reset before each request through existing concurrency-count control. Website caches/cookies retained; native result thumbnails retained. CDP attached in both conditions. No UI dump during loading. Four warm searches, exploratory only, no statistical speedup claim.",
+  "batteryTemperatureC": 36.2,
+  "imageBlocking": {
+    "method": "CDP Fetch.enable resourceType Image, failRequest BlockedByClient; temporary development-only, disabled after test.",
+    "limitations": "Memory-cached images bypass interception. Baseline Paneer primed image caches, so Paneer is weak evidence. Counters are cumulative across BOTH blocked trials.",
+    "cumulativeBlocked": {
+      "flipkart": 46,
+      "blinkit": 11,
+      "zepto": 39,
+      "instamart": 16
+    }
+  },
+  "apiTimelineNormalButter": {
+    "zepto": [
+      {
+        "startMs": 2366,
+        "endMs": 2567,
+        "durationMs": 201
+      },
+      {
+        "startMs": 2924,
+        "endMs": 3343,
+        "durationMs": 420
+      }
+    ],
+    "instamart": [
+      {
+        "startMs": 2144,
+        "endMs": 2564,
+        "durationMs": 420
+      }
+    ],
+    "blinkit": [
+      {
+        "startMs": 1912,
+        "endMs": 2169,
+        "durationMs": 257
+      },
+      {
+        "startMs": 2455,
+        "endMs": 2686,
+        "durationMs": 231
+      }
+    ],
+    "clock": "Navigation-relative Resource Timing. Zepto/Swiggy/Blinkit endpoint names inspected locally; queries, headers, cookies and bodies not exported."
+  },
+  "conclusions": [
+    "No consistent image-blocking speed gain: Paneer -84ms; Butter +424ms.",
+    "LowP scan work is tens of milliseconds; larger costs precede extraction: website startup, requests and rendering, plus concurrency queueing.",
+    "This does not separate all CPU time from network/async waits; long-task durations are partial observations, not CPU profiles.",
+    "All five stores returned candidates in each trial. Product/SKU correctness is not established, especially Flipkart's paneer-herb/peanut-butter alternatives.",
+    "No app behavior or default changed from this experiment."
+  ],
+  "trials": [
+    {
+      "label": "perfA1",
+      "images": "normal",
+      "query": "Paneer 200g",
+      "totalMs": 5333,
+      "storeResultMs": {
+        "amazon_main": 1541,
+        "blinkit": 2904,
+        "instamart": 4024,
+        "flipkart": 4824,
+        "zepto": 5261
+      },
+      "dispatchDelayMs": {
+        "instamart": 47,
+        "zepto": 48,
+        "blinkit": 48,
+        "flipkart": 3180
+      },
+      "timings": {
+        "blinkit": {
+          "scriptElapsedMs": 2271,
+          "extractionWorkMs": 32,
+          "extractionMaxMs": 15,
+          "scanCount": 9,
+          "firstCandidateMs": 2270,
+          "scriptStartSinceNavigationMs": 521,
+          "longTaskMs": 547,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 223,
+          "responseEndMs": 366,
+          "domInteractiveMs": 601,
+          "domContentLoadedMs": 873,
+          "readyState": "complete"
+        },
+        "instamart": {
+          "scriptElapsedMs": 3503,
+          "extractionWorkMs": 41,
+          "extractionMaxMs": 25,
+          "scanCount": 14,
+          "firstCandidateMs": 3503,
+          "scriptStartSinceNavigationMs": 412,
+          "longTaskMs": 803,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 247,
+          "responseEndMs": 208,
+          "domInteractiveMs": 530,
+          "domContentLoadedMs": 574,
+          "readyState": "complete"
+        },
+        "flipkart": {
+          "scriptElapsedMs": 733,
+          "extractionWorkMs": 9,
+          "extractionMaxMs": 8,
+          "scanCount": 2,
+          "firstCandidateMs": 733,
+          "scriptStartSinceNavigationMs": 840,
+          "longTaskMs": 0,
+          "longTaskCount": 0,
+          "longTaskMaxMs": 0,
+          "responseEndMs": 897,
+          "domInteractiveMs": 0,
+          "domContentLoadedMs": 0,
+          "readyState": "loading"
+        },
+        "zepto": {
+          "scriptElapsedMs": 4554,
+          "extractionWorkMs": 25,
+          "extractionMaxMs": 13,
+          "scanCount": 16,
+          "firstCandidateMs": 4553,
+          "scriptStartSinceNavigationMs": 393,
+          "longTaskMs": 849,
+          "longTaskCount": 6,
+          "longTaskMaxMs": 277,
+          "responseEndMs": 157,
+          "domInteractiveMs": 896,
+          "domContentLoadedMs": 897,
+          "readyState": "complete"
+        }
+      },
+      "rawMetroLog": " LOG  [LowP Mobile] Initiating parallel search for: \"Paneer 200g\" across 5 stores (WebView concurrency 3, mode page)\n LOG  [LowP Mobile] WebView start: instamart (47ms queued)\n LOG  [LowP Mobile] WebView start: zepto (48ms queued)\n LOG  [LowP Mobile] WebView start: blinkit (48ms queued)\n LOG  [LowP Mobile] Page load start: zepto (376ms)\n LOG  [LowP Mobile] Page load start: instamart (425ms)\n LOG  [LowP Mobile] Page load start: blinkit (524ms)\n LOG  [LowP Mobile] amazon_main FAST HTTP SUCCESS: \"Gowardhan Fresh Paneer Classic Block 200g\" at ₹81 (1541ms)\n LOG  [LowP Mobile] Page load start: zepto (1542ms)\n LOG  [LowP Mobile] Page load end: zepto (1542ms)\n LOG  [LowP Mobile] Page load end: zepto (1784ms)\n LOG  [LowP Mobile] Page load end: blinkit (1792ms)\n LOG  [LowP Mobile] Page load end: instamart (2248ms)\n LOG  [LowP Mobile] Scraper timing: blinkit {\"scriptElapsedMs\":2271,\"extractionWorkMs\":32,\"extractionMaxMs\":15,\"scanCount\":9,\"firstCandidateMs\":2270,\"scriptStartSinceNavigationMs\":521,\"longTaskMs\":547,\"longTaskCount\":4,\"longTaskMaxMs\":223,\"responseEndMs\":366,\"domInteractiveMs\":601,\"domContentLoadedMs\":873,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] blinkit SUCCESS: \"Milky Mist Paneer\" at ₹110 (2904ms) [Candidates: Milky Mist Paneer | Heritage Fresh Paneer | Gowardhan Classic Block Pane]\n LOG  [LowP Mobile] blinkit extraction failures: [{\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}]\n LOG  [LowP Mobile] WebView start: flipkart (3180ms queued)\n LOG  [LowP Mobile] Page load start: flipkart (4004ms)\n LOG  [LowP Mobile] Scraper timing: instamart {\"scriptElapsedMs\":3503,\"extractionWorkMs\":41,\"extractionMaxMs\":25,\"scanCount\":14,\"firstCandidateMs\":3503,\"scriptStartSinceNavigationMs\":412,\"longTaskMs\":803,\"longTaskCount\":5,\"longTaskMaxMs\":247,\"responseEndMs\":208,\"domInteractiveMs\":530,\"domContentLoadedMs\":574,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] instamart SUCCESS: \"Amul Fresh Paneer\" at ₹95 (4024ms) [Candidates: Amul Fresh Paneer | Heritage Fresh Paneer | NOICE Fresh Malai Paneer (Ha]\n LOG  [LowP Mobile] Scraper timing: flipkart {\"scriptElapsedMs\":733,\"extractionWorkMs\":9,\"extractionMaxMs\":8,\"scanCount\":2,\"firstCandidateMs\":733,\"scriptStartSinceNavigationMs\":840,\"longTaskMs\":0,\"longTaskCount\":0,\"longTaskMaxMs\":0,\"responseEndMs\":897,\"domInteractiveMs\":0,\"domContentLoadedMs\":0,\"readyState\":\"loading\"}\n LOG  [LowP Mobile] flipkart SUCCESS: \"DHRK Paneer Phool for Diabetes (200grams) | Paneer Doda | Paneer Dodi\" at ₹132 (4824ms) [Candidates: DHRK Paneer Phool for Diabet | Tatmods Paneer Phool 200gm ( | Kashvy Paneer Ka Phool | Pan]\n LOG  [LowP Mobile] Scraper timing: zepto {\"scriptElapsedMs\":4554,\"extractionWorkMs\":25,\"extractionMaxMs\":13,\"scanCount\":16,\"firstCandidateMs\":4553,\"scriptStartSinceNavigationMs\":393,\"longTaskMs\":849,\"longTaskCount\":6,\"longTaskMaxMs\":277,\"responseEndMs\":157,\"domInteractiveMs\":896,\"domContentLoadedMs\":897,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] zepto SUCCESS: \"Heritage Fresh Paneer\" at ₹114 (5261ms) [Candidates: Heritage Fresh Paneer | Amul Fresh Malai Paneer | Desi Farms Low Fat Paneer]\n LOG  [LowP Mobile] All results appeared in 5333ms (5.33s)\n"
+    },
+    {
+      "label": "perfB1",
+      "images": "blocked-network-image-requests",
+      "query": "Paneer 200g",
+      "totalMs": 5249,
+      "storeResultMs": {
+        "amazon_main": 1479,
+        "blinkit": 3610,
+        "instamart": 4365,
+        "zepto": 4758,
+        "flipkart": 5108
+      },
+      "dispatchDelayMs": {
+        "instamart": 75,
+        "zepto": 76,
+        "blinkit": 76,
+        "flipkart": 4146
+      },
+      "timings": {
+        "blinkit": {
+          "scriptElapsedMs": 2738,
+          "extractionWorkMs": 41,
+          "extractionMaxMs": 8,
+          "scanCount": 13,
+          "firstCandidateMs": 2738,
+          "scriptStartSinceNavigationMs": 724,
+          "longTaskMs": 460,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 221,
+          "responseEndMs": 532,
+          "domInteractiveMs": 1097,
+          "domContentLoadedMs": 1281,
+          "readyState": "complete"
+        },
+        "instamart": {
+          "scriptElapsedMs": 3673,
+          "extractionWorkMs": 35,
+          "extractionMaxMs": 13,
+          "scanCount": 16,
+          "firstCandidateMs": 3673,
+          "scriptStartSinceNavigationMs": 513,
+          "longTaskMs": 641,
+          "longTaskCount": 5,
+          "longTaskMaxMs": 251,
+          "responseEndMs": 188,
+          "domInteractiveMs": 594,
+          "domContentLoadedMs": 683,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 4016,
+          "extractionWorkMs": 37,
+          "extractionMaxMs": 13,
+          "scanCount": 17,
+          "firstCandidateMs": 4015,
+          "scriptStartSinceNavigationMs": 467,
+          "longTaskMs": 486,
+          "longTaskCount": 2,
+          "longTaskMaxMs": 307,
+          "responseEndMs": 181,
+          "domInteractiveMs": 709,
+          "domContentLoadedMs": 711,
+          "readyState": "complete"
+        },
+        "flipkart": {
+          "scriptElapsedMs": 332,
+          "extractionWorkMs": 22,
+          "extractionMaxMs": 20,
+          "scanCount": 2,
+          "firstCandidateMs": 332,
+          "scriptStartSinceNavigationMs": 584,
+          "longTaskMs": 79,
+          "longTaskCount": 1,
+          "longTaskMaxMs": 79,
+          "responseEndMs": 590,
+          "domInteractiveMs": 0,
+          "domContentLoadedMs": 0,
+          "readyState": "loading"
+        }
+      },
+      "rawMetroLog": " LOG  [LowP Mobile] Initiating parallel search for: \"Paneer 200g\" across 5 stores (WebView concurrency 3, mode page)\n LOG  [LowP Mobile] WebView start: instamart (75ms queued)\n LOG  [LowP Mobile] WebView start: zepto (76ms queued)\n LOG  [LowP Mobile] WebView start: blinkit (76ms queued)\n LOG  [LowP Mobile] Page load start: zepto (420ms)\n LOG  [LowP Mobile] Page load start: instamart (509ms)\n LOG  [LowP Mobile] Page load start: blinkit (717ms)\n LOG  [LowP Mobile] amazon_main FAST HTTP SUCCESS: \"Gowardhan Fresh Paneer Classic Block 200g\" at ₹81 (1479ms)\n LOG  [LowP Mobile] Page load start: zepto (1649ms)\n LOG  [LowP Mobile] Page load end: zepto (1649ms)\n LOG  [LowP Mobile] Page load end: zepto (1651ms)\n LOG  [LowP Mobile] Page load end: blinkit (2128ms)\n LOG  [LowP Mobile] Page load end: instamart (2901ms)\n LOG  [LowP Mobile] Scraper timing: blinkit {\"scriptElapsedMs\":2738,\"extractionWorkMs\":41,\"extractionMaxMs\":8,\"scanCount\":13,\"firstCandidateMs\":2738,\"scriptStartSinceNavigationMs\":724,\"longTaskMs\":460,\"longTaskCount\":4,\"longTaskMaxMs\":221,\"responseEndMs\":532,\"domInteractiveMs\":1097,\"domContentLoadedMs\":1281,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] blinkit SUCCESS: \"Milky Mist Paneer\" at ₹110 (3610ms) [Candidates: Milky Mist Paneer | Heritage Fresh Paneer | Gowardhan Classic Block Pane]\n LOG  [LowP Mobile] blinkit extraction failures: [{\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}]\n LOG  [LowP Mobile] WebView start: flipkart (4146ms queued)\n LOG  [LowP Mobile] Scraper timing: instamart {\"scriptElapsedMs\":3673,\"extractionWorkMs\":35,\"extractionMaxMs\":13,\"scanCount\":16,\"firstCandidateMs\":3673,\"scriptStartSinceNavigationMs\":513,\"longTaskMs\":641,\"longTaskCount\":5,\"longTaskMaxMs\":251,\"responseEndMs\":188,\"domInteractiveMs\":594,\"domContentLoadedMs\":683,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] instamart SUCCESS: \"Amul Fresh Paneer\" at ₹95 (4365ms) [Candidates: Amul Fresh Paneer | Heritage Fresh Paneer | NOICE Fresh Malai Paneer (Ha]\n LOG  [LowP Mobile] Scraper timing: zepto {\"scriptElapsedMs\":4016,\"extractionWorkMs\":37,\"extractionMaxMs\":13,\"scanCount\":17,\"firstCandidateMs\":4015,\"scriptStartSinceNavigationMs\":467,\"longTaskMs\":486,\"longTaskCount\":2,\"longTaskMaxMs\":307,\"responseEndMs\":181,\"domInteractiveMs\":709,\"domContentLoadedMs\":711,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] zepto SUCCESS: \"Heritage Fresh Paneer\" at ₹114 (4758ms) [Candidates: Heritage Fresh Paneer | Amul Fresh Malai Paneer | Desi Farms Low Fat Paneer]\n LOG  [LowP Mobile] Page load start: flipkart (4760ms)\n LOG  [LowP Mobile] Scraper timing: flipkart {\"scriptElapsedMs\":332,\"extractionWorkMs\":22,\"extractionMaxMs\":20,\"scanCount\":2,\"firstCandidateMs\":332,\"scriptStartSinceNavigationMs\":584,\"longTaskMs\":79,\"longTaskCount\":1,\"longTaskMaxMs\":79,\"responseEndMs\":590,\"domInteractiveMs\":0,\"domContentLoadedMs\":0,\"readyState\":\"loading\"}\n LOG  [LowP Mobile] flipkart SUCCESS: \"DHRK Paneer Phool for Diabetes (200grams) | Paneer Doda | Paneer Dodi\" at ₹132 (5108ms) [Candidates: DHRK Paneer Phool for Diabet | Tatmods Paneer Phool 200gm ( | Kashvy Paneer Ka Phool | Pan]\n LOG  [LowP Mobile] All results appeared in 5249ms (5.25s)\n"
+    },
+    {
+      "label": "perfB2",
+      "images": "blocked-network-image-requests",
+      "query": "Amul Butter 500g",
+      "totalMs": 5364,
+      "storeResultMs": {
+        "amazon_main": 2003,
+        "blinkit": 2884,
+        "instamart": 3584,
+        "zepto": 4858,
+        "flipkart": 5298
+      },
+      "dispatchDelayMs": {
+        "instamart": 49,
+        "zepto": 49,
+        "blinkit": 49,
+        "flipkart": 3320
+      },
+      "timings": {
+        "blinkit": {
+          "scriptElapsedMs": 2148,
+          "extractionWorkMs": 19,
+          "extractionMaxMs": 9,
+          "scanCount": 11,
+          "firstCandidateMs": 2148,
+          "scriptStartSinceNavigationMs": 615,
+          "longTaskMs": 299,
+          "longTaskCount": 3,
+          "longTaskMaxMs": 158,
+          "responseEndMs": 513,
+          "domInteractiveMs": 1046,
+          "domContentLoadedMs": 1163,
+          "readyState": "complete"
+        },
+        "instamart": {
+          "scriptElapsedMs": 2999,
+          "extractionWorkMs": 29,
+          "extractionMaxMs": 11,
+          "scanCount": 13,
+          "firstCandidateMs": 2998,
+          "scriptStartSinceNavigationMs": 470,
+          "longTaskMs": 605,
+          "longTaskCount": 6,
+          "longTaskMaxMs": 199,
+          "responseEndMs": 191,
+          "domInteractiveMs": 513,
+          "domContentLoadedMs": 560,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 4331,
+          "extractionWorkMs": 27,
+          "extractionMaxMs": 9,
+          "scanCount": 20,
+          "firstCandidateMs": 4331,
+          "scriptStartSinceNavigationMs": 414,
+          "longTaskMs": 774,
+          "longTaskCount": 7,
+          "longTaskMaxMs": 200,
+          "responseEndMs": 186,
+          "domInteractiveMs": 596,
+          "domContentLoadedMs": 598,
+          "readyState": "complete"
+        },
+        "flipkart": {
+          "scriptElapsedMs": 480,
+          "extractionWorkMs": 37,
+          "extractionMaxMs": 20,
+          "scanCount": 3,
+          "firstCandidateMs": 370,
+          "scriptStartSinceNavigationMs": 1047,
+          "longTaskMs": 0,
+          "longTaskCount": 0,
+          "longTaskMaxMs": 0,
+          "responseEndMs": 675,
+          "domInteractiveMs": 1505,
+          "domContentLoadedMs": 0,
+          "readyState": "interactive"
+        }
+      },
+      "rawMetroLog": " LOG  [LowP Mobile] Initiating parallel search for: \"Amul Butter 500g\" across 5 stores (WebView concurrency 3, mode page)\n LOG  [LowP Mobile] WebView start: instamart (49ms queued)\n LOG  [LowP Mobile] WebView start: zepto (49ms queued)\n LOG  [LowP Mobile] WebView start: blinkit (49ms queued)\n LOG  [LowP Mobile] Page load start: zepto (403ms)\n LOG  [LowP Mobile] Page load start: instamart (448ms)\n LOG  [LowP Mobile] Page load start: blinkit (667ms)\n LOG  [LowP Mobile] amazon_main FAST HTTP SUCCESS: \"Amul Butter Unsalted, 500g\" at ₹320 (2003ms)\n LOG  [LowP Mobile] Page load start: zepto (2261ms)\n LOG  [LowP Mobile] Page load end: zepto (2261ms)\n LOG  [LowP Mobile] Page load end: zepto (2265ms)\n LOG  [LowP Mobile] Page load end: instamart (2576ms)\n LOG  [LowP Mobile] Page load end: blinkit (2603ms)\n LOG  [LowP Mobile] Scraper timing: blinkit {\"scriptElapsedMs\":2148,\"extractionWorkMs\":19,\"extractionMaxMs\":9,\"scanCount\":11,\"firstCandidateMs\":2148,\"scriptStartSinceNavigationMs\":615,\"longTaskMs\":299,\"longTaskCount\":3,\"longTaskMaxMs\":158,\"responseEndMs\":513,\"domInteractiveMs\":1046,\"domContentLoadedMs\":1163,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] blinkit SUCCESS: \"Amul Unsalted Butter\" at ₹320 (2884ms) [Candidates: Amul Unsalted Butter | Amul Fresh Butter Cookies | Mother Dairy Salted Butter (]\n LOG  [LowP Mobile] WebView start: flipkart (3320ms queued)\n LOG  [LowP Mobile] Scraper timing: instamart {\"scriptElapsedMs\":2999,\"extractionWorkMs\":29,\"extractionMaxMs\":11,\"scanCount\":13,\"firstCandidateMs\":2998,\"scriptStartSinceNavigationMs\":470,\"longTaskMs\":605,\"longTaskCount\":6,\"longTaskMaxMs\":199,\"responseEndMs\":191,\"domInteractiveMs\":513,\"domContentLoadedMs\":560,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] instamart SUCCESS: \"Amul Butter Unsalted Box\" at ₹320 (3584ms) [Candidates: Amul Butter Unsalted Box | Amul Unsalted Butter & Maggi | Amul Unsalted Butter]\n LOG  [LowP Mobile] instamart extraction failures: [{\"f\": \"price\", \"txt\": \"12 MINSAmul Processed Cheese SlicesSmooth and creamy cheese \"}]\n LOG  [LowP Mobile] Page load start: flipkart (4012ms)\n LOG  [LowP Mobile] Scraper timing: zepto {\"scriptElapsedMs\":4331,\"extractionWorkMs\":27,\"extractionMaxMs\":9,\"scanCount\":20,\"firstCandidateMs\":4331,\"scriptStartSinceNavigationMs\":414,\"longTaskMs\":774,\"longTaskCount\":7,\"longTaskMaxMs\":200,\"responseEndMs\":186,\"domInteractiveMs\":596,\"domContentLoadedMs\":598,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] zepto SUCCESS: \"Amul Unsalted Cooking Butter\" at ₹320 (4858ms) [Candidates: Amul Unsalted Cooking Butter | Amul Salted Butter (Chiplets | Nutralite Doodhshakti Probio]\n LOG  [LowP Mobile] Scraper timing: flipkart {\"scriptElapsedMs\":480,\"extractionWorkMs\":37,\"extractionMaxMs\":20,\"scanCount\":3,\"firstCandidateMs\":370,\"scriptStartSinceNavigationMs\":1047,\"longTaskMs\":0,\"longTaskCount\":0,\"longTaskMaxMs\":0,\"responseEndMs\":675,\"domInteractiveMs\":1505,\"domContentLoadedMs\":0,\"readyState\":\"interactive\"}\n LOG  [LowP Mobile] flipkart SUCCESS: \"Velva Nut PEANUT BUTTER\" at ₹190 (5298ms) [Candidates: Velva Nut PEANUT BUTTER | neshvira Dark Chocolate Pean | Arcelo Dark chocolate Creamy]\n LOG  [LowP Mobile] All results appeared in 5364ms (5.36s)\n LOG  [LowP Mobile] Flipkart product quantity: \"Velva Nut PEANUT BUTTER\" (500 g)\n LOG  [LowP Mobile] Flipkart product quantity: \"neshvira Dark Chocolate Peanut Butter\" (500 g)\n"
+    },
+    {
+      "label": "perfA2",
+      "images": "normal",
+      "query": "Amul Butter 500g",
+      "totalMs": 4940,
+      "storeResultMs": {
+        "amazon_main": 1436,
+        "blinkit": 3354,
+        "instamart": 4169,
+        "zepto": 4406,
+        "flipkart": 4867
+      },
+      "dispatchDelayMs": {
+        "instamart": 42,
+        "zepto": 43,
+        "blinkit": 43,
+        "flipkart": 3795
+      },
+      "timings": {
+        "blinkit": {
+          "scriptElapsedMs": 2565,
+          "extractionWorkMs": 45,
+          "extractionMaxMs": 28,
+          "scanCount": 11,
+          "firstCandidateMs": 2565,
+          "scriptStartSinceNavigationMs": 671,
+          "longTaskMs": 406,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 191,
+          "responseEndMs": 537,
+          "domInteractiveMs": 1105,
+          "domContentLoadedMs": 1263,
+          "readyState": "complete"
+        },
+        "instamart": {
+          "scriptElapsedMs": 3354,
+          "extractionWorkMs": 32,
+          "extractionMaxMs": 12,
+          "scanCount": 15,
+          "firstCandidateMs": 3354,
+          "scriptStartSinceNavigationMs": 472,
+          "longTaskMs": 521,
+          "longTaskCount": 4,
+          "longTaskMaxMs": 214,
+          "responseEndMs": 228,
+          "domInteractiveMs": 509,
+          "domContentLoadedMs": 552,
+          "readyState": "complete"
+        },
+        "zepto": {
+          "scriptElapsedMs": 3670,
+          "extractionWorkMs": 31,
+          "extractionMaxMs": 10,
+          "scanCount": 17,
+          "firstCandidateMs": 3670,
+          "scriptStartSinceNavigationMs": 435,
+          "longTaskMs": 486,
+          "longTaskCount": 2,
+          "longTaskMaxMs": 283,
+          "responseEndMs": 123,
+          "domInteractiveMs": 500,
+          "domContentLoadedMs": 500,
+          "readyState": "complete"
+        },
+        "flipkart": {
+          "scriptElapsedMs": 459,
+          "extractionWorkMs": 16,
+          "extractionMaxMs": 9,
+          "scanCount": 3,
+          "firstCandidateMs": 344,
+          "scriptStartSinceNavigationMs": 570,
+          "longTaskMs": 120,
+          "longTaskCount": 1,
+          "longTaskMaxMs": 120,
+          "responseEndMs": 564,
+          "domInteractiveMs": 1018,
+          "domContentLoadedMs": 0,
+          "readyState": "interactive"
+        }
+      },
+      "rawMetroLog": " LOG  [LowP Mobile] Initiating parallel search for: \"Amul Butter 500g\" across 5 stores (WebView concurrency 3, mode page)\n LOG  [LowP Mobile] WebView start: instamart (42ms queued)\n LOG  [LowP Mobile] WebView start: zepto (43ms queued)\n LOG  [LowP Mobile] WebView start: blinkit (43ms queued)\n LOG  [LowP Mobile] Page load start: zepto (348ms)\n LOG  [LowP Mobile] Page load start: instamart (432ms)\n LOG  [LowP Mobile] Page load start: blinkit (698ms)\n LOG  [LowP Mobile] Page load start: zepto (1040ms)\n LOG  [LowP Mobile] Page load end: zepto (1041ms)\n LOG  [LowP Mobile] Page load end: zepto (1043ms)\n LOG  [LowP Mobile] amazon_main FAST HTTP SUCCESS: \"Amul Butter Unsalted, 500g\" at ₹320 (1436ms)\n LOG  [LowP Mobile] Page load end: blinkit (2419ms)\n LOG  [LowP Mobile] Page load end: instamart (2521ms)\n LOG  [LowP Mobile] Scraper timing: blinkit {\"scriptElapsedMs\":2565,\"extractionWorkMs\":45,\"extractionMaxMs\":28,\"scanCount\":11,\"firstCandidateMs\":2565,\"scriptStartSinceNavigationMs\":671,\"longTaskMs\":406,\"longTaskCount\":4,\"longTaskMaxMs\":191,\"responseEndMs\":537,\"domInteractiveMs\":1105,\"domContentLoadedMs\":1263,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] blinkit SUCCESS: \"Amul Unsalted Butter\" at ₹320 (3354ms) [Candidates: Amul Unsalted Butter | Amul Fresh Butter Cookies | Mother Dairy Salted Butter (]\n LOG  [LowP Mobile] blinkit extraction failures: [{\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}, {\"f\": \"price\", \"txt\": \"Get the app for better experienceUse App0 items₹ 0View Cart&\"}]\n LOG  [LowP Mobile] WebView start: flipkart (3795ms queued)\n LOG  [LowP Mobile] Scraper timing: instamart {\"scriptElapsedMs\":3354,\"extractionWorkMs\":32,\"extractionMaxMs\":12,\"scanCount\":15,\"firstCandidateMs\":3354,\"scriptStartSinceNavigationMs\":472,\"longTaskMs\":521,\"longTaskCount\":4,\"longTaskMaxMs\":214,\"responseEndMs\":228,\"domInteractiveMs\":509,\"domContentLoadedMs\":552,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] instamart SUCCESS: \"Amul Butter Unsalted Box\" at ₹320 (4169ms) [Candidates: Amul Butter Unsalted Box | Amul Unsalted Butter & Maggi | Amul Unsalted Butter]\n LOG  [LowP Mobile] instamart extraction failures: [{\"f\": \"price\", \"txt\": \"10 MINSAmul Processed Cheese SlicesSmooth and creamy cheese \"}]\n LOG  [LowP Mobile] Scraper timing: zepto {\"scriptElapsedMs\":3670,\"extractionWorkMs\":31,\"extractionMaxMs\":10,\"scanCount\":17,\"firstCandidateMs\":3670,\"scriptStartSinceNavigationMs\":435,\"longTaskMs\":486,\"longTaskCount\":2,\"longTaskMaxMs\":283,\"responseEndMs\":123,\"domInteractiveMs\":500,\"domContentLoadedMs\":500,\"readyState\":\"complete\"}\n LOG  [LowP Mobile] zepto SUCCESS: \"Amul Unsalted Cooking Butter\" at ₹320 (4406ms) [Candidates: Amul Unsalted Cooking Butter | Amul Salted Butter (Chiplets | Nutralite Doodhshakti Probio]\n LOG  [LowP Mobile] Page load start: flipkart (4407ms)\n LOG  [LowP Mobile] Scraper timing: flipkart {\"scriptElapsedMs\":459,\"extractionWorkMs\":16,\"extractionMaxMs\":9,\"scanCount\":3,\"firstCandidateMs\":344,\"scriptStartSinceNavigationMs\":570,\"longTaskMs\":120,\"longTaskCount\":1,\"longTaskMaxMs\":120,\"responseEndMs\":564,\"domInteractiveMs\":1018,\"domContentLoadedMs\":0,\"readyState\":\"interactive\"}\n LOG  [LowP Mobile] flipkart SUCCESS: \"Velva Nut PEANUT BUTTER\" at ₹190 (4867ms) [Candidates: Velva Nut PEANUT BUTTER | neshvira Dark Chocolate Pean | Arcelo Dark chocolate Creamy]\n LOG  [LowP Mobile] All results appeared in 4940ms (4.94s)\n LOG  [LowP Mobile] Flipkart product quantity: \"Velva Nut PEANUT BUTTER\" (500 g)\n LOG  [LowP Mobile] Flipkart product quantity: \"neshvira Dark Chocolate Peanut Butter\" (500 g)\n"
+    }
+  ]
+}

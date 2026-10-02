@@ -1,0 +1,180 @@
+{
+  "date": "2026-10-01",
+  "queries": [
+    "Paneer 200g",
+    "Amul Butter 500g",
+    "Basmati Rice 1kg"
+  ],
+  "samplesPerConfiguration": 3,
+  "totalStoreRequests": 105,
+  "returnedProducts": 105,
+  "timeouts": 0,
+  "configurations": [
+    {
+      "configuration": "p3",
+      "medianMs": 6164,
+      "minMs": 5790,
+      "maxMs": 6690,
+      "trials": [
+        {
+          "query": "Paneer 200g",
+          "totalMs": 5790
+        },
+        {
+          "query": "Amul Butter 500g",
+          "totalMs": 6690
+        },
+        {
+          "query": "Basmati Rice 1kg",
+          "totalMs": 6164
+        }
+      ]
+    },
+    {
+      "configuration": "off",
+      "medianMs": 7176,
+      "minMs": 5085,
+      "maxMs": 8151,
+      "trials": [
+        {
+          "query": "Paneer 200g",
+          "totalMs": 5085
+        },
+        {
+          "query": "Amul Butter 500g",
+          "totalMs": 7176
+        },
+        {
+          "query": "Basmati Rice 1kg",
+          "totalMs": 8151
+        }
+      ]
+    },
+    {
+      "configuration": "e1",
+      "medianMs": 7711,
+      "minMs": 6455,
+      "maxMs": 8191,
+      "trials": [
+        {
+          "query": "Paneer 200g",
+          "totalMs": 6455
+        },
+        {
+          "query": "Amul Butter 500g",
+          "totalMs": 8191
+        },
+        {
+          "query": "Basmati Rice 1kg",
+          "totalMs": 7711
+        }
+      ]
+    },
+    {
+      "configuration": "p1",
+      "medianMs": 8413,
+      "minMs": 8147,
+      "maxMs": 9668,
+      "trials": [
+        {
+          "query": "Paneer 200g",
+          "totalMs": 8147
+        },
+        {
+          "query": "Amul Butter 500g",
+          "totalMs": 8413
+        },
+        {
+          "query": "Basmati Rice 1kg",
+          "totalMs": 9668
+        }
+      ]
+    },
+    {
+      "configuration": "e3",
+      "medianMs": 7351,
+      "minMs": 7163,
+      "maxMs": 8500,
+      "trials": [
+        {
+          "query": "Paneer 200g",
+          "totalMs": 7351
+        },
+        {
+          "query": "Amul Butter 500g",
+          "totalMs": 7163
+        },
+        {
+          "query": "Basmati Rice 1kg",
+          "totalMs": 8500
+        }
+      ]
+    },
+    {
+      "configuration": "p2",
+      "medianMs": 7384,
+      "minMs": 7177,
+      "maxMs": 7899,
+      "trials": [
+        {
+          "query": "Paneer 200g",
+          "totalMs": 7384
+        },
+        {
+          "query": "Amul Butter 500g",
+          "totalMs": 7177
+        },
+        {
+          "query": "Basmati Rice 1kg",
+          "totalMs": 7899
+        }
+      ]
+    },
+    {
+      "configuration": "e2",
+      "medianMs": 7679,
+      "minMs": 7574,
+      "maxMs": 7722,
+      "trials": [
+        {
+          "query": "Paneer 200g",
+          "totalMs": 7574
+        },
+        {
+          "query": "Amul Butter 500g",
+          "totalMs": 7679
+        },
+        {
+          "query": "Basmati Rice 1kg",
+          "totalMs": 7722
+        }
+      ]
+    }
+  ],
+  "matchedDefaultVsUnlimited": [
+    {
+      "query": "Paneer 200g",
+      "fullThreeMs": 5790,
+      "unlimitedMs": 5085,
+      "benefitMs": -705
+    },
+    {
+      "query": "Amul Butter 500g",
+      "fullThreeMs": 6690,
+      "unlimitedMs": 7176,
+      "benefitMs": 486
+    },
+    {
+      "query": "Basmati Rice 1kg",
+      "fullThreeMs": 6164,
+      "unlimitedMs": 8151,
+      "benefitMs": 1987
+    }
+  ],
+  "recommendation": "Keep limiting on, three active full page workloads; parallel page loading off.",
+  "limitations": [
+    "Three different warm queries per configuration, one trial each; medians describe this small matched-query sample rather than a broad controlled speedup estimate.",
+    "Existing cookies, addresses and website caches retained. Source unchanged throughout the 21 measured trials; result cache cleared each time.",
+    "Products returned do not prove exact-SKU correctness. No cold-start comparison or 8s Gen 3 retest performed."
+  ]
+}

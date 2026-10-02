@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,8 @@ import {
   StatusBar,
   ActivityIndicator,
   Modal,
-  Linking
+  Linking,
+  Switch
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,30 +18,34 @@ import { StoreCard } from '../components/StoreCard';
 import { BackgroundScrapers } from '../components/BackgroundScrapers';
 import { StoreLoginModal } from '../components/StoreLoginModal';
 import { StrategyMatrixModal } from '../components/StrategyMatrixModal';
+import { SettingsModal } from '../components/SettingsModal';
+import {StoreSyncPanel} from '../components/StoreSyncPanel';
+import { StoreOffers, StoreOffer, OFFERS_STORAGE_KEY, normalizeOffer } from '../core/StoreOffers';
+import { compareProduct, reshuffleMatches, refreshComparison, editComparisonCell, ComparisonEdit } from '../core/ProductComparison';
+import { enrichFlipkartQuantities } from '../core/ProductDetails';
+import {productSearchTitle} from '../core/ProductSearch';
+import {useSessionChecks} from '../core/useSessionChecks';
 import { MatchingEngine } from '../core/MatchingEngine';
-import { StoreSession, currentSession, updateStoreSession, SESSION_LABELS } from '../core/StoreSession';
+import { StoreSession, StoreLocation, SESSION_TTL_MS, currentSession, updateStoreSession, updateStoreLocation } from '../core/StoreSession';
 import {
   PlatformId,
   StoreCollection,
   ProductItem,
   StoreResult,
   StrategyMatrixRow,
-  MatrixStoreCell
 } from '../types';
 import {
   Search,
   X,
-  Sparkles,
   Store,
-  RefreshCw,
   Clock,
-  ShoppingCart,
   Table,
   Check,
   Plus,
   Edit2,
   Trash2,
-  Layers
+  Layers,
+  Settings
 } from 'lucide-react-native';
 
 export const getStoreSearchUrl = (platformId: PlatformId, query: string): string => {
@@ -151,6 +156,8 @@ export const MAX_COLLECTIONS = 7;
 
 const SEARCH_CACHE_TTL_MS = 90000;
 const SEARCH_CACHE_MAX_ENTRIES = 30;
+const SEARCH_LIMIT_STORAGE_KEY = 'lowp_limit_parallel_searches';
+const SEARCH_OPTIONS_STORAGE_KEY = 'lowp_search_limit_options_v1';
 
 const QUICK_TAGS = [
   'Paneer 200g',
@@ -206,7 +213,13 @@ export const HomeScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSearch, setActiveSearch] = useState('');
   const [searchId, setSearchId] = useState(0);
+  const currentSearchIdRef = useRef(0);
+  const [scrapersEnabled, setScrapersEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [limitParallelSearches, setLimitParallelSearches] = useState(true);
+  const [searchLimitCount, setSearchLimitCount] = useState(3);
+  const [parallelPageLoading, setParallelPageLoading] = useState(false);
+  const [searchOptionsVisible, setSearchOptionsVisible] = useState(false);
   const [collections, setCollections] = useState<StoreCollection[]>(DEFAULT_COLLECTIONS);
   const [activeCollectionId, setActiveCollectionId] = useState<string>('10_min_pack');
   const [collectionModalVisible, setCollectionModalVisible] = useState(false);
@@ -221,17 +234,58 @@ export const HomeScreen: React.FC = () => {
   const [searchDuration, setSearchDuration] = useState<number | null>(null);
   const [loginModalVisible, setLoginModalVisible] = useState(false);
   const [selectedLoginStore, setSelectedLoginStore] = useState<PlatformId | null>(null);
-  const [storeSessions, setStoreSessions] = useState<Partial<Record<PlatformId, StoreSession>>>({});
+  const [storeWindowPurpose, setStoreWindowPurpose] = useState<'account' | 'address'>('account');
+  const [storeLocations, setStoreLocations] = useState<Partial<Record<PlatformId, StoreLocation>>>({});
+  const handleLocationChange = (id: PlatformId, location: StoreLocation) => setStoreLocations(previous => updateStoreLocation(previous,id,location));
+  const [storeAddressQuery, setStoreAddressQuery] = useState('');
   const [, refreshSessionAge] = useState(0);
   const [matrixRows, setMatrixRows] = useState<StrategyMatrixRow[]>([]);
   const [matrixModalVisible, setMatrixModalVisible] = useState(false);
-  const [addedToast, setAddedToast] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
+  const [titleStore, setTitleStore] = useState<PlatformId | null>(null);
+  const [titlePickerVisible, setTitlePickerVisible] = useState(false);
+  const [titleQuery, setTitleQuery] = useState('');
+  const [titlePreferenceReady, setTitlePreferenceReady] = useState(false);
+  const [searchedFrom, setSearchedFrom] = useState<PlatformId | null>(null);
+  const [activeSearchStores, setActiveSearchStores] = useState<PlatformId[] | null>(null);
+  const searchStoreIds = useMemo(() => activeSearchStores || currentCollection.storeIds, [activeSearchStores, currentCollection.storeIds]);
+  useEffect(() => {
+    let active = true;
+    AsyncStorage.getItem('lowp_find_title_store_v1').then(id => {
+      if (active && id && Object.prototype.hasOwnProperty.call(ALL_STORE_TEMPLATES, id)) setTitleStore(id as PlatformId);
+    }).catch(() => {}).finally(() => {if (active) setTitlePreferenceReady(true);});
+    return () => {active = false;};
+  }, []);
+  useEffect(() => {
+    if (titlePreferenceReady) AsyncStorage.setItem('lowp_find_title_store_v1', titleStore || '').catch(() => {});
+  }, [titleStore, titlePreferenceReady]);
+  const [storeOffers, setStoreOffers] = useState<StoreOffers>({});
+  useEffect(() => {
+    let active = true;
+    AsyncStorage.getItem(OFFERS_STORAGE_KEY).then(raw => {
+      if (!raw || !active) return;
+      const saved = JSON.parse(raw);
+      const restored: StoreOffers = {};
+      for (const id of Object.keys(ALL_STORE_TEMPLATES) as PlatformId[]) {
+        if (saved?.[id] && Array.isArray(saved[id].tiers)) restored[id] = normalizeOffer(saved[id]);
+      }
+      setStoreOffers(restored);
+    }).catch(() => {});
+    return () => {active = false;};
+  }, []);
+  const saveStoreOffer = async (id: PlatformId, offer: StoreOffer) => {
+    const next = {...storeOffers, [id]: normalizeOffer(offer)};
+    try {await AsyncStorage.setItem(OFFERS_STORAGE_KEY, JSON.stringify(next)); setStoreOffers(next); return true;} catch {return false;}
+  };
+
 
   const pendingStores = useRef<Set<PlatformId>>(new Set());
   const searchStartTime = useRef<number>(0);
   // Gated until the persisted packs have been restored once, so the initial
   // default state never overwrites the user's saved packs on relaunch.
   const [collectionsReady, setCollectionsReady] = useState(false);
+  const sessionChecks = useSessionChecks(isLoading || loginModalVisible, collectionsReady);
+  const {sessions: storeSessions, setSessions: setStoreSessions} = sessionChecks;
   const collectionsScrollRef = useRef<ScrollView>(null);
 
   // Exact-term result cache: key is RAW typed query (case/space
@@ -248,7 +302,7 @@ export const HomeScreen: React.FC = () => {
   }, []);
 
   const handleSessionChange = (platformId: PlatformId, observation: StoreSession) => {
-    setStoreSessions((previous) => updateStoreSession(previous, platformId, observation));
+    sessionChecks.observe(platformId, observation);
   };
 
   const handleCloseStore = () => {
@@ -289,11 +343,21 @@ export const HomeScreen: React.FC = () => {
     let cancelled = false;
     (async () => {
       try {
-        const [savedColsRaw, savedActiveId] = await Promise.all([
+        const [savedColsRaw, savedActiveId, savedSearchLimit, savedSearchOptions] = await Promise.all([
           AsyncStorage.getItem(COLLECTIONS_STORAGE_KEY),
-          AsyncStorage.getItem(ACTIVE_COLLECTION_STORAGE_KEY)
+          AsyncStorage.getItem(ACTIVE_COLLECTION_STORAGE_KEY),
+          AsyncStorage.getItem(SEARCH_LIMIT_STORAGE_KEY),
+          AsyncStorage.getItem(SEARCH_OPTIONS_STORAGE_KEY)
         ]);
         if (cancelled) return;
+        setLimitParallelSearches(savedSearchLimit !== 'false');
+        if (savedSearchOptions) {
+          try {
+            const options = JSON.parse(savedSearchOptions);
+            setSearchLimitCount([1, 2, 3].includes(options.count) ? options.count : 3);
+            setParallelPageLoading(options.parallelPageLoading === true);
+          } catch { /* Invalid preferences retain the default of three full page slots. */ }
+        }
         let nextCols: StoreCollection[] | null = null;
         if (savedColsRaw) {
           try {
@@ -345,6 +409,13 @@ export const HomeScreen: React.FC = () => {
     if (!collectionsReady) return;
     AsyncStorage.setItem(ACTIVE_COLLECTION_STORAGE_KEY, activeCollectionId).catch(() => {});
   }, [activeCollectionId, collectionsReady]);
+
+  useEffect(() => {
+    if (!collectionsReady) return;
+    AsyncStorage.setItem(SEARCH_OPTIONS_STORAGE_KEY, JSON.stringify({
+      count: searchLimitCount, parallelPageLoading
+    })).catch(() => {});
+  }, [searchLimitCount, parallelPageLoading, collectionsReady]);
 
   const handleSelectCollection = (colId: string) => {
     setActiveCollectionId(colId);
@@ -411,29 +482,36 @@ export const HomeScreen: React.FC = () => {
     setCollectionModalVisible(false);
   };
 
-  const handleTriggerSearch = (query: string, storeOverride?: PlatformId[]) => {
+  const handleTriggerSearch = (query: string, storeOverride?: PlatformId[], titleSelection = !storeOverride && !!titleStore) => {
     const clean = MatchingEngine.cleanSearchTerm(query);
     if (!clean) return;
 
-    const colStoreIds = storeOverride || currentCollection.storeIds;
+    const colStoreIds = storeOverride || (titleStore ? [titleStore] : currentCollection.storeIds);
+    setActiveSearchStores(colStoreIds);
+    setSearchedFrom(titleSelection ? colStoreIds[0] : null);
     const cacheTerm = query.trim().toLowerCase();
     const cacheKey = `${cacheTerm}#${colStoreIds.slice().sort().join(',')}`;
     activeCacheKeyRef.current = cacheKey;
     searchStartTime.current = Date.now();
+    currentSearchIdRef.current += 1;
+    setSearchId(currentSearchIdRef.current);
 
     const hit = searchCacheRef.current.get(cacheKey);
     if (hit && Date.now() - hit.ts <= SEARCH_CACHE_TTL_MS) {
       // Cache hit: restore snapshot without remounting WebViews
       setActiveSearch(clean);
+      setScrapersEnabled(false);
       setIsLoading(false);
       setSearchDuration(Date.now() - searchStartTime.current);
       pendingStores.current.clear();
-      setStores(hit.stores.map((s) => ({ ...s })));
+      const restored = hit.stores.map((s) => ({ ...s }));
+      latestStoresRef.current = restored;
+      setStores(restored);
       return;
     }
 
     setActiveSearch(clean);
-    setSearchId((prev) => prev + 1);
+    setScrapersEnabled(true);
     setIsLoading(true);
     setSearchDuration(null);
     arrivalSeqRef.current = 0;
@@ -458,11 +536,30 @@ export const HomeScreen: React.FC = () => {
     );
   };
 
+  const searchProductTitle = (title: string) => {
+    setSearchQuery(title);
+    handleTriggerSearch(title, currentCollection.storeIds);
+  };
+  const cancelTitleSearch = () => {
+    setTitleStore(null);
+    setSearchedFrom(null);
+    setActiveSearchStores(null);
+    currentSearchIdRef.current += 1;
+    setSearchId(currentSearchIdRef.current);
+    setScrapersEnabled(false);
+    pendingStores.current.clear();
+    setIsLoading(false);
+    setActiveSearch('');
+    setSearchDuration(null);
+    setStores(currentCollection.storeIds.map(id => ({...ALL_STORE_TEMPLATES[id]})));
+  };
+
   const handleStoreResult = (
     platformId: PlatformId,
     item: ProductItem | null,
     durationMs?: number,
-    candidates?: ProductItem[]
+    candidates?: ProductItem[],
+    failureReason?: 'login_required'
   ) => {
     pendingStores.current.delete(platformId);
 
@@ -482,7 +579,7 @@ export const HomeScreen: React.FC = () => {
           return {
             ...store,
             isAvailable: false,
-            statusMessage: 'Not available for this location',
+            statusMessage: failureReason === 'login_required' ? 'Sign in required' : 'Not available for this location',
             item: null,
             candidates: [],
             selectedIndex: 0,
@@ -560,158 +657,68 @@ export const HomeScreen: React.FC = () => {
     }
   }, [isLoading]);
 
-  const handleCycleCandidate = (platformId: PlatformId, direction: 'next' | 'prev') => {
-    setStores((prev) => {
-      const updated = prev.map((store) => {
-        if (store.platformId !== platformId) return store;
-        if (!store.candidates || store.candidates.length <= 1) return store;
-
-        const total = store.candidates.length;
-        const currentIdx = store.selectedIndex || 0;
-        const nextIdx = direction === 'next' ? (currentIdx + 1) % total : (currentIdx - 1 + total) % total;
-        const nextItem = store.candidates[nextIdx];
-        const nextCost = MatchingEngine.calculateTotalCost(nextItem);
-        const storeSearchUrl = getStoreSearchUrl(platformId, activeSearch || searchQuery);
-
-        return {
-          ...store,
-          item: nextItem,
-          selectedIndex: nextIdx,
-          priceBreakdown: nextCost,
-          productUrl: nextItem.productUrl || storeSearchUrl,
-          globalUrl: nextItem.globalUrl || storeSearchUrl,
-          searchUrl: nextItem.searchUrl || storeSearchUrl
-        };
+  useEffect(() => {
+    if (isLoading || !activeSearch || !searchId) return;
+    const flipkart = stores.find(store => store.platformId === 'flipkart');
+    if (!flipkart?.candidates?.length) return;
+    const controller = new AbortController();
+    const cacheKey = activeCacheKeyRef.current;
+    enrichFlipkartQuantities(flipkart.candidates, controller.signal, (item, quantity) => {
+      if (controller.signal.aborted || currentSearchIdRef.current !== searchId) return;
+      if (__DEV__) console.log(`[LowP Mobile] Flipkart product quantity: "${item.title}" (${quantity})`);
+      const patch = (product: ProductItem | null) => product &&
+        ((item.id && product.id === item.id) || (product.title === item.title && product.productUrl === item.productUrl))
+        ? { ...product, quantity } : product;
+      setStores(previous => {
+        const updated = previous.map(store => store.platformId === 'flipkart'
+          ? { ...store, item: patch(store.item), candidates: store.candidates?.map(candidate => patch(candidate)!) } : store);
+        latestStoresRef.current = updated;
+        const cached = cacheKey ? searchCacheRef.current.get(cacheKey) : null;
+        if (cached && cacheKey) searchCacheRef.current.set(cacheKey, { ...cached, stores: updated });
+        return updated;
       });
+      setMatrixRows(previous => previous.map(row => {
+        const cell = row.stores.flipkart;
+        return cell ? refreshComparison({ ...row,
+          anchorItem: row.anchorStoreId === 'flipkart' ? patch(row.anchorItem || cell.item) || undefined : row.anchorItem,
+          stores: { ...row.stores, flipkart: {
+          ...cell, item: patch(cell.item), candidates: cell.candidates?.map(candidate => patch(candidate)!)
+        } } }) : row;
+      }));
+    }).catch(() => {});
+    return () => controller.abort();
+  }, [isLoading, searchId]);
 
-      return MatchingEngine.annotateBestOffers(updated);
-    });
-  };
-
-  const handleAddToMatrix = () => {
-    if (!activeSearch) return;
-
-    const availableStores = stores.filter(
-      (s) => s.isAvailable && s.priceBreakdown && s.priceBreakdown.finalPayable > 0
-    );
-    if (availableStores.length === 0) return;
-
-    let minPrice = Infinity;
-    let cheapestStoreId: PlatformId | null = null;
-
-    availableStores.forEach((s) => {
-      const p = s.priceBreakdown!.finalPayable;
-      if (p < minPrice) {
-        minPrice = p;
-        cheapestStoreId = s.platformId;
-      }
-    });
-
-    const storeCells: Record<PlatformId, MatrixStoreCell> = {
-      amazon_tez: {
-        platformId: 'amazon_tez',
-        platformName: 'Amazon Now (Tez)',
-        isAvailable: false,
-        item: null,
-        price: 0,
-        mrp: 0,
-        productUrl: '#',
-        isCheapestInRow: false
-      },
-      instamart: {
-        platformId: 'instamart',
-        platformName: 'Swiggy Instamart',
-        isAvailable: false,
-        item: null,
-        price: 0,
-        mrp: 0,
-        productUrl: '#',
-        isCheapestInRow: false
-      },
-      zepto: {
-        platformId: 'zepto',
-        platformName: 'Zepto',
-        isAvailable: false,
-        item: null,
-        price: 0,
-        mrp: 0,
-        productUrl: '#',
-        isCheapestInRow: false
-      },
-      blinkit: {
-        platformId: 'blinkit',
-        platformName: 'Blinkit',
-        isAvailable: false,
-        item: null,
-        price: 0,
-        mrp: 0,
-        productUrl: '#',
-        isCheapestInRow: false
-      },
-      amazon_main: {
-        platformId: 'amazon_main',
-        platformName: 'Amazon.in',
-        isAvailable: false,
-        item: null,
-        price: 0,
-        mrp: 0,
-        productUrl: '#',
-        isCheapestInRow: false
-      },
-      flipkart: {
-        platformId: 'flipkart',
-        platformName: 'Flipkart',
-        isAvailable: false,
-        item: null,
-        price: 0,
-        mrp: 0,
-        productUrl: '#',
-        isCheapestInRow: false
-      }
-    };
-
-    stores.forEach((s) => {
-      const hasPrice = Boolean(s.isAvailable && s.priceBreakdown && s.priceBreakdown.finalPayable > 0);
-      storeCells[s.platformId] = {
-        platformId: s.platformId,
-        platformName: s.platformName,
-        isAvailable: hasPrice,
-        item: s.item,
-        price: hasPrice ? s.priceBreakdown!.finalPayable : 0,
-        mrp: hasPrice ? (s.item?.mrp || s.priceBreakdown!.finalPayable) : 0,
-        productUrl: s.productUrl,
-        isCheapestInRow: s.platformId === cheapestStoreId
-      };
-    });
-
-    const newRow: StrategyMatrixRow = {
-      id: `matrix_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-      query: activeSearch,
-      addedAt: Date.now(),
-      stores: storeCells,
-      cheapestPrice: minPrice < Infinity ? minPrice : 0,
-      cheapestStoreId
-    };
-
-    setMatrixRows((prev) => [...prev, newRow]);
-    setAddedToast(true);
-    setTimeout(() => setAddedToast(false), 2500);
+  const handleSelectCandidate = (store: StoreResult, index: number) => {
+    if (isLoading) return;
+    const item = (store.candidates?.length ? store.candidates : store.item ? [store.item] : [])[index];
+    if (!item) return;
+    const row = compareProduct(store, item, stores, activeSearch);
+    setStores(previous => reshuffleMatches(previous, row));
+    setMatrixRows(previous => [...previous.filter(existing => existing.selectionKey !== row.selectionKey), row]);
+    setMatrixModalVisible(true);
   };
 
   const handleRemoveMatrixRow = (rowId: string) => {
-    setMatrixRows((prev) => prev.filter((r) => r.id !== rowId));
+    const remaining = matrixRows.filter(row => row.id !== rowId);
+    setMatrixRows(remaining);
+    setStores(previous => remaining.length ? reshuffleMatches(previous, remaining[remaining.length - 1])
+      : previous.map(store => ({ ...store, comparisonMatch: false })));
+  };
+
+  const handleEditComparison = (rowId: string, platform: PlatformId, edit: ComparisonEdit) => {
+    setMatrixRows(previous => previous.map(row => row.id === rowId ? editComparisonCell(row, platform, edit) : row));
   };
 
   const handleClearMatrix = () => {
     setMatrixRows([]);
+    setStores(previous => previous.map(store => ({ ...store, comparisonMatch: false })));
   };
 
-  const lowestStore = stores.find((s) => s.isLowestPrice && s.priceBreakdown);
-  const hasAvailableResults = stores.some((s) => s.isAvailable && s.priceBreakdown && s.priceBreakdown.finalPayable > 0);
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
+      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
       {/* Top Header */}
       <View style={styles.header}>
@@ -721,21 +728,90 @@ export const HomeScreen: React.FC = () => {
           </View>
           <View>
             <Text style={styles.logoTitle}>LowP</Text>
-            <Text style={styles.logoSub}>Hyperlocal Real-Time Comparator</Text>
+            <Text style={styles.logoSub}>Find products. Compare prices.</Text>
           </View>
         </View>
 
         <View style={styles.headerActions}>
-          <TouchableOpacity
+          <TouchableOpacity style={styles.settingsButton} accessibilityRole="button" accessibilityLabel="Open settings" onPress={() => setSettingsVisible(true)}><Settings size={21} color="#475569" /></TouchableOpacity>
+          {!searchedFrom && <TouchableOpacity
             style={[styles.matrixHeaderBtn, matrixRows.length > 0 && styles.matrixHeaderBtnActive]}
             onPress={() => setMatrixModalVisible(true)}
           >
-            <Table size={13} color={matrixRows.length > 0 ? '#10B981' : '#94A3B8'} />
+            <Table size={13} color={matrixRows.length > 0 ? '#15803D' : '#64748B'} />
             <Text style={[styles.matrixHeaderBtnText, matrixRows.length > 0 && styles.matrixHeaderBtnTextActive]}>
-              Matrix {matrixRows.length > 0 ? `(${matrixRows.length})` : ''}
+              Comparison {matrixRows.length > 0 ? `(${matrixRows.length})` : ''}
             </Text>
+          </TouchableOpacity>}
+        </View>
+      </View>
+
+      {/* Main Search Box & Strategy Matrix Action Bar */}
+      <View style={styles.searchSection}>
+        <View style={styles.searchBox}>
+          <Search size={18} color="#64748B" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Product, brand or pack size"
+            accessibilityLabel="Search products"
+            placeholderTextColor="#64748B"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={() => handleTriggerSearch(searchQuery)}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              style={styles.clearSearchBtn}
+            >
+              <X size={16} color="#64748B" />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={[styles.titleModeToggle, titleStore && styles.titleModeActive]} accessibilityRole="button" accessibilityLabel={titleStore ? `Find title, selected store ${ALL_STORE_TEMPLATES[titleStore].platformName}` : 'Get good search title'} onPress={() => {setTitleQuery(searchQuery); setTitlePickerVisible(true);}}>
+            <Text style={styles.titleModeLabel}>Find title ▾</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.searchSubmitBtn}
+            onPress={() => handleTriggerSearch(searchQuery)}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.searchSubmitBtnText}>Search</Text>
+            )}
           </TouchableOpacity>
         </View>
+
+        {titleStore && <View style={styles.titleModeBanner}>
+          <View style={{flex: 1, minWidth: 0}}>
+            <Text style={styles.titleModeBannerTitle}>Find title is on</Text>
+            <Text style={styles.titleModeBannerDetail}>Searching only {ALL_STORE_TEMPLATES[titleStore].platformName}</Text>
+          </View>
+          <TouchableOpacity style={styles.titleModeOffButton} accessibilityRole="button" accessibilityLabel="Turn off find title" onPress={cancelTitleSearch}>
+            <X size={16} color="#FFFFFF" />
+            <Text style={styles.titleModeOffText}>Turn off</Text>
+          </TouchableOpacity>
+        </View>}
+        {/* Quick Tag Chips */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.quickTagsRow}
+        >
+          {QUICK_TAGS.map((tag) => (
+            <TouchableOpacity
+              key={tag}
+              style={styles.tagChip}
+              onPress={() => {
+                setSearchQuery(tag);
+                handleTriggerSearch(tag);
+              }}
+            >
+              <Text style={styles.tagChipText}>{tag}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
       {/* Store Collections Tab Bar */}
@@ -764,7 +840,7 @@ export const HomeScreen: React.FC = () => {
                   style={{ marginLeft: 4 }}
                   accessibilityLabel={`Edit ${col.name}`}
                 >
-                  <Edit2 size={11} color={isActive ? '#10B981' : '#94A3B8'} />
+                  <Edit2 size={11} color={isActive ? '#15803D' : '#64748B'} />
                 </TouchableOpacity>
               </TouchableOpacity>
             );
@@ -777,7 +853,7 @@ export const HomeScreen: React.FC = () => {
             onPress={() => handleOpenCollectionModal(null)}
             disabled={collections.length >= MAX_COLLECTIONS}
           >
-            <Plus size={13} color={collections.length >= MAX_COLLECTIONS ? '#475569' : '#10B981'} />
+            <Plus size={13} color={collections.length >= MAX_COLLECTIONS ? '#475569' : '#15803D'} />
             <Text style={styles.addCollectionBtnText}>
               Pack {collections.length}/{MAX_COLLECTIONS}
             </Text>
@@ -787,130 +863,36 @@ export const HomeScreen: React.FC = () => {
 
       {/* Connected Stores Bar */}
       <View style={styles.connectedStoresSection}>
-        <Text style={styles.connectedStoresLabel}>Stores:</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storesRow}>
-          {Object.keys(ALL_STORE_TEMPLATES).map((key) => {
-            const s = ALL_STORE_TEMPLATES[key as PlatformId];
-            const session = currentSession(storeSessions[s.platformId]);
-            const statusColor = session.status === 'signed_in' ? '#6EE7B7'
-              : session.status === 'signed_out' ? '#FCD34D' : '#CBD5E1';
-            return (
-              <TouchableOpacity
-                key={s.platformId}
-                style={[styles.storePill, { borderColor: s.logoColor }]}
-                accessibilityLabel={`${s.platformName}, ${SESSION_LABELS[session.status]}. Open store to check account or delivery location.`}
-                onPress={() => {
-                  setSelectedLoginStore(s.platformId);
-                  setLoginModalVisible(true);
-                }}
-              >
-                <View style={[styles.storeDot, { backgroundColor: statusColor }]} />
-                <View>
-                  <Text style={styles.storePillText}>{s.platformName}</Text>
-                  <Text style={[styles.storeSessionText, { color: statusColor }]}>{SESSION_LABELS[session.status]}</Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
-
-      {/* Main Search Box & Strategy Matrix Action Bar */}
-      <View style={styles.searchSection}>
-        <View style={styles.searchBox}>
-          <Search size={18} color="#64748B" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search groceries (e.g. paneer, butter 500g)..."
-            placeholderTextColor="#64748B"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onSubmitEditing={() => handleTriggerSearch(searchQuery)}
-            returnKeyType="search"
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <StoreSyncPanel stores={Object.values(ALL_STORE_TEMPLATES)} sessions={storeSessions} locations={storeLocations} searchBusy={isLoading} storeWindowOpen={loginModalVisible}
+            syncing={sessionChecks.syncing} paused={sessionChecks.paused} pendingCount={sessionChecks.pendingCount}
+            onRefresh={sessionChecks.refresh}
+            onOpenStore={id => {setStoreWindowPurpose('account'); setStoreAddressQuery(''); setSelectedLoginStore(id); setLoginModalVisible(true);}}
+            onSetAddress={(id, address) => {setStoreWindowPurpose('address'); setStoreAddressQuery(address); setSelectedLoginStore(id); setLoginModalVisible(true);}}
           />
-          {searchQuery.length > 0 && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <TouchableOpacity
-              onPress={() => setSearchQuery('')}
-              style={styles.clearSearchBtn}
+              accessibilityLabel="Search performance options"
+              disabled={isLoading}
+              onPress={() => setSearchOptionsVisible(true)}
             >
-              <X size={16} color="#94A3B8" />
+              <Text style={{ color: '#1D4ED8', fontSize: 12, padding: 6 }}>Options</Text>
             </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            style={styles.searchSubmitBtn}
-            onPress={() => handleTriggerSearch(searchQuery)}
-          >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#0F172A" />
-            ) : (
-              <Text style={styles.searchSubmitBtnText}>Compare</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Strategy Matrix & Cart Action Controls */}
-        <View style={styles.cartActionBar}>
-          <TouchableOpacity
-            style={[
-              styles.addToCartBtn,
-              hasAvailableResults && styles.addToCartBtnActive
-            ]}
-            onPress={handleAddToMatrix}
-            disabled={!hasAvailableResults || isLoading}
-          >
-            {addedToast ? (
-              <Check size={14} color="#0F172A" />
-            ) : (
-              <ShoppingCart size={14} color={hasAvailableResults ? "#0F172A" : "#64748B"} />
-            )}
-            <Text
-              style={[
-                styles.addToCartBtnText,
-                hasAvailableResults && styles.addToCartBtnTextActive
-              ]}
-            >
-              {addedToast ? "Added to Matrix!" : "+ Add to Strategy Matrix"}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.viewMatrixBtn,
-              matrixRows.length > 0 && styles.viewMatrixBtnActive
-            ]}
-            onPress={() => setMatrixModalVisible(true)}
-          >
-            <Table size={14} color={matrixRows.length > 0 ? "#10B981" : "#94A3B8"} />
-            <Text
-              style={[
-                styles.viewMatrixBtnText,
-                matrixRows.length > 0 && styles.viewMatrixBtnTextActive
-              ]}
-            >
-              View Matrix ({matrixRows.length})
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Quick Tag Chips */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.quickTagsRow}
-        >
-          {QUICK_TAGS.map((tag) => (
-            <TouchableOpacity
-              key={tag}
-              style={styles.tagChip}
-              onPress={() => {
-                setSearchQuery(tag);
-                handleTriggerSearch(tag);
+            <Text style={{ color: '#475569', fontSize: 12 }}>Limit searches</Text>
+            <Switch
+              accessibilityLabel="Limit parallel searches"
+              value={limitParallelSearches}
+              disabled={isLoading}
+              trackColor={{ false: '#E2E8F0', true: '#BFDBFE' }}
+              thumbColor={limitParallelSearches ? '#1D4ED8' : '#64748B'}
+              onValueChange={(value) => {
+                setLimitParallelSearches(value);
+                searchCacheRef.current.clear();
+                AsyncStorage.setItem(SEARCH_LIMIT_STORAGE_KEY, String(value)).catch(() => {});
               }}
-            >
-              <Text style={styles.tagChipText}>{tag}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+            />
+          </View>
+        </View>
       </View>
 
       {/* Results Section */}
@@ -922,45 +904,35 @@ export const HomeScreen: React.FC = () => {
           <View style={styles.searchMetaRow}>
             <Text style={styles.searchMetaText}>
               Results for <Text style={styles.searchMetaQuery}>"{activeSearch}"</Text>
+              {searchedFrom ? `\nSearched from ${ALL_STORE_TEMPLATES[searchedFrom].platformName}` : ''}
             </Text>
             {isLoading ? (
               <View style={styles.timeBadgeLoading}>
-                <ActivityIndicator size="small" color="#38BDF8" style={{ marginRight: 4 }} />
-                <Text style={styles.timeBadgeLoadingText}>Comparing live...</Text>
+                <ActivityIndicator size="small" color="#1D4ED8" style={{ marginRight: 4 }} />
+                <Text style={styles.timeBadgeLoadingText}>{searchedFrom ? 'Searching…' : 'Comparing live…'}</Text>
               </View>
             ) : searchDuration ? (
               <View style={styles.timeBadgeSuccess}>
-                <Clock size={12} color="#10B981" />
+                <Clock size={12} color="#15803D" />
                 <Text style={styles.timeBadgeSuccessText}>{(searchDuration / 1000).toFixed(2)}s</Text>
               </View>
             ) : null}
           </View>
         ) : null}
 
-        {lowestStore && (
-          <View style={styles.savingsBanner}>
-            <View style={styles.savingsBannerContent}>
-              <Sparkles size={16} color="#92400E" />
-              <Text style={styles.savingsBannerText}>
-                <Text style={styles.boldText}>{lowestStore.platformName}</Text> offers the lowest price at{' '}
-                <Text style={styles.priceHighlight}>₹{lowestStore.priceBreakdown?.finalPayable}</Text>!
-              </Text>
-            </View>
-            <TouchableOpacity
-              style={styles.bannerAddBtn}
-              onPress={handleAddToMatrix}
-            >
-              <Text style={styles.bannerAddBtnText}>+ Matrix</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        <Text style={{ color: '#475569', fontSize: 13, lineHeight: 19, marginBottom: 14 }}>
+          {searchedFrom ? (isLoading ? 'Finding product titles in one store…' : 'Choose a product to use its title and size for your pack search.') : activeSearch ? (isLoading ? 'Finding products across your stores…' : 'Tap a product to compare similar items across stores.') : 'Search a product, choose a match, then compare prices across stores.'}
+        </Text>
 
-        {stores.map((store) => (
+        {activeSearch && stores.map((store) => (
           <StoreCard
             key={store.platformId}
             store={store}
-            isLoading={isLoading}
-            onCycleCandidate={(dir) => handleCycleCandidate(store.platformId, dir)}
+            isLoading={isLoading && store.statusMessage === 'Searching...'}
+            selectionDisabled={isLoading}
+            selectionMode={searchedFrom ? 'title' : 'compare'}
+            onSelectCandidate={(index) => {if (searchedFrom) {const item = (store.candidates?.length ? store.candidates : store.item ? [store.item] : [])[index]; if (item) searchProductTitle(productSearchTitle(item));} else handleSelectCandidate(store, index);}}
+            onSearchTitle={searchProductTitle}
             onOpenLink={(url) => {
               if (url && url !== '#') {
                 Linking.openURL(url).catch(() => {});
@@ -974,9 +946,63 @@ export const HomeScreen: React.FC = () => {
       <BackgroundScrapers
         searchQuery={activeSearch}
         searchId={searchId}
-        activeStoreIds={currentCollection.storeIds}
-        onStoreResult={handleStoreResult}
+        enabled={scrapersEnabled}
+        maxConcurrentWebViews={limitParallelSearches ? searchLimitCount : 6}
+        limitMode={limitParallelSearches && parallelPageLoading ? 'extraction' : 'page'}
+        activeStoreIds={searchStoreIds}
+        sessionJob={sessionChecks.job}
+        searchBusy={isLoading}
+        sessionObservationEnabled={sessionChecks.appActive && !loginModalVisible}
+        onSessionCheckResult={sessionChecks.finish}
+        onSessionObservation={handleSessionChange}
+        onLocationObservation={handleLocationChange}
+        onStoreResult={(...args) => {
+          if (currentSearchIdRef.current === searchId) handleStoreResult(...args);
+        }}
       />
+
+      <Modal visible={titlePickerVisible} animationType="slide" onRequestClose={() => setTitlePickerVisible(false)}><SafeAreaView style={{flex: 1, backgroundColor: '#F8FAFC', padding: 16}}><View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 16}}><Text style={{flex: 1, fontSize: 20, fontWeight: '700', color: '#0F172A'}}>Get good search title</Text><TouchableOpacity style={{minHeight: 44, justifyContent: 'center'}} onPress={() => setTitlePickerVisible(false)}><Text style={{color: '#1D4ED8'}}>Cancel</Text></TouchableOpacity></View><Text style={{color: '#475569', marginBottom: 12}}>Choose the store for Find title. This choice stays active until you turn it off.</Text><TextInput accessibilityLabel="Product name for title search" style={{backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 8, padding: 12, color: '#0F172A', marginBottom: 16}} value={titleQuery} onChangeText={setTitleQuery} placeholder="e.g. Amul butter" placeholderTextColor="#64748B" /><ScrollView keyboardShouldPersistTaps="handled">{Object.values(ALL_STORE_TEMPLATES).map(store => <TouchableOpacity key={store.platformId} accessibilityLabel={`Find product title in ${store.platformName}`} accessibilityState={{selected: titleStore === store.platformId}} style={{padding: 16, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, marginBottom: 12, backgroundColor: titleStore === store.platformId ? '#F0FDF4' : '#FFFFFF'}} onPress={() => {setTitleStore(store.platformId); setSearchQuery(titleQuery); setTitlePickerVisible(false); if (MatchingEngine.cleanSearchTerm(titleQuery)) handleTriggerSearch(titleQuery, [store.platformId], true);}}><Text style={{color: '#1D4ED8', fontWeight: '600'}}>{titleStore === store.platformId ? 'Selected: ' : ''}{store.platformName} →</Text></TouchableOpacity>)}</ScrollView></SafeAreaView></Modal>
+
+      <Modal visible={searchOptionsVisible} transparent animationType="fade" onRequestClose={() => setSearchOptionsVisible(false)}>
+        <View style={{ flex: 1, justifyContent: 'center', backgroundColor: '#00000099', padding: 24 }}>
+          <View style={{ backgroundColor: '#F8FAFC', borderRadius: 16, padding: 20, gap: 16 }}>
+            <Text style={{ color: '#F1F5F9', fontSize: 18, fontWeight: '600' }}>Search performance</Text>
+            <Text style={{ color: '#475569' }}>Concurrent stores</Text>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              {[1, 2, 3].map(count => (
+                <TouchableOpacity
+                  key={count}
+                  accessibilityLabel={`Concurrent stores ${count}`}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: searchLimitCount === count }}
+                  onPress={() => { setSearchLimitCount(count); searchCacheRef.current.clear(); }}
+                  style={{ flex: 1, padding: 12, alignItems: 'center', borderRadius: 8,
+                    backgroundColor: searchLimitCount === count ? '#BFDBFE' : '#FFFFFF' }}
+                >
+                  <Text style={{ color: '#F1F5F9', fontSize: 16 }}>{count}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={{ color: '#475569' }}>Load pages in parallel</Text>
+              <Switch
+                accessibilityLabel="Load pages in parallel"
+                value={parallelPageLoading}
+                trackColor={{ false: '#E2E8F0', true: '#BFDBFE' }}
+                thumbColor={parallelPageLoading ? '#1D4ED8' : '#64748B'}
+                onValueChange={(value) => { setParallelPageLoading(value); searchCacheRef.current.clear(); }}
+              />
+            </View>
+            <Text style={{ color: '#64748B', fontSize: 12 }}>
+              {parallelPageLoading ? 'All pages load together. Only result extraction is limited.'
+                : 'Page loading and result extraction share the store limit.'}
+            </Text>
+            <TouchableOpacity accessibilityLabel="Close search performance options" onPress={() => setSearchOptionsVisible(false)}>
+              <Text style={{ color: '#1D4ED8', padding: 10, textAlign: 'right', fontWeight: '600' }}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
 
 
@@ -987,6 +1013,10 @@ export const HomeScreen: React.FC = () => {
         session={currentSession(selectedLoginStore ? storeSessions[selectedLoginStore] : undefined)}
         onClose={handleCloseStore}
         onSessionChange={handleSessionChange}
+        purpose={storeWindowPurpose}
+        addressQuery={storeAddressQuery}
+        locationIsSet={!!selectedLoginStore && storeLocations[selectedLoginStore]?.status === 'set' && Date.now() >= storeLocations[selectedLoginStore]!.checkedAt && Date.now() - storeLocations[selectedLoginStore]!.checkedAt < SESSION_TTL_MS}
+        onLocationChange={handleLocationChange}
       />
 
       {/* Custom Collection Builder Modal */}
@@ -1000,13 +1030,13 @@ export const HomeScreen: React.FC = () => {
           <View style={styles.collectionModalCard}>
             <View style={styles.collectionModalHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Layers size={18} color="#10B981" />
+                <Layers size={18} color="#15803D" />
                 <Text style={styles.collectionModalTitle}>
                   {editingCollection ? 'Edit Collection' : 'Create Store Collection'}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => setCollectionModalVisible(false)}>
-                <X size={18} color="#94A3B8" />
+                <X size={18} color="#64748B" />
               </TouchableOpacity>
             </View>
 
@@ -1044,7 +1074,7 @@ export const HomeScreen: React.FC = () => {
                       <Text style={[styles.storeCheckboxText, isSelected && styles.storeCheckboxTextActive]}>
                         {s.platformName}
                       </Text>
-                      {isSelected && <Check size={14} color="#10B981" style={{ marginLeft: 'auto' }} />}
+                      {isSelected && <Check size={14} color="#15803D" style={{ marginLeft: 'auto' }} />}
                     </TouchableOpacity>
                   );
                 })}
@@ -1080,28 +1110,34 @@ export const HomeScreen: React.FC = () => {
       {/* Strategy Matrix Modal */}
       <StrategyMatrixModal
         visible={matrixModalVisible}
+        offers={storeOffers}
         rows={matrixRows}
         onClose={() => setMatrixModalVisible(false)}
         onRemoveRow={handleRemoveMatrixRow}
+        onEditCell={handleEditComparison}
         onClearAll={handleClearMatrix}
       />
+      <SettingsModal visible={settingsVisible} onClose={() => setSettingsVisible(false)} stores={Object.values(ALL_STORE_TEMPLATES)} offers={storeOffers} onSave={saveStoreOffer} />
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  settingsButton: {width: 44, height: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 9},
   container: {
     flex: 1,
-    backgroundColor: '#0F172A'
+    backgroundColor: '#F8FAFC'
   },
   header: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E293B'
+    borderBottomColor: '#FFFFFF'
   },
   brandRow: {
     flexDirection: 'row',
@@ -1112,7 +1148,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: '#10B981',
+    backgroundColor: '#15803D',
     alignItems: 'center',
     justifyContent: 'center'
   },
@@ -1120,42 +1156,43 @@ const styles = StyleSheet.create({
     fontSize: 16
   },
   logoTitle: {
-    color: '#F8FAFC',
+    color: '#0F172A',
     fontSize: 18,
     fontWeight: '900',
     letterSpacing: -0.5
   },
   logoSub: {
-    color: '#94A3B8',
+    color: '#64748B',
     fontSize: 10
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8
+    gap: 8,
+    flexWrap: 'wrap'
   },
   matrixHeaderBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#334155'
+    borderColor: '#E2E8F0'
   },
   matrixHeaderBtnActive: {
-    borderColor: '#10B981',
+    borderColor: '#15803D',
     backgroundColor: 'rgba(16, 185, 129, 0.12)'
   },
   matrixHeaderBtnText: {
-    color: '#94A3B8',
+    color: '#64748B',
     fontSize: 11,
     fontWeight: '700'
   },
   matrixHeaderBtnTextActive: {
-    color: '#10B981'
+    color: '#15803D'
   },
 
   connectedStoresSection: {
@@ -1178,7 +1215,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 14,
@@ -1190,7 +1227,7 @@ const styles = StyleSheet.create({
     borderRadius: 3.5
   },
   storePillText: {
-    color: '#F8FAFC',
+    color: '#0F172A',
     fontSize: 11,
     fontWeight: '600'
   },
@@ -1205,20 +1242,28 @@ const styles = StyleSheet.create({
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
     paddingLeft: 12,
     paddingRight: 6,
     height: 48
   },
+  titleModeToggle: {alignItems: 'center', justifyContent: 'center', minHeight: 36, paddingHorizontal: 8, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 6},
+  titleModeActive: {backgroundColor: '#EFF6FF', borderColor: '#2563EB'},
+  titleModeLabel: {color: '#475569', fontSize: 11},
+  titleModeBanner: {flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, marginTop: 10, backgroundColor: '#EFF6FF', borderWidth: 1, borderColor: '#93C5FD', borderRadius: 10},
+  titleModeBannerTitle: {color: '#1E3A8A', fontSize: 14, fontWeight: '700'},
+  titleModeBannerDetail: {color: '#475569', fontSize: 12, marginTop: 3},
+  titleModeOffButton: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44, paddingHorizontal: 14, backgroundColor: '#1D4ED8', borderRadius: 8},
+  titleModeOffText: {color: '#FFFFFF', fontSize: 14, fontWeight: '700'},
   searchIcon: {
     marginRight: 6
   },
   searchInput: {
     flex: 1,
-    color: '#F8FAFC',
+    color: '#0F172A',
     fontSize: 14,
     fontWeight: '500'
   },
@@ -1226,71 +1271,16 @@ const styles = StyleSheet.create({
     padding: 6
   },
   searchSubmitBtn: {
-    backgroundColor: '#10B981',
+    backgroundColor: '#2563EB',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
     marginLeft: 6
   },
   searchSubmitBtnText: {
-    color: '#0F172A',
+    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '800'
-  },
-  cartActionBar: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 8
-  },
-  addToCartBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#1E293B',
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#334155'
-  },
-  addToCartBtnActive: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981'
-  },
-  addToCartBtnText: {
-    color: '#64748B',
-    fontSize: 12,
-    fontWeight: '700'
-  },
-  addToCartBtnTextActive: {
-    color: '#0F172A',
-    fontWeight: '800'
-  },
-  viewMatrixBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#1E293B',
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#334155'
-  },
-  viewMatrixBtnActive: {
-    borderColor: 'rgba(16, 185, 129, 0.4)',
-    backgroundColor: 'rgba(16, 185, 129, 0.12)'
-  },
-  viewMatrixBtnText: {
-    color: '#94A3B8',
-    fontSize: 12,
-    fontWeight: '700'
-  },
-  viewMatrixBtnTextActive: {
-    color: '#10B981'
   },
   quickTagsRow: {
     flexDirection: 'row',
@@ -1298,62 +1288,21 @@ const styles = StyleSheet.create({
     paddingTop: 8
   },
   tagChip: {
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#334155'
+    borderColor: '#E2E8F0'
   },
   tagChipText: {
-    color: '#94A3B8',
+    color: '#64748B',
     fontSize: 12,
     fontWeight: '500'
   },
   resultsContainer: {
     paddingHorizontal: 16,
     paddingBottom: 24
-  },
-  savingsBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    backgroundColor: '#FEF3C7',
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#FDE68A'
-  },
-  savingsBannerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1
-  },
-  savingsBannerText: {
-    color: '#92400E',
-    fontSize: 12,
-    flex: 1
-  },
-  bannerAddBtn: {
-    backgroundColor: '#92400E',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6
-  },
-  bannerAddBtnText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '800'
-  },
-  boldText: {
-    fontWeight: '800'
-  },
-  priceHighlight: {
-    fontWeight: '900',
-    color: '#78350F'
   },
   searchMetaRow: {
     flexDirection: 'row',
@@ -1363,12 +1312,12 @@ const styles = StyleSheet.create({
     marginTop: 4
   },
   searchMetaText: {
-    color: '#94A3B8',
+    color: '#64748B',
     fontSize: 13,
     flex: 1
   },
   searchMetaQuery: {
-    color: '#F8FAFC',
+    color: '#0F172A',
     fontWeight: '700'
   },
   timeBadgeLoading: {
@@ -1382,7 +1331,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(56, 189, 248, 0.3)'
   },
   timeBadgeLoadingText: {
-    color: '#38BDF8',
+    color: '#1D4ED8',
     fontSize: 12,
     fontWeight: '600'
   },
@@ -1398,7 +1347,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(16, 185, 129, 0.3)'
   },
   timeBadgeSuccessText: {
-    color: '#10B981',
+    color: '#15803D',
     fontSize: 12,
     fontWeight: '700'
   },
@@ -1406,7 +1355,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E293B'
+    borderBottomColor: '#FFFFFF'
   },
   collectionsRow: {
     flexDirection: 'row',
@@ -1417,27 +1366,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#334155'
+    borderColor: '#E2E8F0'
   },
   collectionPillActive: {
-    borderColor: '#10B981',
+    borderColor: '#15803D',
     backgroundColor: 'rgba(16, 185, 129, 0.12)'
   },
   collectionEmoji: {
     fontSize: 12
   },
   collectionPillText: {
-    color: '#94A3B8',
+    color: '#64748B',
     fontSize: 12,
     fontWeight: '600'
   },
   collectionPillTextActive: {
-    color: '#10B981',
+    color: '#15803D',
     fontWeight: '700'
   },
   addCollectionBtn: {
@@ -1449,7 +1398,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
     borderStyle: 'dashed'
   },
   addCollectionBtnDisabled: {
@@ -1457,7 +1406,7 @@ const styles = StyleSheet.create({
     borderColor: '#475569'
   },
   addCollectionBtnText: {
-    color: '#10B981',
+    color: '#15803D',
     fontSize: 11,
     fontWeight: '700'
   },
@@ -1471,10 +1420,10 @@ const styles = StyleSheet.create({
   collectionModalCard: {
     width: '100%',
     maxWidth: 420,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#F8FAFC',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
     overflow: 'hidden'
   },
   collectionModalHeader: {
@@ -1483,10 +1432,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E293B'
+    borderBottomColor: '#FFFFFF'
   },
   collectionModalTitle: {
-    color: '#F8FAFC',
+    color: '#0F172A',
     fontSize: 15,
     fontWeight: '800'
   },
@@ -1494,7 +1443,7 @@ const styles = StyleSheet.create({
     padding: 16
   },
   inputLabel: {
-    color: '#94A3B8',
+    color: '#64748B',
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -1502,11 +1451,11 @@ const styles = StyleSheet.create({
     marginBottom: 6
   },
   modalInput: {
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#334155',
-    color: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    color: '#0F172A',
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14
@@ -1521,26 +1470,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#E2E8F0',
     width: '48%'
   },
   storeCheckboxItemActive: {
-    borderColor: '#10B981',
+    borderColor: '#15803D',
     backgroundColor: 'rgba(16, 185, 129, 0.12)'
   },
   storeCheckboxText: {
-    color: '#94A3B8',
+    color: '#64748B',
     fontSize: 12,
     fontWeight: '600',
     flex: 1
   },
   storeCheckboxTextActive: {
-    color: '#F8FAFC',
+    color: '#0F172A',
     fontWeight: '700'
   },
   collectionModalFooter: {
@@ -1550,10 +1499,10 @@ const styles = StyleSheet.create({
     marginTop: 20,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#1E293B'
+    borderTopColor: '#FFFFFF'
   },
   saveModalBtn: {
-    backgroundColor: '#10B981',
+    backgroundColor: '#15803D',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 8,
