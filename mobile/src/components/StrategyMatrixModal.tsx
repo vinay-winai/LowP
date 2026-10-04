@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, Modal, StyleSheet, TouchableOpacity, ScrollView, Linking, Share, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StrategyMatrixRow, PlatformId } from '../types';
-import { ComparisonEdit, parseComparisonPrice, refreshComparison } from '../core/ProductComparison';
+import { ComparisonEdit, parseComparisonPrice, refreshComparison, sizePriceSuggestion } from '../core/ProductComparison';
 import { StoreOffers, comparisonBaskets, calculateOffer } from '../core/StoreOffers';
 
 interface Props { visible: boolean; rows: StrategyMatrixRow[]; offers: StoreOffers; onClose: () => void; onRemoveRow: (id: string) => void; onClearAll: () => void; onEditCell: (rowId: string, platform: PlatformId, edit: ComparisonEdit) => void; }
@@ -34,22 +34,24 @@ export const StrategyMatrixModal: React.FC<Props> = ({ visible, rows: savedRows,
             {!complete.length && <Text style={styles.note}>No store has every selected item included in its total.</Text>}
             {complete.map((basket, index) => <View key={basket.id} style={[styles.cell, index === 0 && styles.best]}><View style={styles.cellHeader}><Text style={styles.store}>{basket.name}{index === 0 ? ' · Lowest total' : ''}</Text><Text style={styles.price}>₹{basket.effectiveTotal}</Text></View><OfferBreakdown basket={basket} /></View>)}
             <Text style={styles.note}>Product prices only. Delivery fees and checkout offers may differ. Check each match before buying.</Text>
+            {rows.some(row => Object.values(row.stores).some(cell => cell.effectiveQuantity)) && <Text style={styles.note}>Totals use effective prices adjusted to your selected product sizes.</Text>}
           </View>
           {!!incomplete.length && <View style={styles.card}><Text style={styles.title}>Incomplete stores</Text>{incomplete.map(basket => <View key={basket.id} style={styles.cell}><View style={styles.cellHeader}><Text style={styles.store}>{basket.name} · {basket.count}/{rows.length} items included</Text><Text style={styles.price}>₹{basket.effectiveTotal}</Text></View><Text style={styles.muted}>Partial total after offers</Text><OfferBreakdown basket={basket} />{basket.missing.map((item, index) => <Text key={index} style={styles.note}>{item.excluded ? 'Excluded: ' : 'Missing: '}{item.title}{item.excluded ? ' · Price differs by more than 20%' : ''}</Text>)}</View>)}</View>}
           {rows.map(row => <View key={row.id} style={styles.card}>
             <View style={styles.rowHeader}><View style={{ flex: 1 }}><Text style={styles.title}>{row.query}</Text><Text style={styles.muted}>Selected from {row.anchorStoreId ? row.stores[row.anchorStoreId]?.platformName : 'search results'}</Text></View>
               <TouchableOpacity style={styles.button} accessibilityLabel={`Remove ${row.query}`} onPress={() => onRemoveRow(row.id)}><Text style={styles.muted}>Remove</Text></TouchableOpacity></View>
-            {Object.values(row.stores).map(cell => <View key={cell.platformId} style={[styles.cell, cell.isCheapestInRow && styles.best]}>
+            {Object.values(row.stores).map(cell => {const suggestion = sizePriceSuggestion(row, cell); return <View key={cell.platformId} style={[styles.cell, cell.isCheapestInRow && styles.best]}>
               <TouchableOpacity disabled={!cell.candidates?.length} accessibilityRole="button"
                 accessibilityLabel={`${cell.item ? 'Change' : 'Choose'} product for ${cell.platformName}`}
                 onPress={() => setEditor({rowId: row.id, platform: cell.platformId, mode: 'swap'})}>
-                <View style={styles.cellHeader}><Text style={styles.store}>{cell.platformName}</Text><Text style={styles.price}>{cell.isAvailable ? `₹${cell.price}` : '—'}</Text></View>
+                <View style={styles.cellHeader}><Text style={styles.store}>{cell.platformName}</Text><Text style={styles.price}>{cell.isAvailable ? `${cell.effectiveQuantity ? 'Effective ' : ''}₹${cell.effectivePrice ?? cell.price}` : '—'}</Text></View>
                 <Text style={styles.muted}>{cell.item ? `${cell.item.title}${cell.item.quantity ? ` · ${cell.item.quantity}` : ''}` : 'No item selected'}</Text>
                 {cell.isAvailable && <Text style={styles.match}>{cell.manuallySelected ? 'Selected by you' : cell.platformId === row.anchorStoreId ? 'Your selection' : 'Suggested match'}{cell.comparisonKind === 'different_pack' ? ' · Different pack size' : cell.comparisonKind === 'size_unknown' ? ' · Size not verified' : ''}{cell.isCheapestInRow ? ' · Lowest included price' : ''}</Text>}
                 {cell.isAvailable && cell.isComparable === false && <Text style={styles.note}>Price differs by {Number((cell.priceDifferencePercent || 0).toFixed(1))}% from your selected item · Excluded from totals</Text>}
                 {cell.includeInTotals && <Text style={styles.match}>Included in totals by you</Text>}
-                {cell.originalPrice !== undefined && <Text style={styles.muted}>Edited price · Store price ₹{cell.originalPrice}</Text>}
+                {cell.originalPrice !== undefined && <Text style={styles.muted}>Edited pack price · Store price ₹{cell.originalPrice}</Text>}
               </TouchableOpacity>
+              {suggestion && <Text style={styles.note}>For {suggestion.anchorQuantity} · Pack price ₹{suggestion.sourcePrice} for {suggestion.storeQuantity}. Size-adjusted estimate.</Text>}
               <View style={styles.actions}>
                 {!!cell.candidates?.length && <TouchableOpacity style={styles.action} accessibilityLabel={`Swap item for ${cell.platformName}`} onPress={() => setEditor({rowId: row.id, platform: cell.platformId, mode: 'swap'})}><Text style={styles.blue}>{cell.item ? 'Swap item' : 'Choose item'}</Text></TouchableOpacity>}
                 {cell.isAvailable && <>
@@ -59,9 +61,9 @@ export const StrategyMatrixModal: React.FC<Props> = ({ visible, rows: savedRows,
                   {cell.productUrl && cell.productUrl !== '#' && <TouchableOpacity style={styles.action} accessibilityRole="link" accessibilityLabel={`View ${cell.item?.title || cell.platformName} in store`} onPress={() => Linking.openURL(cell.productUrl).catch(() => {})}><Text style={styles.blue}>View in store ↗</Text></TouchableOpacity>}
                 </>}
               </View>
-            </View>)}
+            </View>;})}
           </View>)}
-          <TouchableOpacity style={styles.button} onPress={() => Share.share({ message: rows.map(row => `${row.query}\n${Object.values(row.stores).map(cell => `${cell.platformName}: ${cell.isAvailable ? `₹${cell.price} — ${cell.item?.title}` : 'No close match'}`).join('\n')}`).join('\n\n') + '\n\nProduct prices only; check matches and checkout fees.' }).catch(() => {})}><Text style={styles.blue}>Share comparison</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.button} onPress={() => Share.share({ message: rows.map(row => `${row.query}\n${Object.values(row.stores).map(cell => `${cell.platformName}: ${cell.isAvailable ? `₹${cell.effectivePrice ?? cell.price} — ${cell.item?.title}${cell.effectiveQuantity ? ` (effective estimate for ${cell.effectiveQuantity}; pack price ₹${cell.price})` : ''}` : 'No close match'}`).join('\n')}`).join('\n\n') + '\n\nProduct prices only; check matches and checkout fees.' }).catch(() => {})}><Text style={styles.blue}>Share comparison</Text></TouchableOpacity>
           <TouchableOpacity style={styles.button} onPress={onClearAll}><Text style={styles.muted}>Clear all comparisons</Text></TouchableOpacity>
         </>}
       </ScrollView>

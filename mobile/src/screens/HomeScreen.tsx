@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
+  Image,
   Text,
   TextInput,
   TouchableOpacity,
@@ -10,7 +11,10 @@ import {
   ActivityIndicator,
   Modal,
   Linking,
-  Switch
+  Switch,
+  Pressable,
+  Keyboard,
+  useWindowDimensions
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -25,8 +29,9 @@ import { compareProduct, reshuffleMatches, refreshComparison, editComparisonCell
 import { enrichFlipkartQuantities } from '../core/ProductDetails';
 import {productSearchTitle} from '../core/ProductSearch';
 import {useSessionChecks} from '../core/useSessionChecks';
+import {useSearchHistory} from '../core/useSearchHistory';
 import { MatchingEngine } from '../core/MatchingEngine';
-import { StoreSession, StoreLocation, SESSION_TTL_MS, currentSession, updateStoreSession, updateStoreLocation } from '../core/StoreSession';
+import { StoreSession, StoreLocation, LOCATION_STORAGE_KEY, restoreLocationCache, currentSession, updateStoreSession, updateStoreLocation } from '../core/StoreSession';
 import {
   PlatformId,
   StoreCollection,
@@ -160,11 +165,12 @@ const SEARCH_LIMIT_STORAGE_KEY = 'lowp_limit_parallel_searches';
 const SEARCH_OPTIONS_STORAGE_KEY = 'lowp_search_limit_options_v1';
 
 const QUICK_TAGS = [
-  'Paneer 200g',
-  'Amul Butter 500g',
-  'Basmati Rice 1kg',
-  'Milk 1L',
-  'Fortune Oil 1L'
+  'milk',
+  'curd',
+  'potato',
+  'banana',
+  'atta',
+  'toor dal'
 ];
 
 const COLLECTIONS_STORAGE_KEY = 'lowp_collections_v1';
@@ -209,17 +215,44 @@ function sanitizeCollections(raw: unknown): StoreCollection[] | null {
   return clean.length > 0 ? clean : null;
 }
 
-export const HomeScreen: React.FC = () => {
+export const HomeScreen: React.FC<{onReady?: () => void}> = ({onReady}) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSearchHistory, setShowSearchHistory] = useState(false);
+  const searchInputRef = useRef<TextInput>(null);
+  const searchHistory = useSearchHistory(searchQuery);
+  const searchBoxRef = useRef<View>(null);
+  const screenRef = useRef<View>(null);
+  const windowSize = useWindowDimensions();
+  const [keyboardTop, setKeyboardTop] = useState<number | null>(null);
+  const [historyBounds, setHistoryBounds] = useState({left: 0, top: 0, width: 0, available: 0});
+  const historyRowHeight = Math.max(44, Math.ceil(24 * windowSize.fontScale + 20));
+  const measureHistory = () => {
+    screenRef.current?.measureInWindow((rootX, rootY, _width, rootHeight) => {
+      searchBoxRef.current?.measureInWindow((x, y, width, height) => {
+        const bottom = Math.min(rootY + rootHeight, keyboardTop ?? Infinity);
+        setHistoryBounds({left: x - rootX, top: y + height - rootY, width, available: Math.max(0, bottom - y - height - 8)});
+      });
+    });
+  };
+  useEffect(() => {
+    const shown = Keyboard.addListener('keyboardDidShow', event => setKeyboardTop(event.endCoordinates.screenY));
+    const hidden = Keyboard.addListener('keyboardDidHide', () => {setKeyboardTop(null); setShowSearchHistory(false); searchInputRef.current?.blur();});
+    return () => {shown.remove(); hidden.remove();};
+  }, []);
+  useEffect(() => {
+    if (!showSearchHistory) return;
+    const frame = requestAnimationFrame(measureHistory);
+    return () => cancelAnimationFrame(frame);
+  }, [showSearchHistory, keyboardTop, windowSize.height, windowSize.width, windowSize.fontScale]);
+  const visibleHistory = searchHistory.suggestions.slice(0, Math.min(10, Math.floor(historyBounds.available / historyRowHeight)));
   const [activeSearch, setActiveSearch] = useState('');
   const [searchId, setSearchId] = useState(0);
   const currentSearchIdRef = useRef(0);
   const [scrapersEnabled, setScrapersEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [limitParallelSearches, setLimitParallelSearches] = useState(true);
+  const [limitParallelSearches, setLimitParallelSearches] = useState(false);
   const [searchLimitCount, setSearchLimitCount] = useState(3);
   const [parallelPageLoading, setParallelPageLoading] = useState(false);
-  const [searchOptionsVisible, setSearchOptionsVisible] = useState(false);
   const [collections, setCollections] = useState<StoreCollection[]>(DEFAULT_COLLECTIONS);
   const [activeCollectionId, setActiveCollectionId] = useState<string>('10_min_pack');
   const [collectionModalVisible, setCollectionModalVisible] = useState(false);
@@ -236,7 +269,17 @@ export const HomeScreen: React.FC = () => {
   const [selectedLoginStore, setSelectedLoginStore] = useState<PlatformId | null>(null);
   const [storeWindowPurpose, setStoreWindowPurpose] = useState<'account' | 'address'>('account');
   const [storeLocations, setStoreLocations] = useState<Partial<Record<PlatformId, StoreLocation>>>({});
-  const handleLocationChange = (id: PlatformId, location: StoreLocation) => setStoreLocations(previous => updateStoreLocation(previous,id,location));
+  const [locationsReady, setLocationsReady] = useState(false);
+  useEffect(() => {
+    let active = true;
+    AsyncStorage.getItem(LOCATION_STORAGE_KEY).then(raw => {if (active) setStoreLocations(previous => ({...restoreLocationCache(raw), ...previous}));})
+      .catch(() => {}).finally(() => {if (active) setLocationsReady(true);});
+    return () => {active = false;};
+  }, []);
+  useEffect(() => {if (locationsReady) AsyncStorage.setItem(LOCATION_STORAGE_KEY, JSON.stringify(storeLocations)).catch(() => {});}, [storeLocations, locationsReady]);
+  const handleLocationChange = (id: PlatformId, location: StoreLocation) => {
+    if (loginModalVisible || sessionChecks.pendingCount > 0) setStoreLocations(previous => updateStoreLocation(previous,id,location));
+  };
   const [storeAddressQuery, setStoreAddressQuery] = useState('');
   const [, refreshSessionAge] = useState(0);
   const [matrixRows, setMatrixRows] = useState<StrategyMatrixRow[]>([]);
@@ -284,6 +327,9 @@ export const HomeScreen: React.FC = () => {
   // Gated until the persisted packs have been restored once, so the initial
   // default state never overwrites the user's saved packs on relaunch.
   const [collectionsReady, setCollectionsReady] = useState(false);
+  useEffect(() => {
+    if (collectionsReady) onReady?.();
+  }, [collectionsReady, onReady]);
   const sessionChecks = useSessionChecks(isLoading || loginModalVisible, collectionsReady);
   const {sessions: storeSessions, setSessions: setStoreSessions} = sessionChecks;
   const collectionsScrollRef = useRef<ScrollView>(null);
@@ -350,7 +396,7 @@ export const HomeScreen: React.FC = () => {
           AsyncStorage.getItem(SEARCH_OPTIONS_STORAGE_KEY)
         ]);
         if (cancelled) return;
-        setLimitParallelSearches(savedSearchLimit !== 'false');
+        setLimitParallelSearches(savedSearchLimit === 'true');
         if (savedSearchOptions) {
           try {
             const options = JSON.parse(savedSearchOptions);
@@ -485,6 +531,11 @@ export const HomeScreen: React.FC = () => {
   const handleTriggerSearch = (query: string, storeOverride?: PlatformId[], titleSelection = !storeOverride && !!titleStore) => {
     const clean = MatchingEngine.cleanSearchTerm(query);
     if (!clean) return;
+
+    searchHistory.remember(query);
+    setShowSearchHistory(false);
+    searchInputRef.current?.blur();
+    Keyboard.dismiss();
 
     const colStoreIds = storeOverride || (titleStore ? [titleStore] : currentCollection.storeIds);
     setActiveSearchStores(colStoreIds);
@@ -717,18 +768,28 @@ export const HomeScreen: React.FC = () => {
 
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView ref={screenRef} style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
+      <Pressable pointerEvents={showSearchHistory ? 'auto' : 'none'} accessible={showSearchHistory} accessibilityLabel="Dismiss search suggestions" style={[StyleSheet.absoluteFill, {zIndex: 10, backgroundColor: showSearchHistory ? '#00000018' : 'transparent'}]} onPress={() => {setShowSearchHistory(false); searchInputRef.current?.blur(); Keyboard.dismiss();}} />
+      {showSearchHistory && visibleHistory.length > 0 && <View style={{position: 'absolute', left: historyBounds.left, top: historyBounds.top - 1, width: historyBounds.width, zIndex: 30, elevation: 8, backgroundColor: '#FFFFFF', borderColor: '#E2E8F0', borderWidth: 1, borderTopWidth: 0, borderBottomLeftRadius: 12, borderBottomRightRadius: 12, overflow: 'hidden', shadowColor: '#000000', shadowOpacity: 0.15, shadowRadius: 6, shadowOffset: {width: 0, height: 3}}}>
+        {visibleHistory.map(term => {
+          const match = searchQuery.trim();
+          const index = match ? term.toLowerCase().indexOf(match.toLowerCase()) : -1;
+          return <TouchableOpacity key={term.toLowerCase()} accessibilityRole="button" accessibilityLabel={`Search again for ${term}`} onPress={() => {setSearchQuery(term); handleTriggerSearch(term);}} style={{flexDirection: 'row', alignItems: 'center', gap: 12, height: historyRowHeight, paddingHorizontal: 12}}>
+            <Search size={17} color="#374151" /><Text numberOfLines={1} ellipsizeMode="tail" style={{flex: 1, color: '#111827', fontSize: 15, fontWeight: '600'}}>{index < 0 ? term : <>{term.slice(0, index)}<Text style={{fontWeight: '400'}}>{term.slice(index, index + match.length)}</Text>{term.slice(index + match.length)}</>}</Text>
+          </TouchableOpacity>;
+        })}
+      </View>}
 
       {/* Top Header */}
       <View style={styles.header}>
         <View style={styles.brandRow}>
           <View style={styles.logoBadge}>
-            <Text style={styles.logoBadgeText}>⚡</Text>
+            <Image source={require('../../assets/loop-bag-logo.png')} style={{width: 60, height: 60}} resizeMode="contain" accessibilityLabel="Loop shopping bag logo" />
           </View>
           <View>
             <Text style={styles.logoTitle}>LowP</Text>
-            <Text style={styles.logoSub}>Find products. Compare prices.</Text>
+            <Text style={styles.logoSub}>Hunt the lowest price with privacy</Text>
           </View>
         </View>
 
@@ -747,22 +808,26 @@ export const HomeScreen: React.FC = () => {
       </View>
 
       {/* Main Search Box & Strategy Matrix Action Bar */}
-      <View style={styles.searchSection}>
-        <View style={styles.searchBox}>
+      <View style={[styles.searchSection, {zIndex: 20}]}>
+        <View style={{zIndex: 1}}>
+        <View ref={searchBoxRef} collapsable={false} onLayout={measureHistory} style={[styles.searchBox, showSearchHistory && visibleHistory.length > 0 && {borderBottomLeftRadius: 0, borderBottomRightRadius: 0}]}>
           <Search size={18} color="#64748B" style={styles.searchIcon} />
           <TextInput
+            ref={searchInputRef}
             style={styles.searchInput}
             placeholder="Product, brand or pack size"
             accessibilityLabel="Search products"
             placeholderTextColor="#64748B"
             value={searchQuery}
-            onChangeText={setSearchQuery}
+            onFocus={() => setShowSearchHistory(true)}
+            onBlur={() => setShowSearchHistory(false)}
+            onChangeText={value => {setSearchQuery(value); setShowSearchHistory(true);}}
             onSubmitEditing={() => handleTriggerSearch(searchQuery)}
             returnKeyType="search"
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity
-              onPress={() => setSearchQuery('')}
+              onPress={() => {setSearchQuery(''); setShowSearchHistory(true);}}
               style={styles.clearSearchBtn}
             >
               <X size={16} color="#64748B" />
@@ -781,6 +846,9 @@ export const HomeScreen: React.FC = () => {
               <Text style={styles.searchSubmitBtnText}>Search</Text>
             )}
           </TouchableOpacity>
+        </View>
+
+
         </View>
 
         {titleStore && <View style={styles.titleModeBanner}>
@@ -866,18 +934,11 @@ export const HomeScreen: React.FC = () => {
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <StoreSyncPanel stores={Object.values(ALL_STORE_TEMPLATES)} sessions={storeSessions} locations={storeLocations} searchBusy={isLoading} storeWindowOpen={loginModalVisible}
             syncing={sessionChecks.syncing} paused={sessionChecks.paused} pendingCount={sessionChecks.pendingCount}
-            onRefresh={sessionChecks.refresh}
+            onRefresh={sessionChecks.refresh} lastSyncedAt={sessionChecks.lastSyncedAt}
             onOpenStore={id => {setStoreWindowPurpose('account'); setStoreAddressQuery(''); setSelectedLoginStore(id); setLoginModalVisible(true);}}
             onSetAddress={(id, address) => {setStoreWindowPurpose('address'); setStoreAddressQuery(address); setSelectedLoginStore(id); setLoginModalVisible(true);}}
           />
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <TouchableOpacity
-              accessibilityLabel="Search performance options"
-              disabled={isLoading}
-              onPress={() => setSearchOptionsVisible(true)}
-            >
-              <Text style={{ color: '#1D4ED8', fontSize: 12, padding: 6 }}>Options</Text>
-            </TouchableOpacity>
             <Text style={{ color: '#475569', fontSize: 12 }}>Limit searches</Text>
             <Switch
               accessibilityLabel="Limit parallel searches"
@@ -963,46 +1024,6 @@ export const HomeScreen: React.FC = () => {
 
       <Modal visible={titlePickerVisible} animationType="slide" onRequestClose={() => setTitlePickerVisible(false)}><SafeAreaView style={{flex: 1, backgroundColor: '#F8FAFC', padding: 16}}><View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 16}}><Text style={{flex: 1, fontSize: 20, fontWeight: '700', color: '#0F172A'}}>Get good search title</Text><TouchableOpacity style={{minHeight: 44, justifyContent: 'center'}} onPress={() => setTitlePickerVisible(false)}><Text style={{color: '#1D4ED8'}}>Cancel</Text></TouchableOpacity></View><Text style={{color: '#475569', marginBottom: 12}}>Choose the store for Find title. This choice stays active until you turn it off.</Text><TextInput accessibilityLabel="Product name for title search" style={{backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 8, padding: 12, color: '#0F172A', marginBottom: 16}} value={titleQuery} onChangeText={setTitleQuery} placeholder="e.g. Amul butter" placeholderTextColor="#64748B" /><ScrollView keyboardShouldPersistTaps="handled">{Object.values(ALL_STORE_TEMPLATES).map(store => <TouchableOpacity key={store.platformId} accessibilityLabel={`Find product title in ${store.platformName}`} accessibilityState={{selected: titleStore === store.platformId}} style={{padding: 16, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, marginBottom: 12, backgroundColor: titleStore === store.platformId ? '#F0FDF4' : '#FFFFFF'}} onPress={() => {setTitleStore(store.platformId); setSearchQuery(titleQuery); setTitlePickerVisible(false); if (MatchingEngine.cleanSearchTerm(titleQuery)) handleTriggerSearch(titleQuery, [store.platformId], true);}}><Text style={{color: '#1D4ED8', fontWeight: '600'}}>{titleStore === store.platformId ? 'Selected: ' : ''}{store.platformName} →</Text></TouchableOpacity>)}</ScrollView></SafeAreaView></Modal>
 
-      <Modal visible={searchOptionsVisible} transparent animationType="fade" onRequestClose={() => setSearchOptionsVisible(false)}>
-        <View style={{ flex: 1, justifyContent: 'center', backgroundColor: '#00000099', padding: 24 }}>
-          <View style={{ backgroundColor: '#F8FAFC', borderRadius: 16, padding: 20, gap: 16 }}>
-            <Text style={{ color: '#F1F5F9', fontSize: 18, fontWeight: '600' }}>Search performance</Text>
-            <Text style={{ color: '#475569' }}>Concurrent stores</Text>
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              {[1, 2, 3].map(count => (
-                <TouchableOpacity
-                  key={count}
-                  accessibilityLabel={`Concurrent stores ${count}`}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: searchLimitCount === count }}
-                  onPress={() => { setSearchLimitCount(count); searchCacheRef.current.clear(); }}
-                  style={{ flex: 1, padding: 12, alignItems: 'center', borderRadius: 8,
-                    backgroundColor: searchLimitCount === count ? '#BFDBFE' : '#FFFFFF' }}
-                >
-                  <Text style={{ color: '#F1F5F9', fontSize: 16 }}>{count}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Text style={{ color: '#475569' }}>Load pages in parallel</Text>
-              <Switch
-                accessibilityLabel="Load pages in parallel"
-                value={parallelPageLoading}
-                trackColor={{ false: '#E2E8F0', true: '#BFDBFE' }}
-                thumbColor={parallelPageLoading ? '#1D4ED8' : '#64748B'}
-                onValueChange={(value) => { setParallelPageLoading(value); searchCacheRef.current.clear(); }}
-              />
-            </View>
-            <Text style={{ color: '#64748B', fontSize: 12 }}>
-              {parallelPageLoading ? 'All pages load together. Only result extraction is limited.'
-                : 'Page loading and result extraction share the store limit.'}
-            </Text>
-            <TouchableOpacity accessibilityLabel="Close search performance options" onPress={() => setSearchOptionsVisible(false)}>
-              <Text style={{ color: '#1D4ED8', padding: 10, textAlign: 'right', fontWeight: '600' }}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
 
 
@@ -1015,7 +1036,7 @@ export const HomeScreen: React.FC = () => {
         onSessionChange={handleSessionChange}
         purpose={storeWindowPurpose}
         addressQuery={storeAddressQuery}
-        locationIsSet={!!selectedLoginStore && storeLocations[selectedLoginStore]?.status === 'set' && Date.now() >= storeLocations[selectedLoginStore]!.checkedAt && Date.now() - storeLocations[selectedLoginStore]!.checkedAt < SESSION_TTL_MS}
+        locationIsSet={!!selectedLoginStore && storeLocations[selectedLoginStore]?.status === 'set' && Date.now() >= storeLocations[selectedLoginStore]!.checkedAt}
         onLocationChange={handleLocationChange}
       />
 
@@ -1148,7 +1169,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: '#15803D',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center'
   },

@@ -8,6 +8,37 @@ const {matchScore,compareProduct,reshuffleMatches,refreshComparison,editComparis
 const item=(title,price=100,quantity='',brand='')=>({id:title,title,price,quantity,brand,mrp:price,image:'',productUrl:`https://example.com/${encodeURIComponent(title)}`});
 const store=(id,candidates)=>({platformId:id,platformName:id,candidates,item:candidates[0]||null,isAvailable:!!candidates.length,searchUrl:'https://example.com/search'});
 
+test('effective prices preserve pack price and original anchor without compounding',()=>{
+ const anchor=item('Amul Butter',100,'200g'), other=item('Amul Butter',240,'500g');
+ const a=store('zepto',[anchor]), b=store('blinkit',[other, item('Amul Butter',110,'200g')]);const row=compareProduct(a,anchor,[a,b],'butter');
+ const adjusted=editComparisonCell(row,'blinkit',{kind:'swap',index:0});
+ assert.equal(adjusted.stores.blinkit.price,240);assert.equal(adjusted.stores.blinkit.item.price,240);
+ assert.equal(adjusted.stores.blinkit.effectivePrice,96);assert.equal(adjusted.stores.blinkit.isComparable,true);assert.equal(adjusted.cheapestPrice,96);
+ assert.equal(refreshComparison(refreshComparison(adjusted)).stores.blinkit.effectivePrice,96);
+ const edited=editComparisonCell(adjusted,'blinkit',{kind:'price',price:250});
+ assert.equal(edited.stores.blinkit.effectivePrice,100);assert.equal(edited.stores.blinkit.price,250);
+ const swappedAnchor=editComparisonCell(adjusted,'zepto',{kind:'price',price:200});assert.equal(swappedAnchor.stores.blinkit.effectivePrice,96);
+ const swapped=editComparisonCell(adjusted,'blinkit',{kind:'swap',index:1});assert.equal(swapped.stores.blinkit.effectivePrice,110);assert.equal(swapped.stores.blinkit.effectiveQuantity,undefined);
+ const removed=editComparisonCell(adjusted,'blinkit',{kind:'remove'});assert.equal(removed.stores.blinkit.effectivePrice,0);assert.equal(removed.stores.blinkit.effectiveQuantity,undefined);
+ const legacy={...adjusted,stores:{...adjusted.stores,blinkit:{...adjusted.stores.blinkit,price:96,item:{...other,price:96},sizeAdjustment:{sourcePrice:240,anchorQuantity:'200 g',storeQuantity:'500 g'}}}};
+ const migrated=refreshComparison(legacy);assert.equal(migrated.stores.blinkit.price,240);assert.equal(migrated.stores.blinkit.effectivePrice,96);assert.equal(migrated.stores.blinkit.sizeAdjustment,undefined);
+});
+test('size suggestion converts compatible units and multipacks, rejects missing or incompatible sizes and 20 percent boundary',()=>{
+ const make=(aq,bq,price=240)=>{const anchor=item('Milk',100,aq),a=store('zepto',[anchor]);const r=compareProduct(a,anchor,[a,store('blinkit',[item('Milk',price,bq)])],'milk');return context.exports.sizePriceSuggestion(r,r.stores.blinkit);};
+ assert.equal(make('1 L','500 ml',60).price,120);
+ assert.equal(make('1 kg','2 x 250g',240).price,480);
+ for(const [a,b,p] of [['200g','500 ml',240],['','500g',240],['200g','',240],['0g','500g',240],['200g','500g',120],['200g','200g',240]])assert.equal(make(a,b,p),null);
+});
+test('already-totalled pack quantities are not multiplied twice',()=>{
+ const anchor=item('Amul Butter',100,'200g'), a=store('zepto',[anchor]);
+ for(const quantity of ['1 kg','500g']){
+  const row=compareProduct(a,anchor,[a,store('blinkit',[item('Amul Butter 2 x 500g',450,quantity)])],'butter');
+  assert.equal(context.exports.sizePriceSuggestion(row,row.stores.blinkit).price,90);
+ }
+ const ambiguous=compareProduct(a,anchor,[a,store('blinkit',[item('Amul Butter 2 x 500g',450,'750g')])],'butter');
+ assert.equal(context.exports.sizePriceSuggestion(ambiguous,ambiguous.stores.blinkit),null);
+});
+
 test('descriptions after dashes contribute less than the primary product name',()=>{
  const anchor=item('Quaker Oats - delicious wholesome daily meal for the entire family');
  const plain=item('Quaker Oats');

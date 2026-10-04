@@ -73,6 +73,9 @@ export interface MatrixStoreCell {
   candidates?: ProductItem[];
   manuallySelected?: boolean;
   originalPrice?: number;
+  effectivePrice?: number;
+  effectiveQuantity?: string;
+  sizeAdjustment?: {sourcePrice: number; anchorQuantity: string; storeQuantity: string};
   price: number;
   mrp: number;
   productUrl: string;

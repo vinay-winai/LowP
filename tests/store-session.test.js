@@ -54,15 +54,15 @@ test('session bridge rejects wrong domains, stale navigation tokens and malforme
   assert.equal(session.isStoreSessionUrl('zepto', 'http://www.zepto.com/'), false);
 });
 
-test('old and future-dated observations become unknown', () => {
+test('old observations persist while future-dated observations are rejected', () => {
   const known = { status: 'signed_in', evidence: 'logout_control', checkedAt: 1000 };
   assert.equal(session.currentSession(known, 1100).status, 'signed_in');
-  assert.equal(session.currentSession(known, 1000 + session.SESSION_TTL_MS).status, 'unknown');
+  assert.equal(session.currentSession(known, 1000 + session.SYNC_REMINDER_MS * 2).status, 'signed_in');
   assert.equal(session.currentSession(known, 999).status, 'unknown');
   assert.equal(session.currentSession().status, 'unknown');
 });
 
-test('persisted sessions restore only validated fresh evidence and mirror Amazon', () => {
+test('persisted sessions restore validated evidence regardless of age and mirror Amazon', () => {
   const saved = {amazon_main:{status:'signed_in',evidence:'logout_control',checkedAt:1000},
     zepto:{status:'signed_in',evidence:'cookie_present',checkedAt:1000},
     blinkit:{status:'signed_out',evidence:'login_form',checkedAt:1000},
@@ -70,12 +70,12 @@ test('persisted sessions restore only validated fresh evidence and mirror Amazon
   const restored=session.restoreSessionCache(JSON.stringify(saved),1100);
   assert.equal(restored.amazon_main.status,'signed_in');assert.equal(restored.amazon_tez.status,'signed_in');
   assert.equal(restored.blinkit.status,'signed_out');assert.equal(restored.zepto,undefined);assert.equal(restored.flipkart,undefined);
-  assert.equal(Object.keys(session.restoreSessionCache(JSON.stringify(saved),1000+session.SESSION_TTL_MS)).length,0);
+  assert.equal(Object.keys(session.restoreSessionCache(JSON.stringify(saved),1000+session.SYNC_REMINDER_MS*2)).length,3);
   assert.equal(Object.keys(session.restoreSessionCache(JSON.stringify(saved),999)).length,0);
   assert.equal(Object.keys(session.restoreSessionCache('{broken')).length,0);
 });
 
-test('Amazon.in and Amazon Now share verified status and expiration', () => {
+test('Amazon.in and Amazon Now share persistent verified status', () => {
   const signedIn = { status: 'signed_in', evidence: 'logout_control', checkedAt: 1000 };
   const verified = session.updateStoreSession({}, 'amazon_main', signedIn, 1000);
   assert.equal(verified.amazon_tez.status, 'signed_in');
@@ -85,11 +85,23 @@ test('Amazon.in and Amazon Now share verified status and expiration', () => {
   const signedOut = { status: 'signed_out', evidence: 'login_prompt', checkedAt: 1200 };
   const loggedOut = session.updateStoreSession(verified, 'amazon_tez', signedOut, 1200);
   assert.equal(loggedOut.amazon_main.status, 'signed_out');
-  assert.equal(session.currentSession(loggedOut.amazon_tez, 1200 + session.SESSION_TTL_MS).status, 'unknown');
-  assert.equal(session.currentSession(loggedOut.amazon_main, 1200 + session.SESSION_TTL_MS).status, 'unknown');
-  assert.equal(session.updateStoreSession(verified, 'amazon_tez', unknown, 1000 + session.SESSION_TTL_MS).amazon_main.status, 'unknown');
+  assert.equal(session.currentSession(loggedOut.amazon_tez, 1200 + session.SESSION_TTL_MS).status, 'signed_out');
+  assert.equal(session.currentSession(loggedOut.amazon_main, 1200 + session.SESSION_TTL_MS).status, 'signed_out');
+  assert.equal(session.updateStoreSession(verified, 'amazon_tez', unknown, 1000 + session.SESSION_TTL_MS).amazon_main.status, 'signed_in');
   const swiggy = session.updateStoreSession(verified, 'instamart', signedOut, 1200);
   assert.equal(swiggy.amazon_main.status, 'signed_in');
+});
+
+test('sync reminder starts after one week and saved metadata rejects invalid dates',()=>{
+ const time=1000;
+ assert.equal(session.syncNeedsReminder(time,time+session.SYNC_REMINDER_MS),false);
+ assert.equal(session.syncNeedsReminder(time,time+session.SYNC_REMINDER_MS+1),true);
+ assert.equal(session.syncNeedsReminder(0,time+session.SYNC_REMINDER_MS),false);
+ assert.equal(session.restoreLastSyncedAt(JSON.stringify({lastSyncedAt:time}),2000),time);
+ assert.equal(session.restoreLastSyncedAt(JSON.stringify({lastSyncedAt:3000}),2000),0);
+ assert.equal(session.restoreLastSyncedAt('{broken'),0);
+ const locations=session.restoreLocationCache(JSON.stringify({amazon_main:{status:'set',checkedAt:1000},amazon_tez:{status:'unknown',checkedAt:1100},zepto:{status:'bad',checkedAt:1000}}),session.SYNC_REMINDER_MS*2);
+ assert.equal(locations.amazon_main.status,'set');assert.equal(locations.amazon_tez.status,'set');assert.equal(locations.zepto,undefined);
 });
 
 test('injected observer ignores hidden cues, detects changes and disposes duplicate observers', () => {

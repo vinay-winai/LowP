@@ -44,7 +44,7 @@ test('fresh saved evidence restores without launch checks, and manual/interactiv
  h.render();await h.flush();assert.equal(h.output.sessions.amazon_tez.status,'signed_in');assert.equal(h.timers.size,0);assert.equal(h.output.pendingCount,0);h.output.refresh();h.render();
  const active=h.dispatch();assert.equal(active.job.platformId,'amazon_main');
  active.observe('amazon_tez',{status:'signed_out',evidence:'login_control',checkedAt:Date.now()});h.render();await h.flush();h.output.refresh();h.render();
- assert.equal(h.output.sessions.amazon_main.status,'signed_out');assert.equal(h.writes.at(-1).amazon_tez.status,'signed_out');
+ assert.equal(h.output.sessions.amazon_main.status,'signed_out');assert.equal(h.writes.at(-1).sessions.amazon_tez.status,'signed_out');
  assert.equal(h.dispatch().job.platformId,'instamart');
 });
 
@@ -63,6 +63,21 @@ test('render and storage readiness gate manual dispatch and a search cancels a q
  h.launchReady=true;h.render();assert.equal(h.timers.size,1);
  h.blocked=true;h.render();assert.equal(h.timers.size,0);
  h.blocked=false;h.render();assert.equal(h.dispatch().job.platformId,'amazon_main');
+});
+
+test('saved status survives pending checks and passive observations; date advances only when manual sync completes',async()=>{
+ const old=Date.now()-14*24*60*60*1000;
+ const h=harness(JSON.stringify({lastSyncedAt:old,sessions:{amazon_main:{status:'signed_in',evidence:'logout_control',checkedAt:old}}}));
+ h.render();await h.flush();assert.equal(h.output.lastSyncedAt,old);
+ h.output.observe('amazon_main',{status:'signed_out',evidence:'login_control',checkedAt:Date.now()});h.render();assert.equal(h.output.sessions.amazon_main.status,'signed_in');
+ h.output.refresh();h.render();
+ for(const id of ['amazon_main','instamart','zepto','blinkit','flipkart']){
+  const current=h.dispatch();assert.equal(current.lastSyncedAt,old);
+  if(id==='amazon_main')assert.equal(h.writes.at(-1).sessions.amazon_main.status,'signed_in');
+  current.finish(current.job.token,id,{status:'signed_out',evidence:'login_form',checkedAt:Date.now()});h.render();
+ }
+ h.render();assert.ok(h.output.lastSyncedAt>old);assert.equal(h.writes.at(-1).lastSyncedAt,h.output.lastSyncedAt);
+ const restored=harness(JSON.stringify(h.writes.at(-1)));restored.render();await restored.flush();assert.equal(restored.output.lastSyncedAt,h.output.lastSyncedAt);assert.equal(restored.output.sessions.amazon_tez.status,'signed_out');
 });
 
 test('manual sync rechecks all accounts, reports progress, and waits for an active search',async()=>{

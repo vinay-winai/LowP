@@ -33,7 +33,7 @@ export function comparisonBaskets(rows: StrategyMatrixRow[], offers: StoreOffers
   const complete = ids.flatMap(id => {
     const cells = rows.map(row => row.stores[id]);
     if (!rows.length || !cells.every(cell => cell?.isAvailable && cell.isComparable !== false)) return [];
-    return [{id, name: cells[0].platformName, ...calculateOffer(cells.reduce((sum, cell) => sum + cell.price, 0), offers[id])}];
+    return [{id, name: cells[0].platformName, ...calculateOffer(cells.reduce((sum, cell) => sum + (cell.effectivePrice ?? cell.price), 0), offers[id])}];
   }).sort((a, b) => a.effectiveTotal - b.effectiveTotal);
   const incomplete = ids.filter(id => !complete.some(store => store.id === id)).map(id => {
     const included = rows.filter(row => row.stores[id]?.isAvailable && row.stores[id].isComparable !== false);
@@ -41,7 +41,7 @@ export function comparisonBaskets(rows: StrategyMatrixRow[], offers: StoreOffers
       .map(row => ({title: row.query, excluded: !!row.stores[id]?.isAvailable}));
     const name = rows.find(row => row.stores[id])!.stores[id].platformName;
     return {id, name, count: included.length, missing,
-      ...calculateOffer(included.reduce((sum, row) => sum + row.stores[id].price, 0), offers[id])};
+      ...calculateOffer(included.reduce((sum, row) => sum + (row.stores[id].effectivePrice ?? row.stores[id].price), 0), offers[id])};
   });
   return {complete, incomplete};
 }

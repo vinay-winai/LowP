@@ -3,7 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { PlatformId, ProductItem } from '../types';
 import { generateScraperScript } from '../core/ScraperScript';
-import {storeSearchScript, WARM_SEARCH_STORES} from '../core/StoreSearch';
+import {storeSearchScript, WARM_SEARCH_STORES, warmSearchDeadline} from '../core/StoreSearch';
 import { MatchingEngine } from '../core/MatchingEngine';
 import {SessionCheckJob, StoreSession, STORE_SESSION_URLS, SESSION_CHECK_TIMEOUT_MS, readSessionMessage, sessionProbeScript, sessionObserverScript, isStoreSessionUrl} from '../core/StoreSession';
 import {StoreLocation, readLocationMessage, locationObserverScript} from '../core/StoreSession';
@@ -446,7 +446,7 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
             generateScraperScript(searchQuery, platformId, searchId, __DEV__)));
           // Native deadline also covers script errors and a full navigation
           // caused by Enter, which destroys the in-page timer.
-          warmTimers.current[platformId] = setTimeout(() => fallbackSearch(platformId), 3200);
+          warmTimers.current[platformId] = setTimeout(() => fallbackSearch(platformId), warmSearchDeadline(platformId) + 400);
         }, 100);
       } else if (previousUrls.current[platformId] === url) webViewRefs.current[platformId]?.reload();
       previousUrls.current[platformId] = url;
@@ -514,6 +514,7 @@ export const BackgroundScrapers: React.FC<BackgroundScrapersProps> = ({
             activeSearchId.current !== searchId || !request?.warm || request.id !== searchId ||
             resolvedStores.current.has(platformId)) return;
         if (payload.type === 'LOWP_SEARCH_FALLBACK') {
+          if (__DEV__) console.log(`[LowP Mobile] Search bar verification: ${platformId} ${JSON.stringify(payload.state || {})}`);
           fallbackSearch(platformId);
         } else {
           clearTimeout(warmTimers.current[platformId]);

@@ -94,12 +94,12 @@ export function compareProduct(anchorStore: StoreResult, anchor: ProductItem, st
     if (isComparable && price < cheapestPrice) { cheapestPrice = price; cheapestStoreId = store.platformId; }
   }
   Object.values(cells).forEach(cell => { cell.isCheapestInRow = cell.isComparable === true && cell.price === cheapestPrice; });
-  return {
+  return refreshComparison({
     id: `comparison_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, query: anchor.title,
     selectionKey: `${anchor.title}|${anchor.quantity}|${anchor.brand}`.toLowerCase(),
     searchQuery: query, anchorStoreId: anchorStore.platformId, anchorItem: anchor, addedAt: Date.now(), stores: cells,
     cheapestPrice: Number.isFinite(cheapestPrice) ? cheapestPrice : 0, cheapestStoreId
-  };
+  });
 }
 
 export function refreshComparison(row: StrategyMatrixRow): StrategyMatrixRow {
@@ -108,16 +108,23 @@ export function refreshComparison(row: StrategyMatrixRow): StrategyMatrixRow {
   const anchorSize = size(anchor);
   const stores = { ...row.stores };
   let cheapestPrice = Infinity, cheapestStoreId: PlatformId | null = null;
-  for (const cell of Object.values(stores)) {
+  for (const savedCell of Object.values(stores)) {
+    // Migrate an earlier manually accepted estimate back to its pack price.
+    const cell = savedCell.sizeAdjustment ? {...savedCell, price: savedCell.sizeAdjustment.sourcePrice,
+      item: savedCell.item ? {...savedCell.item, price: savedCell.sizeAdjustment.sourcePrice} : null,
+      originalPrice: savedCell.originalPrice === savedCell.sizeAdjustment.sourcePrice ? undefined : savedCell.originalPrice,
+      sizeAdjustment: undefined} : savedCell;
+    const estimate = sizePriceSuggestion(row, cell);
+    const effectivePrice = estimate?.price ?? cell.price;
     const candidateSize = cell.item ? size(cell.item) : null;
     const comparisonKind = anchorSize && candidateSize ? (anchorSize === candidateSize ? 'same_pack' : 'different_pack') : 'size_unknown';
-    const priceDifferencePercent = anchor.price > 0 ? Math.abs(cell.price - anchor.price) / anchor.price * 100 : 0;
-    const withinPriceRange = Math.abs(Math.round(cell.price * 100) - Math.round(anchor.price * 100)) * 100 <= Math.round(anchor.price * 100) * 20;
+    const priceDifferencePercent = anchor.price > 0 ? Math.abs(effectivePrice - anchor.price) / anchor.price * 100 : 0;
+    const withinPriceRange = Math.abs(Math.round(effectivePrice * 100) - Math.round(anchor.price * 100)) * 100 <= Math.round(anchor.price * 100) * 20;
     const isComparable = cell.isAvailable && cell.price > 0 && (cell.includeInTotals === true || withinPriceRange);
-    stores[cell.platformId] = { ...cell, comparisonKind, priceDifferencePercent, isComparable, isCheapestInRow: false };
-    if (isComparable && cell.price < cheapestPrice) { cheapestPrice = cell.price; cheapestStoreId = cell.platformId; }
+    stores[cell.platformId] = { ...cell, effectivePrice, effectiveQuantity: estimate?.anchorQuantity, comparisonKind, priceDifferencePercent, isComparable, isCheapestInRow: false };
+    if (isComparable && effectivePrice < cheapestPrice) { cheapestPrice = effectivePrice; cheapestStoreId = cell.platformId; }
   }
-  Object.values(stores).forEach(cell => { cell.isCheapestInRow = cell.isComparable === true && cell.price === cheapestPrice; });
+  Object.values(stores).forEach(cell => { cell.isCheapestInRow = cell.isComparable === true && cell.effectivePrice === cheapestPrice; });
   return { ...row, stores, cheapestStoreId, cheapestPrice: Number.isFinite(cheapestPrice) ? cheapestPrice : 0 };
 }
 
@@ -128,26 +135,53 @@ export function parseComparisonPrice(input: string): number | null {
   return Number.isFinite(price) && price > 0 && price <= 500000 ? price : null;
 }
 
+export function sizePriceSuggestion(row: StrategyMatrixRow, cell: MatrixStoreCell) {
+  const anchor = row.anchorItem || (row.anchorStoreId ? row.stores[row.anchorStoreId]?.item : null);
+  if (!anchor || !cell.item || !cell.isAvailable || cell.sizeAdjustment || !(anchor.price > 0) || !(cell.price > 0) ||
+      Math.abs(Math.round(cell.price * 100) - Math.round(anchor.price * 100)) * 100 <= Math.round(anchor.price * 100) * 20) return null;
+  const measured = (item: ProductItem) => {
+    const quantity = size({...item, title: ''})?.split(':'), title = size({...item, quantity: ''})?.split(':');
+    if (!quantity) return title;
+    if (title && Number(title[2]) > 1) {
+      if (quantity[0] !== title[0]) return null;
+      const total = Number(title[1]) * Number(title[2]);
+      // Quantity may already be the total pack weight. Do not multiply twice.
+      if (Number(quantity[1]) * Number(quantity[2]) === total) return quantity;
+      if (Number(quantity[2]) === 1 && Number(quantity[1]) === Number(title[1])) return title;
+      return null;
+    }
+    return quantity;
+  };
+  const a = measured(anchor), b = measured(cell.item);
+  if (!a || !b || a[0] !== b[0]) return null;
+  const anchorAmount = Number(a[1]) * Number(a[2]), storeAmount = Number(b[1]) * Number(b[2]);
+  if (!(anchorAmount > 0) || !(storeAmount > 0) || !Number.isFinite(anchorAmount + storeAmount) || anchorAmount === storeAmount) return null;
+  const price = Math.round(cell.price / storeAmount * anchorAmount * 100) / 100;
+  if (!Number.isFinite(price) || price <= 0 || price > 500000 || price === cell.price) return null;
+  const unit = a[0] === 'weight' ? 'g' : 'ml';
+  return {price, sourcePrice: cell.price, anchorQuantity: `${anchorAmount} ${unit}`, storeQuantity: `${storeAmount} ${unit}`};
+}
+
 export type ComparisonEdit = { kind: 'swap'; index: number } | { kind: 'price'; price: number } | { kind: 'remove' } | {kind: 'include'};
 
 export function editComparisonCell(row: StrategyMatrixRow, platform: PlatformId, edit: ComparisonEdit): StrategyMatrixRow {
-  const cell = row.stores[platform];
+  const cell = refreshComparison(row).stores[platform];
   if (!cell) return row;
   let updated: MatrixStoreCell;
   if (edit.kind === 'swap') {
     const item = cell.candidates?.[edit.index];
     if (!item || !(item.price > 0)) return row;
     updated = { ...cell, item: { ...item }, price: item.price, mrp: item.mrp || item.price,
-      productUrl: item.productUrl || cell.productUrl, isAvailable: true, manuallySelected: true, originalPrice: undefined, includeInTotals: undefined };
+      productUrl: item.productUrl || cell.productUrl, isAvailable: true, manuallySelected: true, originalPrice: undefined, sizeAdjustment: undefined, includeInTotals: undefined };
   } else if (edit.kind === 'price') {
     if (!cell.item || !Number.isFinite(edit.price) || edit.price <= 0 || edit.price > 500000) return row;
     updated = { ...cell, price: edit.price, item: { ...cell.item, price: edit.price },
-      originalPrice: cell.originalPrice ?? cell.price };
+      originalPrice: cell.originalPrice ?? cell.price, sizeAdjustment: undefined };
   } else if (edit.kind === 'include') {
     if (!cell.isAvailable || !cell.item) return row;
     updated = {...cell, includeInTotals: true};
   } else {
-    updated = { ...cell, item: null, price: 0, isAvailable: false, originalPrice: undefined, manuallySelected: false, includeInTotals: undefined };
+    updated = { ...cell, item: null, price: 0, isAvailable: false, originalPrice: undefined, sizeAdjustment: undefined, manuallySelected: false, includeInTotals: undefined };
   }
   const anchorItem = row.anchorItem || (row.anchorStoreId ? row.stores[row.anchorStoreId]?.item : null) || undefined;
   return refreshComparison({ ...row, anchorItem, stores: { ...row.stores, [platform]: updated } });

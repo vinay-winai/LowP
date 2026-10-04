@@ -1,9 +1,9 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {Alert, Animated, Easing, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {ChevronDown, CircleAlert, MapPin, RefreshCw, X} from 'lucide-react-native';
+import {ChevronDown, TriangleAlert, MapPin, RefreshCw, X} from 'lucide-react-native';
 import {PlatformId} from '../types';
-import {currentSession, SESSION_LABELS, StoreSession, StoreLocation, LOCATION_LABELS, SESSION_TTL_MS} from '../core/StoreSession';
+import {currentSession, SESSION_LABELS, StoreSession, StoreLocation, LOCATION_LABELS, syncNeedsReminder} from '../core/StoreSession';
 import {FALLBACK_ADDRESS_STORAGE_KEY, addressPin, normalizePinInput, isValidPin} from '../core/StoreAddress';
 
 interface Props {
@@ -12,6 +12,7 @@ interface Props {
   syncing: boolean;
   paused: boolean;
   pendingCount: number;
+  lastSyncedAt: number;
   onRefresh: () => void;
   onOpenStore: (id: PlatformId) => void;
   onSetAddress: (id: PlatformId, address: string) => void;
@@ -20,7 +21,7 @@ interface Props {
   storeWindowOpen?: boolean;
 }
 
-export const StoreSyncPanel: React.FC<Props> = ({stores, sessions, locations, syncing, paused, pendingCount, onRefresh, onOpenStore, onSetAddress, searchBusy = false, storeWindowOpen = false}) => {
+export const StoreSyncPanel: React.FC<Props> = ({stores, sessions, locations, syncing, paused, pendingCount, lastSyncedAt, onRefresh, onOpenStore, onSetAddress, searchBusy = false, storeWindowOpen = false}) => {
   const [expanded, setExpanded] = useState(false);
   const [address, setAddress] = useState('');
   const [savedAddress, setSavedAddress] = useState('');
@@ -51,15 +52,16 @@ export const StoreSyncPanel: React.FC<Props> = ({stores, sessions, locations, sy
   };
   const status = syncing ? `Checking accounts · ${pendingCount} left` : paused ? 'Checks paused' : 'Accounts & delivery location';
   const unverifiedCount = stores.filter(store => currentSession(sessions[store.platformId]).status !== 'signed_in').length;
-  const showWarning = pendingCount === 0 && !syncing && unverifiedCount > 0;
+  const staleSync = syncNeedsReminder(lastSyncedAt);
+  const showWarning = pendingCount === 0 && !syncing && (unverifiedCount > 0 || staleSync);
   return <>
-    <TouchableOpacity style={styles.syncButton} accessibilityRole="button" accessibilityLabel={`Sync stores, ${status}${showWarning ? `, ${unverifiedCount} stores not confirmed signed in` : ''}`}
+    <TouchableOpacity style={styles.syncButton} accessibilityRole="button" accessibilityLabel={`Sync stores, ${status}${showWarning ? `, ${unverifiedCount} stores not confirmed signed in` : ''}${staleSync ? ', last sync over one week ago; sync again' : ''}`}
       accessibilityState={{expanded, busy: syncing}} onPress={() => setExpanded(true)}>
       <Animated.View style={{transform: [{rotate: rotation.interpolate({inputRange: [0, 1], outputRange: ['0deg', '360deg']})}]}}>
         <RefreshCw size={17} color={syncing ? '#1D4ED8' : '#475569'} />
       </Animated.View>
       <Text style={styles.syncLabel}>Sync</Text>
-      {showWarning && <CircleAlert size={17} color="#B45309" />}
+      {showWarning && <TriangleAlert size={17} color="#B45309" fill="#FEF3C7" />}
       <ChevronDown size={14} color="#64748B" />
     </TouchableOpacity>
     <Modal visible={expanded && !storeWindowOpen} transparent animationType="slide" onRequestClose={() => setExpanded(false)}>
@@ -74,6 +76,8 @@ export const StoreSyncPanel: React.FC<Props> = ({stores, sessions, locations, sy
             <TouchableOpacity style={styles.iconButton} accessibilityLabel="Close store sync" onPress={() => setExpanded(false)}><X size={21} color="#475569" /></TouchableOpacity>
           </View>
           <ScrollView style={{flex:1}} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+            <Text style={[styles.hint, {marginBottom: 10}]}>Last synced: {lastSyncedAt ? new Date(lastSyncedAt).toLocaleString() : 'Not recorded yet'}</Text>
+            {staleSync && <View style={styles.addressHeading}><TriangleAlert size={17} color="#B45309" fill="#FEF3C7" /><Text style={[styles.hint, {color: '#92400E'}]}>Over a week since your last sync. Sync again to check the saved statuses.</Text></View>}
             <View style={styles.addressBox}>
               <View style={styles.addressHeading}><MapPin size={17} color="#475569" /><Text style={styles.label}>PIN code to search</Text></View>
               <Text style={styles.hint}>Each store shows its own address matches; you choose the right one.</Text>
@@ -91,7 +95,7 @@ export const StoreSyncPanel: React.FC<Props> = ({stores, sessions, locations, sy
               const session = currentSession(sessions[store.platformId]);
               const color = session.status === 'signed_in' ? '#15803D' : session.status === 'signed_out' ? '#92400E' : '#64748B';
               const location = locations[store.platformId];
-              const locationStatus = location && Date.now() >= location.checkedAt && Date.now() - location.checkedAt < SESSION_TTL_MS ? location.status : 'unknown';
+              const locationStatus = location && Date.now() >= location.checkedAt ? location.status : 'unknown';
               const locationAction = locationStatus === 'set' ? 'Reset location' : 'Set location';
               return <View key={store.platformId} style={styles.storeRow}>
                 <TouchableOpacity style={styles.storeInfo} accessibilityLabel={`${store.platformName}, ${SESSION_LABELS[session.status]}. Open store.`}

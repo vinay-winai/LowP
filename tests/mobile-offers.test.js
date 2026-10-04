@@ -45,3 +45,12 @@ test('complete baskets rank after offers and exclude missing or different packs'
  rows.push({stores:{zepto:cell('zepto',200,false),blinkit:cell('blinkit',200)},cheapestStoreId:'blinkit'});
  assert.equal(comparisonBaskets(rows,{}).complete.length,1);
 });
+
+test('basket totals use effective prices while keeping actual pack prices',()=>{
+ const adjusted={...cell('blinkit',240),effectivePrice:96};
+ const rows=[{query:'Butter',stores:{blinkit:adjusted}}];
+ assert.equal(comparisonBaskets(rows,{}).complete[0].subtotal,96);
+ rows.push({query:'Milk',stores:{blinkit:cell('blinkit',0,false)}});
+ assert.equal(comparisonBaskets(rows,{}).incomplete[0].subtotal,96);
+ assert.equal(adjusted.price,240);
+});

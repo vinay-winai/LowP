@@ -4,14 +4,14 @@
     "slug": "lowp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/loop-bag-logo.png",
     "userInterfaceStyle": "light",
     "plugins": [
       "expo-status-bar",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/splash-icon.png",
+          "image": "./assets/loop-bag-logo.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#F8FAFC"
@@ -26,19 +26,19 @@
       "package": "com.lowp.app",
       "adaptiveIcon": {
         "backgroundColor": "#F8FAFC",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "foregroundImage": "./assets/loop-bag-logo.png",
+        "monochromeImage": "./assets/loop-bag-logo.png"
       },
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/loop-bag-logo.png"
     },
     "extra": {
       "eas": {
         "projectId": "fc1bce65-e90d-4ace-89fc-2444e98f3edd"
       }
-    }
+    },
+    "description": "Hunt the lowest price with privacy"
   }
 }

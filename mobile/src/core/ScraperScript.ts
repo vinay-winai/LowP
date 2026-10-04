@@ -83,7 +83,7 @@ export function generateScraperScript(searchQuery: string, platformId: string, s
       .replace(/^sponsored\\s*/i, "")
       .replace(/\\b(?:sponsored\\s+ad|sponsored|ad)\\s*[-–:]\\s*/gi, "")
       .replace(/^\\s*\\d+(?:\\.\\d+)?\\s*%\\s*off\\s*/i, "")
-      .replace(/(?:₹|Rs\\.?|INR)\\s*[0-9,]+(?:\\.[0-9]+)?/gi, "")
+      .replace(/(?:₹|\\bRs\\.?|\\bINR\\b)\\s*[0-9,]+(?:\\.[0-9]+)?/gi, "")
       .replace(/\\b(?:delivery in\\s*)?\\d+(?:\\s*-\\s*\\d+)?\\s*(?:mins?|minutes?|hours?|sec|seconds?)\\b/gi, "")
       .replace(/\\b(?:add|options?)\\s*\\d*\\b/gi, "")
       .replace(/\\b\\d+(?:\\.\\d+)?\\s*(?:lac|lakh)\\b/gi, "")
@@ -216,8 +216,15 @@ export function generateScraperScript(searchQuery: string, platformId: string, s
     
     // 1. Price extraction
     let price = null;
+    // Amazon Now exposes the selling price separately from its struck MRP.
+    const tezPrice = platformId === 'amazon_tez' && cardNode.querySelector
+      ? cardNode.querySelector('p[aria-label^="₹"]:not([decorationtype="strike"])') : null;
+    if (tezPrice) {
+      const val = Number((tezPrice.getAttribute('aria-label') || '').replace(/[₹,\\s]/g, ''));
+      if (val >= 5 && val <= 500000) price = val;
+    }
     const priceEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="EdlpPrice"], [data-testid*="price"], [data-testid*="item_price"], [data-testid*="offer-price"], span.a-price span.a-offscreen, span.a-price .a-price-whole, span.a-price, span.a-color-price, [class*="a-price"], div.hZ3P6w, div.Nx9bqj, div._30jeq3, div._1vC4OE, [class*="hZ3P6w"], [class*="Nx9bqj"], [class*="_30jeq3"], [class*="_2jn41"], [class*="_1yW90"], [class*="_3-M84"]') : null;
-    if (priceEl) {
+    if (!price && priceEl) {
       const pTxt = getSpacedText(priceEl).trim();
       const m = pTxt.replace(/,/g, "").match(/([0-9]+(?:\\.[0-9]+)?)/);
       if (m) {
@@ -227,7 +234,7 @@ export function generateScraperScript(searchQuery: string, platformId: string, s
     }
 
     if (!price || isNaN(price)) {
-      const literalMatch = spacedCardText.match(/(?:₹|Rs\\.?|INR)\\s*([0-9,]+(?:\\.[0-9]+)?)/i);
+      const literalMatch = spacedCardText.match(/(?:₹|\\bRs\\.?|\\bINR\\b)\\s*([0-9,]+(?:\\.[0-9]+)?)/i);
       if (literalMatch) {
         const val = parseFloat(literalMatch[1].replace(/,/g, ""));
         if (val >= 5 && val <= 500000) price = val;
@@ -324,7 +331,7 @@ export function generateScraperScript(searchQuery: string, platformId: string, s
         if (val >= price) mrp = val;
       }
     } else {
-      const mrpMatch = spacedCardText.match(/(?:MRP|M\\.R\\.P|Strike)\\s*(?:₹|Rs\\.?|INR)?\\s*([0-9,]+(?:\\.[0-9]+)?)/i);
+      const mrpMatch = spacedCardText.match(/(?:MRP|M\\.R\\.P|Strike)\\s*(?:₹|\\bRs\\.?|\\bINR\\b)?\\s*([0-9,]+(?:\\.[0-9]+)?)/i);
       if (mrpMatch) {
         const val = parseFloat(mrpMatch[1].replace(/,/g, ""));
         if (val >= price) mrp = val;
@@ -457,7 +464,7 @@ export function generateScraperScript(searchQuery: string, platformId: string, s
       const allMatched = Array.from(document.querySelectorAll(cardSelectors.join(', ')));
       let cards = allMatched.filter((c) => {
         const t = c.textContent || "";
-        if (/(?:₹|Rs\\.?|INR)\\s*[0-9,]{1,6}/i.test(t)) return true;
+        if (/(?:₹|\\bRs\\.?|\\bINR\\b)\\s*[0-9,]{1,6}/i.test(t)) return true;
         for (const el of c.querySelectorAll("div, span, p")) {
           if (el.children && el.children.length > 0) continue;
           if (/^[0-9]{1,6}$/.test((el.textContent || "").trim())) return true;
@@ -539,7 +546,7 @@ export function generateScraperScript(searchQuery: string, platformId: string, s
         for (const el of allEls) {
           if (++scanned > 600) break;
           const text = el.textContent || '';
-          if (/(?:₹|Rs\\.?|INR)\\s*[0-9,]+/i.test(text) && text.length < 30) {
+          if (/(?:₹|\\bRs\\.?|\\bINR\\b)\\s*[0-9,]+/i.test(text) && text.length < 30) {
             let parent = el.parentElement;
             let depth = 0;
             while (parent && depth < 6 && parent !== document.body) {
@@ -642,7 +649,9 @@ export function generateScraperScript(searchQuery: string, platformId: string, s
         : targetPlatformId === 'amazon_main' ? 'k'
         : targetPlatformId === 'zepto' || targetPlatformId === 'instamart' ? 'query' : 'q';
       const normalize = value => String(value || '').trim().toLowerCase().replace(/\\s+/g, ' ');
-      return normalize(url.searchParams.get(parameter)) === normalize(searchQuery);
+      const value = url.searchParams.get(parameter);
+      if (normalize(value) === normalize(searchQuery)) return true;
+      return targetPlatformId === 'amazon_tez' && normalize(decodeURIComponent(value || '')) === normalize(searchQuery);
     } catch (e) {
       return false;
     }
@@ -721,7 +730,6 @@ export function generateScraperScript(searchQuery: string, platformId: string, s
   let debounceTimer = null;
   let lastAttemptTime = 0;
   let lastEmptyCheckTime = 0;
-  let loginGateSince = null;
   let lastReason = 'running';
 
   function dispose() {
@@ -826,29 +834,13 @@ export function generateScraperScript(searchQuery: string, platformId: string, s
     if (!res.best && attempts >= 8 && now - lastEmptyCheckTime >= 600) {
       lastEmptyCheckTime = now;
       try {
-        // Only explicit search-blocking copy, never a header Login button.
-        // Require it to persist across checks so hydration placeholders do not
-        // prematurely end an otherwise valid product search.
-        const loginGate = (targetPlatformId === 'instamart' || targetPlatformId === 'zepto') &&
-          Array.from(document.querySelectorAll('h1,h2,h3,p,span,div')).some(el => {
-            const text = (el.textContent || '').replace(/\\s+/g, ' ').trim();
-            if(text.length > 250 || !/log ?in to continue (?:shopping|searching)|please log ?in to continue searching/i.test(text)) return false;
-            if(el.closest('[hidden], [inert]')) return false;
-            for(let parent = el; parent; parent = parent.parentElement) {
-              const style = getComputedStyle(parent);
-              if(style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;
-            }
-            return Array.from(el.getClientRects()).some(rect => rect.width > 0 && rect.height > 0);
-          });
-        if(loginGate) {
-          if(loginGateSince === null) loginGateSince = now;
-          else if(now - loginGateSince >= 600) {sendResult(false, null, [], {reason:'login_required'}); return;}
-          return;
-        } else loginGateSince = null;
         const bodyText = visibleBodyText();
+        // Login prompts must not terminate product searches, including when
+        // they contain "sorry" or use a generic EmptyState container.
+        const loginPrompt = /log ?in to continue|please log ?in|enter (?:your )?(?:mobile|phone) number/i.test(bodyText);
         const hasExplicitNoResults = /(?:no\\s+results\\s+for\\s+[^.]*check\\s+your\\s+spelling|no\\s+results\\s+found\\s+for|we\\s+couldn't\\s+find\\s+any\\s+results|could\\s+not\\s+find\\s+any\\s+results|did\\s+not\\s+match\\s+any\\s+products|no\\s+products\\s+found\\s+for|0\\s+items\\s+found\\s+for|nothing\\s+here\\s+yet|sorry|couldn'?t\\s+find|could\\s+not\\s+find)/i.test(bodyText) ||
           !!(document.querySelector && document.querySelector('.s-no-outline, [data-component-type="s-no-results-found"], [data-testid="no-results-container"], [class*="noResults"], [class*="EmptyState"]'));
-        if (hasExplicitNoResults) {
+        if (hasExplicitNoResults && !loginPrompt) {
           sendResult(false, null, [], { reason: 'empty_state' });
           return;
         }

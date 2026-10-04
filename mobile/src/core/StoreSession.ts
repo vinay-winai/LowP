@@ -11,7 +11,7 @@ export interface SessionCheckJob {platformId: PlatformId; token: string;}
 export interface StoreLocation {status: 'set' | 'needed' | 'unknown'; checkedAt: number;}
 export const LOCATION_LABELS = {set: 'Location set', needed: 'Choose delivery location', unknown: 'Location unknown'};
 export function updateStoreLocation(previous: Partial<Record<PlatformId, StoreLocation>>, id: PlatformId, location: StoreLocation): Partial<Record<PlatformId, StoreLocation>> {
-  const fresh = (value?: StoreLocation) => !!value && Date.now() >= value.checkedAt && Date.now() - value.checkedAt < SESSION_TTL_MS;
+  const fresh = (value?: StoreLocation) => !!value && value.checkedAt > 0 && Date.now() >= value.checkedAt;
   if(id === 'amazon_main') {
     const effective = location.status === 'unknown' && fresh(previous.amazon_main) ? previous.amazon_main! : location;
     return {...previous,amazon_main:effective,amazon_tez:effective};
@@ -90,7 +90,8 @@ export const STORE_SESSION_URLS: Record<PlatformId, string> = {
 };
 export function restoreSessionCache(raw: string | null, now = Date.now()): Partial<Record<PlatformId, StoreSession>> {
   try {
-    const saved = JSON.parse(raw || '{}');
+    const parsed = JSON.parse(raw || '{}');
+    const saved = parsed.sessions || parsed;
     let restored: Partial<Record<PlatformId, StoreSession>> = {};
     for (const id of SESSION_CHECK_STORES) {
       const value = saved[id];
@@ -98,13 +99,31 @@ export function restoreSessionCache(raw: string | null, now = Date.now()): Parti
         (value.status === 'signed_in' && value.evidence === 'logout_control' ||
          value.status === 'signed_out' && ['login_control', 'login_prompt', 'login_form'].includes(value.evidence) ||
          value.status === 'unknown' && value.evidence === 'none');
-      if (valid && now >= value.checkedAt && now - value.checkedAt < SESSION_TTL_MS) restored = updateStoreSession(restored, id, value, now);
+      if (valid && now >= value.checkedAt) restored = updateStoreSession(restored, id, value, now);
     }
     return restored;
   } catch {return {};}
 }
 
 export const SESSION_TTL_MS = 5 * 60 * 1000;
+export const SYNC_REMINDER_MS = 7 * 24 * 60 * 60 * 1000;
+export function restoreLastSyncedAt(raw: string | null, now = Date.now()): number {
+  try { const time = JSON.parse(raw || '{}').lastSyncedAt; return Number.isFinite(time) && time > 0 && time <= now ? time : 0; } catch {return 0;}
+}
+export const syncNeedsReminder = (lastSyncedAt: number, now = Date.now()) => lastSyncedAt > 0 && now - lastSyncedAt > SYNC_REMINDER_MS;
+export const LOCATION_STORAGE_KEY = 'lowp_store_locations_v1';
+export function restoreLocationCache(raw: string | null, now = Date.now()): Partial<Record<PlatformId, StoreLocation>> {
+  try {
+    const saved = JSON.parse(raw || '{}');
+    const restored: Partial<Record<PlatformId, StoreLocation>> = {};
+    for (const id of [...SESSION_CHECK_STORES, 'amazon_tez'] as PlatformId[]) {
+      const value = saved[id];
+      if (value && ['set', 'needed', 'unknown'].includes(value.status) && Number.isFinite(value.checkedAt) && value.checkedAt > 0 && value.checkedAt <= now) restored[id] = value;
+    }
+    if (restored.amazon_main) restored.amazon_tez = restored.amazon_main;
+    return restored;
+  } catch {return {};}
+}
 export const SESSION_LABELS: Record<SessionStatus, string> = {
   unknown: 'Unknown', checking: 'Checking…', signed_in: 'Signed in', signed_out: 'Signed out'
 };
@@ -157,7 +176,7 @@ export function readSessionMessage(raw: string, platformId: PlatformId, token: s
 }
 
 export function currentSession(session?: StoreSession, now = Date.now()): StoreSession {
-  if (!session || now - session.checkedAt >= SESSION_TTL_MS || session.checkedAt > now) {
+  if (!session || !Number.isFinite(session.checkedAt) || session.checkedAt <= 0 || session.checkedAt > now) {
     return { status: 'unknown', evidence: 'none', checkedAt: 0 };
   }
   return session;

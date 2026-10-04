@@ -48,6 +48,16 @@ function page(products = []) {
   return { context, intervals, timeouts, observers, listeners, messages, scans: () => scans, advance: ms => { clock += ms; } };
 }
 
+test('Amazon Now accepts its own double-encoded form URL and rejects a different query',()=>{
+ for(const value of ['paneer%2520200g','butter%2520500g']) {
+  const p=page([{name:'Paneer 200g',price:100}]);
+  p.context.window.location.href='https://www.amazon.in/tez/browse/search?searchKeyword='+value;
+  vm.runInContext(generateScraperScript('paneer 200g','amazon_tez',7),p.context);
+  p.advance(300);[...p.intervals].forEach(fn=>fn());
+  assert.equal(p.messages.length,value.startsWith('paneer')?1:0);
+ }
+});
+
 test('loading store shells do not crash; duplicate injections keep one extraction loop', () => {
   for (const store of ['zepto', 'instamart', 'blinkit', 'amazon_tez', 'amazon_main', 'flipkart']) {
     const p = page();
@@ -70,21 +80,20 @@ test('loading store shells do not crash; duplicate injections keep one extractio
   }
 });
 
-test('persistent visible login gates finish early; transient or hidden login copy does not',()=>{
- for(const store of ['zepto','instamart']) for(const mode of ['persistent','transient','hidden','header']) {
-  const p=page();const original=p.context.document.querySelectorAll;let shown=true;
-  const element={textContent:mode==='header'?'Login':'Log in to continue shopping with a more personalised experience',closest:()=>null,getClientRects:()=>[{width:200,height:40}]};
-  p.context.document.querySelectorAll=selector=>selector==='h1,h2,h3,p,span,div'&&shown?[element]:original(selector);
-  p.context.getComputedStyle=()=>({display:mode==='hidden'?'none':'block',visibility:'visible',opacity:'1'});
+test('login prompts do not end searches early; later products or the normal deadline resolve them',()=>{
+ for(const store of ['zepto','instamart']) for(const laterProducts of [false,true]) {
+  const products=[],p=page(products);
+  p.context.NodeFilter={SHOW_ELEMENT:1,SHOW_TEXT:4,FILTER_REJECT:2,FILTER_ACCEPT:1};
+  p.context.document.createTreeWalker=()=>{let read=false;return {nextNode(){if(read)return null;read=true;return {nodeType:3,nodeValue:'Sorry, log in to continue shopping. Enter mobile number'};}};};
+  p.context.document.querySelector=selector=>selector.includes('EmptyState')?{}:null;
   vm.runInContext(generateScraperScript('paneer',store,4),p.context);
-  for(let i=0;i<7;i++){p.advance(150);[...p.intervals].forEach(fn=>fn());}
+  for(let i=0;i<50;i++){p.advance(150);[...p.intervals].forEach(fn=>fn());}
   assert.equal(p.messages.length,0);
-  if(mode==='transient') shown=false;
-  p.advance(650);[...p.intervals].forEach(fn=>fn());
-  if(mode==='persistent') {
-   assert.equal(p.messages.length,1);assert.equal(p.messages[0].debug.reason,'login_required');assert.equal(p.messages[0].success,false);
-   assert.equal(p.intervals.size+p.observers.size,0);
-  } else assert.equal(p.messages.length,0);
+  if(laterProducts)products.push({name:'Paneer',price:100},{name:'Fresh Paneer',price:90},{name:'Malai Paneer',price:110});
+  p.advance(1000);[...p.intervals].forEach(fn=>fn());
+  assert.equal(p.messages.length,1);assert.equal(p.messages[0].success,laterProducts);
+  if(!laterProducts)assert.equal(p.messages[0].debug.reason,'extraction_timeout');
+  assert.equal(p.intervals.size+p.observers.size,0);
  }
 });
 
@@ -206,4 +215,17 @@ test('card text extracts Swiggy and Blinkit weights even without a semantic quan
     const result = vm.runInContext(`extractFromCard(card, '${platform}')`, p.context);
     assert.equal(result.quantity, '500 g');assert.equal(result.price,320);
   }
+});
+
+test('Amazon Now keeps Boosters pack counts separate from selling prices', () => {
+ for (const [quantity, currency, expected, labelled] of [[6,'₹86',86,false],[24,'₹300',300,false],[6,'Rs. 86',86,false],[24,'INR 300',300,false],[6,'₹105',86,true]]) {
+  const p=page(), script=generateScraperScript('abhi eggs','amazon_tez',1);
+  const helpers=script.slice(script.indexOf('  function titleKey'),script.indexOf('  // Reused WebViews'));
+  const text=`Abhi Eggs Vitamin D3 Eggs With Immunity Boosters ${quantity} Pcs ${currency}`;
+  p.context.card={nodeType:1,textContent:text,childNodes:[{nodeType:3,nodeValue:text}],closest:()=>null,querySelectorAll:()=>[],
+   querySelector:selector=>selector.startsWith('p[aria-label') && labelled ? {getAttribute:()=> '₹ 86'} : selector.startsWith('img.s-image') ? {alt:'Abhi Eggs Vitamin D3 Eggs',src:'https://example.com/eggs.png'} : null};
+  vm.runInContext(`const searchQuery='abhi eggs',targetPlatformId='amazon_tez';${helpers}`,p.context);
+  const result=vm.runInContext("extractFromCard(card,'amazon_tez')",p.context);
+  assert.equal(result.price,expected);assert.equal(result.quantity,`${quantity} Pcs`);
+ }
 });

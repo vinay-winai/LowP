@@ -1,5 +1,63 @@
 # Mobile performance checks
 
+October 3 update: the login-prompt early exit is disabled at the user's request.
+Product searches continue through login prompts until products appear or the
+normal extraction/host deadline expires. Login copy containing "sorry" or inside
+an EmptyState container is excluded from the generic no-results early exit.
+Account/session status detection remains independent. All 135 tests and mobile
+TypeScript pass, including late products after a persistent login prompt.
+
+## October 3: submit behavior for the other quick-commerce stores
+
+Reuse is now enabled for Swiggy Instamart, Blinkit, Amazon Now, and Zepto.
+Amazon.in/Flipkart keep their HTTP-first path. Existing full-page scheduling,
+request IDs, mounted views, search priority, and nine-second store budget remain.
+
+The earlier failed trials did not establish that store search was broken:
+
+- Swiggy listens to the search form's submit event. Synthetic Enter events changed
+  text and requested suggestions but did not perform the browser's default submit.
+  The adapter now calls `requestSubmit()` on the verified search input's form,
+  after 500 ms for input/suggestion processing. A 100 ms delay worked visibly but
+  was unreliable in the background pack. Swiggy also recycles product containers;
+  reused cards must have changed nonempty product image alt identities. Price,
+  delivery time, and badge changes do not qualify as a different product.
+- Amazon Now also needs its search form submitted. Its router double-encodes the
+  search parameter: the URL parser can return `Amul%20Butter%20500g`. Both readiness
+  validation and the scraper accept one additional decode for Amazon Now only,
+  while still requiring the complete requested query to match.
+- Blinkit's current cards are `div[role="button"][id][data-pf]`, rather than the
+  old ProductCard class selectors. Typing triggers search; Enter updates its
+  history/keyboard interaction. The adapter uses that input and key behavior.
+
+Swiggy gets 4.5 seconds to verify its transition, with a 4.9-second native
+watchdog. Other stores retain 2.8/3.2 seconds. These are included in the original
+nine-second budget. Unverified transitions still reload and disable further reuse
+attempts for that store until remount. Initial SSR data is excluded after reuse.
+Shared products between related queries can conservatively cause a fallback.
+
+Exynos SM-M336BU / Expo 8081 / three-page limit, October 3:
+
+| Observation | Result |
+| --- | --- |
+| Visible Swiggy Oats to Paneer, same document | Products sampled at 1.076 s; adapter ready at 1.349 s |
+| Background Swiggy butter to paneer | Verified reuse; result at 2.409 s |
+| Background Swiggy paneer to butter | Verified reuse; result at 2.691 s |
+| Amazon Now in those two pack runs | Verified reuse; 1.963 s and 3.037 s |
+| Blinkit earlier background trial | Verified reuse; result at 4.755 s including 2.658 s queue |
+
+These are development samples, not medians or controlled cross-store comparisons.
+Zepto intermittently returned zero products or fell back in this session, and
+Blinkit had a later deadline fallback. Do not describe every pack trial as a
+successful four-store speed gain. No cookies, login sessions, addresses, or packs
+were cleared. `exynos-search-submit-2026-10-03.log` contains selected timing logs.
+`probe-search-input.cjs` reproduces an adapter inside an open interactive store
+window (its DOM samples currently target Swiggy).
+
+Validation: 135 tests and mobile TypeScript passed. Added form submission and
+cancellation checks, recycled-card identity checks, normalized-query checks, and
+double-encoded Amazon URL acceptance with wrong-query rejection.
+
 ## October 2: search inside the retained Zepto page
 
 Enabled for Zepto in full-page scheduling mode (including limiter off).
