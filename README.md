@@ -63,7 +63,9 @@ effective size-adjusted prices, editable comparison items, store offers, and
 local search history (1,000 unique searches; up to 10 suggestions after 180 ms).
 Find title searches one selected store; choosing a title searches your pack.
 Store Sync, address management, and the mobile search-limit toggle are not included.
-The existing fullscreen/maximized-window safeguard remains in place.
+Searches are allowed in normal, maximized, and fullscreen windows. Background
+store windows may still be affected by Chrome's occlusion throttling; live
+results in each mode depend on the store and session.
 
 After pulling changes, click **Reload** on LowP in `chrome://extensions` and reopen
 the side panel. Saved packs and comparisons are retained.

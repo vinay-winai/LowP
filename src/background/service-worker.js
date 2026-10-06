@@ -2524,25 +2524,6 @@ async function resolveSearchContext(query) {
 // Runs every provider in parallel and reports each result through onResult as
 // soon as it settles, so callers can render progressively instead of waiting
 // for the slowest store. Resolves with the fully annotated result array.
-function getWindowBlockReason() {
-  return new Promise((resolve) => {
-    if (typeof chrome === "undefined" || !chrome.windows || !chrome.windows.getLastFocused) return resolve(null);
-    try {
-      chrome.windows.getLastFocused((win) => {
-        if (chrome.runtime.lastError) return resolve(null);
-        const state = win && win.state;
-        if (state === "maximized" || state === "fullscreen") {
-          resolve("Chrome is " + state + ". Store pages will not render results in this mode — please restore (un-maximize) the Chrome window and search again.");
-        } else {
-          resolve(null);
-        }
-      });
-    } catch (e) {
-      resolve(null);
-    }
-  });
-}
-
 const COLLECTIONS_KEY = "lowp_collections_v1";
 const ACTIVE_COLLECTION_KEY = "lowp_active_collection_v1";
 
@@ -2664,8 +2645,6 @@ async function streamSearchResults(query, locationId = null, onResult = () => {}
     locationId = null;
   }
 
-  const windowBlock = await getWindowBlockReason();
-  if (windowBlock) throw new Error(windowBlock);
 
   const emit = (store) => {
     try { onResult(store); } catch (e) {}

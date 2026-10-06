@@ -262,6 +262,27 @@ test('streamSearchResults - emits each provider result as it settles then resolv
   );
 });
 
+test('search dispatch works in maximized and fullscreen windows without restoring them', async (t) => {
+  const {PROVIDERS} = require('../src/background/service-worker.js');
+  const provider = PROVIDERS.find(p => p.platformId === 'instamart');
+  let searched = 0, windowUpdates = 0;
+  t.mock.method(provider, 'search', async () => {
+    searched++;
+    return provider.formatResult({title:'Milk',price:30,mrp:30,quantity:'500 ml'},null,'milk');
+  });
+  const previous = chrome.windows;
+  try {
+    for (const state of ['normal','maximized','fullscreen']) {
+      chrome.windows = {getLastFocused: cb => cb({id:1,state}),update:()=>{windowUpdates++;}};
+      SearchCache.resetForTests();
+      const results = await streamSearchResults('window mode milk',null,()=>{},['instamart']);
+      assert.strictEqual(results[0].isAvailable,true);
+    }
+    assert.strictEqual(searched,3);
+    assert.strictEqual(windowUpdates,0);
+  } finally {chrome.windows = previous;}
+});
+
 test('handleSearchQuery - serves repeat queries from the short-TTL cache without re-running providers', async () => {
   SearchCache.resetForTests();
   const seedTs = Date.now();
