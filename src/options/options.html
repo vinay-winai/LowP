@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LowP - Location Settings</title>
+  <title>LowP - Settings</title>
   <link rel="stylesheet" href="options.css">
 </head>
 <body>
@@ -19,6 +19,17 @@
     </header>
 
     <main class="main-content">
+      <section class="list-section">
+        <h2>Store discounts and cashback</h2>
+        <p>Card discounts apply to the product subtotal. Only the highest eligible cashback applies. Verify each offer at checkout.</p>
+        <label for="offerStore">Store</label><select id="offerStore"></select>
+        <form id="offerForm">
+          <label for="cardPercent">Card discount (%)</label><input id="cardPercent" type="number" min="0" max="100" step="0.01" required>
+          <h3>Cashback milestones</h3><div id="tiers"></div>
+          <button type="button" id="addTier">Add milestone</button>
+          <button type="submit">Save offers</button><p id="offerStatus" role="status"></p>
+        </form>
+      </section>
       <!-- Developer Options -->
       <section class="list-section">
         <h2>Developer</h2>
@@ -30,6 +41,7 @@
     </main>
   </div>
 
+  <script src="../shared/mobile-core.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

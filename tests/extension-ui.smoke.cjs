@@ -1,0 +1,80 @@
+// Browser integration coverage with deterministic store responses; no live accounts.
+const {chromium} = require('playwright');
+const assert = require('node:assert/strict');
+const {pathToFileURL} = require('node:url');
+const path = require('node:path');
+const fs = require('node:fs');
+(async () => {
+  const browser = await chromium.launch({headless:true});
+  const context = await browser.newContext({viewport:{width:420,height:900}});
+  await context.addInitScript(() => {
+    const initial = {lowp_search_history_v1:['milk','milk powder','curd','banana'],lowp_store_offers_v1:{blinkit:{cardPercent:5,tiers:[{threshold:300,cashback:30}]}},lowp_debug_enabled:false};
+    const data = JSON.parse(localStorage.getItem('testStorage') || JSON.stringify(initial));
+    const changes=[];
+    const storage = {get(keys,cb){const result=Object.fromEntries(keys.map(k=>[k,data[k]]));if(cb)queueMicrotask(()=>cb(result));return Promise.resolve(result);},set(values){Object.assign(data,values);localStorage.setItem('testStorage',JSON.stringify(data));changes.forEach(fn=>fn(Object.fromEntries(Object.entries(values).map(([k,v])=>[k,{newValue:v}])),'local'));return Promise.resolve();}};
+    window.__ports=[];window.__queries=[];
+    const item=(title,price,quantity)=>({id:title,title,price,quantity,mrp:price,productUrl:'https://example.com/product',image:'',brand:'Amul'});
+    const samples={zepto:[item('Amul Butter',320,'500 g'),item('Amul Salted Butter',310,'500 g'),item('Amul Butter <img src=x onerror=alert(1)>',65,'100 g')],blinkit:[item('Amul Butter',65,'100 g'),item('Amul Paneer',315,'500 g')],instamart:[]};
+    window.chrome={storage:{local:storage,sync:storage,onChanged:{addListener:fn=>changes.push(fn)}},tabs:{query:(_,cb)=>queueMicrotask(()=>cb([]))},runtime:{lastError:null,openOptionsPage(){},
+      sendMessage(message,cb){const response=message.action==='GET_COLLECTIONS'?{success:true,collections:[{id:'10_min_pack',name:'10 min pack',storeIds:['zepto','blinkit','instamart']}],activeId:'10_min_pack'}:{success:true,logs:[]};if(cb)queueMicrotask(()=>cb(response));},
+      connect(){const messages=[],disconnects=[];const port={onMessage:{addListener:fn=>messages.push(fn)},onDisconnect:{addListener:fn=>disconnects.push(fn)},disconnect(){disconnects.forEach(fn=>fn());},emit(msg){messages.forEach(fn=>fn(msg));},postMessage(message){window.__queries.push(message.payload);const ids=message.payload.storeIds;setTimeout(()=>{ids.forEach(id=>port.emit({type:'RESULT',store:{platformId:id,platformName:id,isAvailable:!!samples[id]?.length,item:samples[id]?.[0],candidates:samples[id]||[],searchUrl:'https://example.com/search',durationMs:400}}));port.emit({type:'DONE',durationMs:500});},40);}};window.__ports.push(port);return port;}}
+    };
+  });
+  const page=await context.newPage(), errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(pathToFileURL(path.resolve('src/popup/popup.html')).href);
+  await page.locator('#searchInput').fill('milk');
+  await page.waitForTimeout(220);
+  assert.equal(await page.locator('#historyList button').count(),2);
+  await page.locator('#historyList button').first().click();
+  await page.waitForTimeout(150);
+  assert.equal(await page.locator('.store-card').count(),3);
+  assert.equal(await page.locator('.store-card').first().locator('.product').count(),3);
+  assert.equal(await page.locator('#cardsGrid img').count(),0,'product titles must be escaped');
+  await page.locator('[data-compare="zepto"]').first().click();
+  assert.match(await page.locator('#matrixModalBody').innerText(),/Effective ₹325/);
+  assert.match(await page.locator('#matrixModalBody').innerText(),/5% card discount/);
+  await page.locator('[data-edit="swap"][data-store="blinkit"]').click();
+  assert.equal(await page.locator('#editDialog').evaluate(el=>el.open),true);
+  assert.equal(await page.locator('#editBody .selected').count(),1);
+  await page.locator('#editBody [data-choice="1"]').click();
+  await page.locator('[data-edit="price"][data-store="blinkit"]').click();
+  await page.locator('#priceInput').fill('305');await page.locator('#priceForm button').click();
+  assert.match(await page.locator('#matrixModalBody').innerText(),/₹305/);
+  await page.locator('[data-edit="remove"][data-store="blinkit"]').click();
+  assert.equal(await page.locator('[data-edit="swap"][data-store="blinkit"]').innerText(),'Add');
+  await page.locator('[data-edit="swap"][data-store="blinkit"]').click();await page.locator('#editBody [data-choice="0"]').click();
+  fs.mkdirSync('output/playwright',{recursive:true});await page.screenshot({path:'output/playwright/extension-comparison.png'});
+  await page.locator('#closeMatrixBtn').click();
+  await page.locator('#findTitle').selectOption('blinkit');await page.locator('#searchBtn').click();await page.waitForTimeout(100);
+  assert.equal(await page.locator('[data-compare]').count(),0);
+  assert.match(await page.locator('#resultMeta').innerText(),/Searched from/);
+  await page.locator('[data-search-title]').first().click();await page.waitForTimeout(100);
+  assert.equal(await page.locator('#findTitle').inputValue(),'blinkit','store choice persists after using a title');
+  const queries=await page.evaluate(()=>window.__queries);assert.equal(queries.at(-1).storeIds.length,3);assert.match(queries.at(-1).query,/100 g/);
+  const before=await page.locator('#cardsGrid').innerText();await page.evaluate(()=>window.__ports[0].emit({type:'RESULT',store:{platformId:'stale',platformName:'stale'}}));assert.equal(await page.locator('#cardsGrid').innerText(),before);
+  await page.screenshot({path:'output/playwright/extension-search.png'});
+  await page.reload();assert.equal(await page.locator('#matrixCount').innerText(),'1');
+  await page.evaluate(()=>{
+    const data=JSON.parse(localStorage.getItem('testStorage'));
+    delete data.lowp_comparison_rows_v2;
+    data.lowp_strategy_matrix=[{id:'old',query:'Saved butter',stores:{zepto:{platformId:'zepto',platformName:'Zepto',isAvailable:true,title:'Amul Butter',price:100,mrp:100,productUrl:'https://example.com'}}}];
+    data.lowp_search_history_v1=Array.from({length:20},(_,i)=>`milk ${i}`);
+    localStorage.setItem('testStorage',JSON.stringify(data));
+  });
+  await page.reload();await page.locator('#openMatrixBtn').click();
+  assert.match(await page.locator('#matrixModalBody').innerText(),/Saved butter/);
+  await page.locator('#closeMatrixBtn').click();
+  await page.locator('#searchInput').focus();
+  assert.ok(await page.locator('#historyList button').count()<=10);
+  await page.screenshot({path:'output/playwright/extension-history.png'});
+  await page.setViewportSize({width:320,height:700});
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'no horizontal overflow in a narrow side panel');
+  await page.goto(pathToFileURL(path.resolve('src/options/options.html')).href);
+  await page.locator('#offerStore').selectOption('zepto');await page.locator('#cardPercent').fill('7');await page.locator('#addTier').click();
+  await page.getByLabel('Spend threshold in rupees').fill('499');await page.getByLabel('Cashback in rupees').fill('50');await page.locator('#offerForm button[type=submit]').click();
+  assert.equal(await page.locator('#offerStatus').innerText(),'Offers saved.');
+  await page.reload();assert.equal(await page.locator('#cardPercent').inputValue(),'0');await page.locator('#offerStore').selectOption('zepto');assert.equal(await page.locator('#cardPercent').inputValue(),'7');
+  assert.deepEqual(errors,[]);
+  console.log('Extension browser checks passed: history, products, comparison edits, effective totals, offers, title mode, persistence, stale streams.');
+  await browser.close();
+})().catch(error=>{console.error(error);process.exit(1);});

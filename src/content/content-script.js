@@ -73,7 +73,7 @@
     return str
       .replace(/^sponsored\s*/i, "")
       .replace(/^\s*\d+(?:\.\d+)?\s*%\s*off\s*/i, "")
-      .replace(/(?:₹|Rs\.?|INR)\s*[0-9,]+(?:\.[0-9]+)?/gi, "")
+      .replace(/(?:₹|\bRs\.?|\bINR\b)\s*[0-9,]+(?:\.[0-9]+)?/gi, "")
       .replace(/\b(?:delivery in\s*)?\d+(?:\s*-\s*\d+)?\s*(?:mins?|minutes?|hours?|sec|seconds?)\b/gi, "")
       .replace(/\b(?:add|options?)\s*\d*\b/gi, "")
       .replace(/\b\d+(?:\.\d+)?\s*(?:lac|lakh)\b/gi, "")
@@ -185,6 +185,14 @@
     return text;
   }
 
+  function extractQuantity(text) {
+    if (typeof text !== 'string') return '';
+    const clean = text.replace(/\u00a0/g, ' ');
+    const measure = clean.match(/(?:\b\d+\s*[x×]\s*)?\b\d+(?:\.\d+)?\s*(?:kgs?|kilograms?|grams?|gms?|g|ml|millilitres?|milliliters?|litres?|liters?|ltrs?|l)\b(?:\s*[x×]\s*\d+\b|\s*\(?pack\s+of\s+\d+\)?)?/i);
+    const count = clean.match(/\b\d+\s*(?:pcs?|pieces?|units?|packs?)\b/i);
+    return (measure || count) ? (measure || count)[0].replace(/\s+/g, ' ').trim() : '';
+  }
+
   function extractFromCard(cardNode, platformId) {
     if (!cardNode) return null;
     if (cardNode.closest && cardNode.closest('[class*="filter"], [class*="suggestion"], [class*="chip"], [class*="pill"], [class*="breadcrumb"], [class*="header"], [class*="footer"], [class*="nav"], header, footer, nav')) {
@@ -209,9 +217,17 @@
     
     // 1. Price extraction (Priority: specific price element -> spaced currency match -> leaf numeric fallback)
     let price = null;
+    // Amazon Now exposes the selling price separately from its struck MRP.
+    const tezPrice = platformId === 'amazon_tez' && cardNode.querySelector
+      ? cardNode.querySelector('p[aria-label^="₹"]:not([decorationtype="strike"])') : null;
+    if (tezPrice) {
+      const val = Number((tezPrice.getAttribute('aria-label') || '').replace(/[₹,\s]/g, ''));
+      if (val >= 5 && val <= 500000) price = val;
+    }
+
 
     const priceEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="EdlpPrice"], [data-testid*="price"], [data-testid*="item_price"], [data-testid*="offer-price"], span.a-price span.a-offscreen, span.a-price .a-price-whole, span.a-price, span.a-color-price, [class*="a-price"], div.hZ3P6w, div.Nx9bqj, div._30jeq3, div._1vC4OE, [class*="hZ3P6w"], [class*="Nx9bqj"], [class*="_30jeq3"], [class*="_2jn41"], [class*="_1yW90"], [class*="_3-M84"]') : null;
-    if (priceEl) {
+    if (!price && priceEl) {
       const pTxt = getSpacedText(priceEl).trim();
       const m = pTxt.replace(/,/g, "").match(/([0-9]+(?:\.[0-9]+)?)/);
       if (m) {
@@ -221,7 +237,7 @@
     }
 
     if (!price || isNaN(price)) {
-      const literalMatch = spacedCardText.match(/(?:₹|Rs\.?|INR)\s*([0-9,]+(?:\.[0-9]+)?)/i);
+      const literalMatch = spacedCardText.match(/(?:₹|\bRs\.?|\bINR\b)\s*([0-9,]+(?:\.[0-9]+)?)/i);
       if (literalMatch) {
         const val = parseFloat(literalMatch[1].replace(/,/g, ""));
         if (val >= 5 && val <= 500000) price = val;
@@ -309,7 +325,7 @@
 
     // 4. Pack size
     const qtyEl = cardNode.querySelector ? cardNode.querySelector('[data-slot-id="PackSize"], [data-testid*="quantity"], [data-testid*="weight"], [data-testid*="item_quantity"], [class*="PackSize"], [class*="weight"], [class*="quantity"], span[class*="pack"], span[class*="unit"]') : null;
-    const quantity = qtyEl ? qtyEl.textContent.trim() : "1 unit";
+    const quantity = extractQuantity(qtyEl?.textContent || '') || extractQuantity(title) || extractQuantity(spacedCardText) || '';
 
     // 5. MRP (Check slashed / strikethrough elements)
     const mrpEl = cardNode.querySelector ? cardNode.querySelector('span.a-price.a-text-price span.a-offscreen, span[data-a-strike="true"], span.a-text-price, div.kRYCnD, div.yRaY8j, div._3I9_wc, [class*="kRYCnD"], [class*="yRaY8j"], [class*="_3I9_wc"], s, del, strike, [class*="strike"], [class*="slashed"], [class*="_3eAjW"], [class*="cx3iWL"], [style*="line-through"], [data-slot-id*="mrp"], [class*="mrp"]') : null;
@@ -508,7 +524,7 @@
     // image insertion and drops real cards during early passes.
     let cards = allMatched.filter((c) => {
       const t = c.textContent || "";
-      if (/(?:₹|Rs\.?|INR)\s*[0-9,]{1,6}/i.test(t)) return true;
+      if (/(?:₹|\bRs\.?|\bINR\b)\s*[0-9,]{1,6}/i.test(t)) return true;
       for (const el of c.querySelectorAll("div, span, p")) {
         if (el.children && el.children.length > 0) continue;
         if (/^[0-9]{1,6}$/.test((el.textContent || "").trim())) return true;
@@ -573,7 +589,7 @@
         for (const el of allEls) {
           if (++scanned > 600) break;
           const text = el.textContent || '';
-          if (/(?:₹|Rs\.?|INR)\s*[0-9,]+/i.test(text) && text.length < 30) {
+          if (/(?:₹|\bRs\.?|\bINR\b)\s*[0-9,]+/i.test(text) && text.length < 30) {
             let parent = el.parentElement;
             let depth = 0;
             while (parent && depth < 6 && parent !== document.body) {
@@ -736,6 +752,7 @@
     // excludes script/style bundles so a loading shell can't match.
     // Only called when zero candidates were extracted.
     const bodyText = visibleBodyText();
+    if (/log ?in to continue|please log ?in|enter (?:your )?(?:mobile|phone) number/i.test(bodyText)) return false;
     return /(?:no\s+results\s+for\s+[^.]*check\s+your\s+spelling|no\s+results\s+found\s+for|we\s+couldn't\s+find\s+any\s+results|could\s+not\s+find\s+any\s+results|did\s+not\s+match\s+any\s+products|no\s+products\s+found\s+for|0\s+items\s+found\s+for|nothing\s+here\s+yet|sorry|couldn'?t\s+find|could\s+not\s+find)/i.test(bodyText) ||
       !!(document.querySelector && document.querySelector('.s-no-outline, [data-component-type="s-no-results-found"], [data-testid="no-results-container"], [class*="noResults"], [class*="EmptyState"]'));
   }

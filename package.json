@@ -8,7 +8,10 @@
     "start": "npm --prefix mobile start",
     "android": "npm --prefix mobile run android",
     "ios": "npm --prefix mobile run ios",
-    "mobile": "npm --prefix mobile start"
+    "mobile": "npm --prefix mobile start",
+    "build:extension": "node scripts/build-extension-core.cjs",
+    "check:extension": "node scripts/build-extension-core.cjs --check",
+    "test:extension": "node scripts/build-extension-core.cjs --check && node tests/extension-ui.smoke.cjs"
   },
   "keywords": [
     "chrome-extension",

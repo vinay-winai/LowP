@@ -58,6 +58,23 @@ A fast, lightweight, and privacy-first real-time price comparator available as a
 3. Click **Load unpacked** and select this folder.
 4. Click the **LowP** icon in your toolbar to start comparing!
 
+The extension uses the mobile app's light theme, product-based comparisons,
+effective size-adjusted prices, editable comparison items, store offers, and
+local search history (1,000 unique searches; up to 10 suggestions after 180 ms).
+Find title searches one selected store; choosing a title searches your pack.
+Store Sync, address management, and the mobile search-limit toggle are not included.
+The existing fullscreen/maximized-window safeguard remains in place.
+
+After pulling changes, click **Reload** on LowP in `chrome://extensions` and reopen
+the side panel. Saved packs and comparisons are retained.
+
+The browser bundle of shared mobile logic is checked in. To regenerate it after
+changing the platform-independent mobile core, install `mobile` dependencies and
+run `npm run build:extension`. Run `npm test` for logic tests and
+`npm run test:extension` for browser UI checks (requires Playwright Chromium).
+Browser checks use deterministic store fixtures; live store availability still
+depends on the user's store sessions and delivery locations.
+
 ### Android Mobile App
 Android apk available for [download](https://github.com/vinay-winai/LowP/releases/tag/v0.2.0). 
 

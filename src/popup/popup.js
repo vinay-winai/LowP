@@ -3,6 +3,7 @@
  */
 
 document.addEventListener("DOMContentLoaded", () => {
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   const searchInput = document.getElementById("searchInput");
   const searchBtn = document.getElementById("searchBtn");
   const cardsGrid = document.getElementById("cardsGrid");
@@ -27,6 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let currentResults = [];
   let strategyMatrixRows = [];
+  let searchGeneration = 0;
 
   const addToMatrixBtn = document.getElementById("addToMatrixBtn");
   const addToMatrixText = document.getElementById("addToMatrixText");
@@ -64,9 +66,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Load saved Strategy Matrix from storage
   if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-    chrome.storage.local.get(["lowp_strategy_matrix"], (res) => {
-      if (res && res.lowp_strategy_matrix && Array.isArray(res.lowp_strategy_matrix)) {
-        strategyMatrixRows = res.lowp_strategy_matrix;
+    chrome.storage.local.get(["lowp_comparison_rows_v2", "lowp_strategy_matrix"], (res) => {
+      const saved = res.lowp_comparison_rows_v2 || res.lowp_strategy_matrix;
+      if (Array.isArray(saved) && !strategyMatrixRows.length) {
+        strategyMatrixRows = saved.filter(row => row && row.stores).map(row => ({...row, stores: Object.fromEntries(Object.entries(row.stores).map(([id,cell]) => {
+          const item = cell.item || (cell.isAvailable && cell.title ? {id: cell.title, title: cell.title, quantity:'', price:cell.price, mrp:cell.mrp, productUrl:cell.productUrl, image:'', brand:''} : null);
+          return [id, {...cell, item, candidates: cell.candidates || (item ? [item] : []), isComparable: cell.isComparable ?? cell.isAvailable}];
+        }))}));
         updateMatrixBadges();
       }
     });
@@ -74,7 +80,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function saveMatrixToStorage() {
     if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.set({ lowp_strategy_matrix: strategyMatrixRows });
+      chrome.storage.local.set({ lowp_comparison_rows_v2: strategyMatrixRows });
     }
     updateMatrixBadges();
   }
@@ -82,7 +88,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function updateMatrixBadges() {
     const count = strategyMatrixRows.length;
     if (matrixCount) matrixCount.textContent = count;
-    if (matrixItemCountText) matrixItemCountText.textContent = `${count} ${count === 1 ? 'Item' : 'Items'} in Basket • Multi-Store Arbitrage`;
+    if (matrixItemCountText) matrixItemCountText.textContent = `${count} ${count === 1 ? 'item' : 'items'} in comparison`;
   }
 
   const ALL_STORES_META = {
@@ -216,10 +222,10 @@ document.addEventListener("DOMContentLoaded", () => {
       pill.setAttribute("aria-selected", isActive ? "true" : "false");
       pill.title = `${col.name} — click to compare, ✎ to edit`;
 
-      const emojiSpan = col.emoji ? `<span aria-hidden="true">${col.emoji}</span>` : '';
+      const emojiSpan = col.emoji ? `<span aria-hidden="true">${esc(col.emoji)}</span>` : '';
       // Every pack (built-in or created) is editable — the edit affordance is
       // a real button with a finger-sized hit area, not a tiny glyph span.
-      pill.innerHTML = `${emojiSpan}<span class="pill-name">${col.name}</span><button type="button" class="pill-edit-btn" title="Edit ${col.name}" aria-label="Edit ${col.name}">✎</button>`;
+      pill.innerHTML = `${emojiSpan}<span class="pill-name">${esc(col.name)}</span><button type="button" class="pill-edit-btn" title="Edit ${esc(col.name)}" aria-label="Edit ${esc(col.name)}">✎</button>`;
 
       pill.addEventListener("click", (e) => {
         if (e.target.closest(".pill-edit-btn")) {
@@ -448,20 +454,30 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function disconnectSearchPort() {
     if (activeSearchPort) {
-      try { activeSearchPort.disconnect(); } catch (e) {}
+      const previous = activeSearchPort;
       activeSearchPort = null;
+      try { previous.disconnect(); } catch (e) {}
     }
   }
 
   function finishSearch(results, { error = null } = {}) {
     loadingState.style.display = "none";
     if (error) {
-      cardsGrid.innerHTML = `<div class="error-msg" style="text-align:center; padding:20px; color:#EF4444;">Search failed: ${error}</div>`;
+      cardsGrid.innerHTML = `<div class="error-msg" style="text-align:center; padding:20px; color:#EF4444;">Search failed: ${esc(error)}</div>`;
       updateDebugLogs();
       return;
     }
     currentResults = results;
     renderCards(results);
+    if (resultTitleStore) setResultMeta('Searched from ' + ALL_STORES_META[resultTitleStore].name);
+    const flipkart = currentResults.find(store => store.platformId === 'flipkart');
+    const controller = detailAbort;
+    if (flipkart && controller) C.enrichFlipkartQuantities(flipkart.candidates, controller.signal, (item, quantity) => {
+      if (controller.signal.aborted) return;
+      const current = currentResults.find(store => store.platformId === 'flipkart');
+      current?.candidates.filter(candidate => candidate.productUrl === item.productUrl).forEach(candidate => {candidate.quantity = quantity;});
+      renderCards(currentResults);
+    });
     updateDebugLogs();
 
     // Enable Add to Matrix if any price is available
@@ -476,7 +492,18 @@ document.addEventListener("DOMContentLoaded", () => {
     return current ? current.storeIds : ["amazon_tez", "instamart", "zepto", "blinkit"];
   }
 
-  function performSearch(query) {
+  async function performSearch(query, forcePack = false) {
+    if (!query.trim()) return;
+    const generation = ++searchGeneration;
+    await prefsReady;
+    if (generation !== searchGeneration) return;
+    resultTitleStore = forcePack ? null : titleStore;
+    openMatrixBtn.hidden = !!resultTitleStore;
+    history = C.normalizeSearchHistory([query,...history]);
+    chrome.storage.local.set({lowp_search_history_v1: history});
+    closeHistory(); searchInput.blur(); selectedComparison = null;
+    detailAbort?.abort();
+    detailAbort = new AbortController();
     loadingState.style.display = "flex";
     cardsGrid.innerHTML = "";
     currentResults = [];
@@ -484,7 +511,7 @@ document.addEventListener("DOMContentLoaded", () => {
     disconnectSearchPort();
     setResultMeta(null);
 
-    const storeIds = getActiveStoreIds();
+    const storeIds = resultTitleStore ? [resultTitleStore] : getActiveStoreIds();
 
     if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.connect) {
       legacySearch(query, storeIds);
@@ -503,10 +530,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const port = activeSearchPort;
 
     port.onMessage.addListener((msg) => {
-      if (!msg || typeof msg.type !== "string") return;
+      if (activeSearchPort !== port || !msg || typeof msg.type !== "string") return;
 
       if (msg.type === "RESULT" && msg.store) {
-        results.push(msg.store);
+        const previous = results.findIndex(s => s.platformId === msg.store.platformId);
+        if (previous >= 0) results[previous] = msg.store; else results.push(msg.store);
         loadingState.style.display = "none";
         render();
         updateDebugLogs();
@@ -539,7 +567,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     port.onDisconnect.addListener(() => {
-      if (activeSearchPort === port) activeSearchPort = null;
+      if (activeSearchPort !== port) return;
+      activeSearchPort = null;
       // If the worker died mid-stream, fall back to whatever arrived.
       if (results.length > 0) {
         finishSearch(results.slice());
@@ -551,10 +580,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function legacySearch(query, storeIds) {
     const startedAt = Date.now();
+    const generation = searchGeneration;
     chrome.runtime.sendMessage({
       action: "SEARCH_QUERY",
       payload: { query, storeIds }
     }, (response) => {
+      if (generation !== searchGeneration) return;
       loadingState.style.display = "none";
       if (response && response.success && response.data) {
         const cached = response.data.some((s) => s.cachedAt) ? " • from cache" : "";
@@ -569,400 +600,132 @@ document.addEventListener("DOMContentLoaded", () => {
           addToMatrixBtn.disabled = !hasPrice;
         }
       } else {
-        cardsGrid.innerHTML = `<div class="error-msg" style="text-align:center; padding:20px; color:#EF4444;">Search failed: ${response?.error || 'Unknown error'}</div>`;
+        cardsGrid.innerHTML = `<div class="error-msg" style="text-align:center; padding:20px; color:#EF4444;">Search failed: ${esc(response?.error || 'Unknown error')}</div>`;
         updateDebugLogs();
       }
     });
   }
 
-  // 5. Render Store Cards
-  function renderCards(results) {
-    const available = results.filter((store) => {
-      const candidates = Array.isArray(store.candidates) && store.candidates.length > 0
-        ? store.candidates
-        : (store.item ? [store.item] : []);
-      const index = Math.min(Math.max(Number.isInteger(store.selectedIndex) ? store.selectedIndex : 0, 0), Math.max(0, candidates.length - 1));
-      return store.isAvailable && Number(candidates[index]?.price) > 0;
-    });
-    const lowestPrice = available.length > 0
-      ? Math.min(...available.map((store) => {
-        const candidates = Array.isArray(store.candidates) && store.candidates.length > 0 ? store.candidates : [store.item];
-        return Number(candidates[store.selectedIndex || 0]?.price);
-      }))
-      : null;
-    results.forEach((store) => {
-      const candidates = Array.isArray(store.candidates) && store.candidates.length > 0 ? store.candidates : [store.item];
-      store.isLowestPrice = lowestPrice !== null && Number(candidates[store.selectedIndex || 0]?.price) === lowestPrice;
-    });
-    cardsGrid.innerHTML = "";
-
-    results.forEach((store) => {
-      const card = document.createElement("div");
-      card.className = `store-card ${store.isLowestPrice ? 'highlight-lowest' : ''}`;
-
-      const candidates = Array.isArray(store.candidates) && store.candidates.length > 0
-        ? store.candidates
-        : (store.item ? [store.item] : []);
-      const selectedIndex = Math.min(Math.max(Number.isInteger(store.selectedIndex) ? store.selectedIndex : 0, 0), Math.max(0, candidates.length - 1));
-      const selectedItem = candidates[selectedIndex] || store.item;
-      const selectedPrice = Number(selectedItem?.price) || 0;
-
-      const storeColors = {
-        amazon_tez: "#FF9900",
-        instamart: "#FC8019",
-        zepto: "#7C3AED",
-        blinkit: "#F8CB46"
-      };
-
-      const bgColor = storeColors[store.platformId] || "#38BDF8";
-      const textColor = store.platformId === "blinkit" ? "#111827" : "#FFFFFF";
-      const hasPrice = store.isAvailable && selectedPrice > 0;
-
-      let badgesHtml = "";
-      if (store.isLowestPrice && hasPrice) badgesHtml += `<span class="badge badge-lowest">🏆 Lowest Price</span>`;
-      if (store.cachedAt && hasPrice) badgesHtml += `<span class="badge" style="background:rgba(148,163,184,0.2);color:var(--text-sub);">⚡ Cached</span>`;
-      if (typeof store.durationMs === "number" && store.durationMs >= 0) {
-        badgesHtml += `<span class="badge" style="background:rgba(148,163,184,0.15);color:var(--text-sub);">${(store.durationMs / 1000).toFixed(2)}s</span>`;
-      }
-
-      let priceHtml = "";
-      if (hasPrice) {
-        priceHtml = `
-          <div class="price-box">
-            <span class="price-main">₹${selectedPrice}</span>
-          </div>
-        `;
-      } else {
-        priceHtml = `
-          <div class="price-box">
-            <span class="price-main" style="font-size: 13px; color: var(--text-sub);">Item unavailable</span>
-          </div>
-        `;
-      }
-
-      const itemInfoHtml = hasPrice
-        ? `
-            <span class="item-title">${selectedItem?.title || store.platformName}</span>
-            <span class="item-brand">${selectedItem?.brand || store.platformName} • ${selectedItem?.quantity || '1 unit'}</span>
-          `
-        : "";
-
-      card.innerHTML = `
-        <div class="card-header">
-          <div class="store-identity">
-            <span class="store-pill" style="background: ${bgColor}; color: ${textColor}; font-weight: 700;">${store.platformName}</span>
-          </div>
-          <div class="badges-row">
-            ${badgesHtml}
-          </div>
-        </div>
-
-        <div class="card-body">
-          <div class="item-info">
-            ${itemInfoHtml}
-          </div>
-          ${priceHtml}
-        </div>
-
-        ${candidates.length > 1 ? `
-          <div class="candidate-switcher" style="display:flex;align-items:center;justify-content:center;gap:8px;margin:8px 0;font-size:11px;color:var(--text-sub);">
-            <button type="button" class="candidate-prev" data-platform-id="${store.platformId}" aria-label="Previous match" ${selectedIndex === 0 ? 'disabled' : ''}>‹</button>
-            <span>Match ${selectedIndex + 1} of ${candidates.length}</span>
-            <button type="button" class="candidate-next" data-platform-id="${store.platformId}" aria-label="Next match" ${selectedIndex >= candidates.length - 1 ? 'disabled' : ''}>›</button>
-          </div>
-        ` : ''}
-
-        <div class="card-action">
-          ${(store.globalUrl || store.searchUrl) && (store.globalUrl !== (selectedItem?.productUrl || store.productUrl)) ? `
-            <a href="${store.globalUrl || store.searchUrl}" target="_blank" class="store-global-link" title="Global search on ${store.platformName}">
-              🔍 Search Store
-            </a>
-          ` : ''}
-          <a href="${selectedItem?.productUrl || store.productUrl || store.globalUrl || store.searchUrl}" target="_blank" class="store-link">
-            ${hasPrice ? `Get on ${store.platformName} →` : `Search on ${store.platformName} →`}
-          </a>
-        </div>
-      `;
-
-      cardsGrid.appendChild(card);
-    });
+  const C = LowPCore;
+  const safeUrl = value => {try {const u = new URL(value); return ['https:', 'http:'].includes(u.protocol) ? esc(u.href) : '#';} catch {return '#';}};
+  let offers = {}, history = [], titleStore = null, resultTitleStore = null;
+  let historyTimer, focusedHistory = false, selectedComparison = null, detailAbort = null;
+  const historyList = document.getElementById('historyList');
+  const findTitle = document.getElementById('findTitle');
+  const titleBanner = document.getElementById('titleBanner');
+  const prefsReady = chrome.storage.local.get(['lowp_search_history_v1','lowp_find_title_store','lowp_store_offers_v1']).then(saved => {
+    history = C.normalizeSearchHistory([...history, ...C.normalizeSearchHistory(saved.lowp_search_history_v1)]);
+    titleStore = ALL_STORES_META[saved.lowp_find_title_store] ? saved.lowp_find_title_store : null;
+    offers = saved.lowp_store_offers_v1 || {};
+    findTitle.value = titleStore || '';
+    updateTitleMode();
+  }).catch(() => {updateTitleMode();});
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.lowp_store_offers_v1) {
+      offers = changes.lowp_store_offers_v1.newValue || {};
+      if (matrixModalBackdrop.style.display !== 'none') renderMatrixModal();
+    }
+  });
+  Object.values(ALL_STORES_META).forEach(store => {
+    const option = document.createElement('option'); option.value = store.id; option.textContent = store.name; findTitle.appendChild(option);
+  });
+  function updateTitleMode() {
+    titleBanner.hidden = !titleStore;
+    document.getElementById('titleModeText').textContent = titleStore ? `Find title is on · ${ALL_STORES_META[titleStore].name}` : '';
+    openMatrixBtn.hidden = !!resultTitleStore;
+    if (currentResults.length) renderCards(currentResults);
   }
+  findTitle.addEventListener('change', () => {titleStore = findTitle.value || null; chrome.storage.local.set({lowp_find_title_store: titleStore}); updateTitleMode();});
+  document.getElementById('turnOffTitle').addEventListener('click', () => {titleStore = null; findTitle.value = ''; chrome.storage.local.set({lowp_find_title_store: null}); updateTitleMode();});
+  const quickTags = document.getElementById('quickTags');
+  ['milk','curd','potato','banana','atta','toor dal'].forEach(term => {const button = document.createElement('button'); button.textContent = term; button.onclick = () => {searchInput.value = term; performSearch(term);}; quickTags.appendChild(button);});
+  function closeHistory() {clearTimeout(historyTimer); focusedHistory = false; historyList.hidden = true;}
+  function showHistory() {
+    if (!focusedHistory) return;
+    historyList.style.top = `${searchInput.parentElement.offsetTop + searchInput.parentElement.offsetHeight - 1}px`;
+    const room = (window.visualViewport?.height || innerHeight) - searchInput.parentElement.getBoundingClientRect().bottom - 8;
+    const matches = C.historyMatches(history, searchInput.value).slice(0, Math.max(0, Math.min(10, Math.floor(room / 40))));
+    historyList.replaceChildren();
+    matches.forEach(term => {const button = document.createElement('button'); button.type = 'button'; button.setAttribute('role','option');
+      const index = term.toLowerCase().indexOf(searchInput.value.trim().toLowerCase()), n = searchInput.value.trim().length;
+      button.innerHTML = `<span aria-hidden="true">⌕</span><span class="history-term">${index >= 0 && n ? `${esc(term.slice(0,index))}<span class="typed">${esc(term.slice(index,index+n))}</span>${esc(term.slice(index+n))}` : esc(term)}</span>`;
+      button.title = term; button.onmousedown = event => event.preventDefault(); button.onclick = () => {searchInput.value = term; performSearch(term);}; historyList.appendChild(button);
+    });
+    historyList.hidden = !matches.length;
+  }
+  searchInput.addEventListener('focus', () => {focusedHistory = true; showHistory();});
+  searchInput.addEventListener('blur', event => {if (!historyList.contains(event.relatedTarget)) closeHistory();});
+  searchInput.addEventListener('input', () => {clearTimeout(historyTimer); historyList.hidden = true; focusedHistory = true; if (!searchInput.value.trim()) showHistory(); else historyTimer = setTimeout(showHistory,180);});
+  searchInput.addEventListener('keydown', event => {if (event.key === 'Escape') closeHistory(); if (event.key === 'ArrowDown' && !historyList.hidden) {event.preventDefault();historyList.querySelector('button')?.focus();}});
+  document.addEventListener('click', event => {if (!event.target.closest('.search-section')) closeHistory();});
+  window.addEventListener('resize', showHistory);
+  historyList.addEventListener('keydown', event => {if (event.key === 'Escape') {closeHistory();searchInput.focus();historyList.hidden=true;} });
+  historyList.addEventListener('focusout', event => {if (event.relatedTarget !== searchInput && !historyList.contains(event.relatedTarget)) closeHistory();});
 
-  cardsGrid.addEventListener("click", (event) => {
-    const button = event.target.closest(".candidate-prev, .candidate-next");
-    if (!button) return;
-    const store = currentResults.find((result) => result.platformId === button.dataset.platformId);
-    if (!store || !Array.isArray(store.candidates) || store.candidates.length < 2) return;
-    const delta = button.classList.contains("candidate-next") ? 1 : -1;
-    const current = Number.isInteger(store.selectedIndex) ? store.selectedIndex : 0;
-    store.selectedIndex = Math.min(Math.max(current + delta, 0), store.candidates.length - 1);
-    const selected = store.candidates[store.selectedIndex];
-    store.item = selected;
-    store.productUrl = selected.productUrl || store.productUrl;
-    store.globalUrl = selected.globalUrl || store.globalUrl;
-    store.searchUrl = selected.searchUrl || store.searchUrl;
-    const price = Number(selected.price) || 0;
-    const mrp = Number(selected.mrp) || price;
-    const savings = Math.max(0, mrp - price);
-    store.priceBreakdown = { basePrice: price, finalPayable: price, savings, discountPercent: mrp > 0 ? Math.round((savings / mrp) * 100) : 0 };
-    renderCards(currentResults);
+  function normalizeResults(results) {
+    return results.map(store => ({...store, candidates: (store.candidates?.length ? store.candidates : store.item ? [store.item] : []).slice(0,3).map(item => ({...item, quantity: C.MatchingEngine.extractQuantity(item.quantity || '') || C.MatchingEngine.extractQuantity(item.title || '') || (item.quantity !== '1 unit' ? item.quantity : '') || ''}))}));
+  }
+  function renderCards(results) {
+    currentResults = normalizeResults(results);
+    if (selectedComparison) currentResults = C.reshuffleMatches(currentResults, selectedComparison);
+    cardsGrid.innerHTML = currentResults.map(store => `<section class="store-card"><div class="card-header"><h3>${esc(store.platformName)}</h3><span class="muted">${store.durationMs != null ? `${(store.durationMs/1000).toFixed(2)}s` : ''}</span></div>
+      ${store.candidates.length ? store.candidates.map((item,index) => {
+        const selected = selectedComparison?.stores[store.platformId]?.item;
+        const active = selected && selected.title === item.title && selected.price === item.price;
+        return `<article class="product ${active ? 'selected' : ''}"><div class="product-heading"><strong>${esc(item.title)}</strong><button data-search-title="${store.platformId}" data-index="${index}" title="Search this title and size" aria-label="Search ${esc(item.title)}">⌕</button></div><div class="product-details"><span>${esc(item.quantity)}</span><b>₹${item.price}</b></div><div class="product-actions">${resultTitleStore ? `<button data-search-title="${store.platformId}" data-index="${index}">Use this title</button>` : `<button data-compare="${store.platformId}" data-index="${index}">Compare this</button>`}<a target="_blank" rel="noopener" href="${safeUrl(item.productUrl || store.searchUrl || store.productUrl)}">View in store ↗</a></div></article>`;
+      }).join('') : `<p class="empty-state">No products returned. Try again or open the store.</p><a href="${safeUrl(store.searchUrl || store.globalUrl || store.productUrl)}" target="_blank" rel="noopener">Open store ↗</a>`}</section>`).join('');
+  }
+  cardsGrid.addEventListener('click', event => {
+    const button = event.target.closest('button[data-compare],button[data-search-title]'); if (!button) return;
+    const id = button.dataset.compare || button.dataset.searchTitle, store = currentResults.find(s => s.platformId === id), item = store?.candidates[Number(button.dataset.index)]; if (!item) return;
+    if (button.dataset.searchTitle) {const term = C.productSearchTitle(item); searchInput.value = term; performSearch(term, true); return;}
+    const row = C.compareProduct(store,item,currentResults,searchInput.value);
+    selectedComparison = row;
+    const existing = strategyMatrixRows.findIndex(r => r.selectionKey === row.selectionKey);
+    if (existing >= 0) strategyMatrixRows[existing] = row; else strategyMatrixRows.push(row);
+    saveMatrixToStorage(); renderCards(currentResults); openMatrixModal();
+  });
+  function openMatrixModal() {renderMatrixModal(); matrixModalBackdrop.style.display = 'flex';}
+  function closeMatrixModal() {matrixModalBackdrop.style.display = 'none';}
+  openMatrixBtn.addEventListener('click',openMatrixModal);
+  closeMatrixBtn.addEventListener('click',closeMatrixModal);
+  clearMatrixBtn.addEventListener('click', () => {strategyMatrixRows = []; selectedComparison = null; saveMatrixToStorage(); renderMatrixModal(); renderCards(currentResults);});
+  document.getElementById('shareComparison').addEventListener('click', async () => {
+    const text = strategyMatrixRows.map(C.refreshComparison).map(row => `${row.query}\n${Object.values(row.stores).map(cell => `${cell.platformName}: ${cell.isAvailable ? `₹${cell.effectivePrice ?? cell.price} — ${cell.item?.title || ''}${cell.effectiveQuantity ? ` (estimate for ${cell.effectiveQuantity}; actual pack ₹${cell.price})` : ''}` : 'No match'}`).join('\n')}`).join('\n\n');
+    try {await navigator.clipboard.writeText(text + '\n\nProduct prices only; check checkout fees and offer eligibility.'); document.getElementById('shareStatus').textContent='Comparison copied.';} catch {document.getElementById('shareStatus').textContent='Could not copy comparison.';}
+  });
+  function basketHtml(basket, incomplete = false) {
+    return `<section class="basket"><h4>${esc(basket.name)} · ₹${basket.effectiveTotal}</h4><p>Product subtotal ₹${basket.subtotal}</p>${basket.discount ? `<p>${basket.cardPercent}% card discount applied: −₹${basket.discount}</p>` : ''}${basket.cashback ? `<p>₹${basket.reachedThreshold} milestone cashback: −₹${basket.cashback}</p>` : ''}${basket.next ? `<p>₹${basket.next.remaining} more to reach ₹${basket.next.threshold} for ₹${basket.next.additional} additional cashback</p>` : ''}${incomplete ? `<p>${basket.count} items included. ${basket.missing.map(m => `${esc(m.title)} (${m.excluded ? 'excluded from total' : 'missing'})`).join('; ')}</p>` : ''}</section>`;
+  }
+  function renderMatrixModal() {
+    strategyMatrixRows = strategyMatrixRows.map(C.refreshComparison);
+    updateMatrixBadges();
+    if (!strategyMatrixRows.length) {matrixModalBody.innerHTML = '<p class="empty-state">Choose “Compare this” on a product to start your comparison.</p>'; return;}
+    const baskets = C.comparisonBaskets(strategyMatrixRows, offers);
+    matrixModalBody.innerHTML = `<h3>Complete basket</h3>${baskets.complete.length ? baskets.complete.map(b=>basketHtml(b)).join('') : '<p>No store has every item included yet.</p>'}<p class="muted">Totals use effective prices for your selected sizes. Check checkout fees and offer eligibility.</p>${baskets.incomplete.length ? `<h3>Incomplete stores</h3>${baskets.incomplete.map(b=>basketHtml(b,true)).join('')}` : ''}
+      ${strategyMatrixRows.map(row => `<section class="comparison-row"><div class="card-header"><h3>${esc(row.query)}</h3><button data-row-remove="${row.id}" aria-label="Remove comparison">×</button></div>${Object.values(row.stores).map(cell => `<article class="product ${cell.isCheapestInRow ? 'selected' : ''}"><div class="card-header"><strong>${esc(cell.platformName)}</strong><b>${cell.isAvailable ? `${cell.effectiveQuantity ? 'Effective ' : ''}₹${cell.effectivePrice ?? cell.price}` : '—'}</b></div><p>${esc(cell.item?.title || 'No close match')}</p><p class="muted">${esc(cell.item?.quantity || '')}${cell.effectiveQuantity ? ` · For ${esc(cell.effectiveQuantity)} · Actual pack ₹${cell.price}. Size-adjusted estimate.` : ''}</p>${cell.isAvailable && !cell.isComparable ? `<p class="muted">Price differs by more than 20%.</p><button data-edit="include" data-row="${row.id}" data-store="${cell.platformId}">Include in totals</button>` : ''}<div class="product-actions"><button data-edit="swap" data-row="${row.id}" data-store="${cell.platformId}">${cell.isAvailable ? 'Swap' : 'Add'}</button>${cell.isAvailable ? `<button data-edit="price" data-row="${row.id}" data-store="${cell.platformId}">Edit price</button><button data-edit="remove" data-row="${row.id}" data-store="${cell.platformId}">Remove</button><a href="${safeUrl(cell.productUrl)}" target="_blank" rel="noopener">View ↗</a>` : ''}</div></article>`).join('')}</section>`).join('')}`;
+  }
+  const editDialog = document.getElementById('editDialog'), editBody = document.getElementById('editBody');
+  document.getElementById('closeEdit').onclick = () => editDialog.close();
+  function applyEdit(rowId, id, edit) {strategyMatrixRows = strategyMatrixRows.map(row => row.id === rowId ? C.editComparisonCell(row,id,edit) : row); saveMatrixToStorage(); renderMatrixModal();}
+  matrixModalBody.addEventListener('click', event => {
+    const remove = event.target.closest('[data-row-remove]');
+    if (remove) {strategyMatrixRows = strategyMatrixRows.filter(row => row.id !== remove.dataset.rowRemove); saveMatrixToStorage(); renderMatrixModal(); return;}
+    const button = event.target.closest('[data-edit]'); if (!button) return;
+    const row = strategyMatrixRows.find(r => r.id === button.dataset.row), id = button.dataset.store, cell = row?.stores[id]; if (!cell) return;
+    const kind = button.dataset.edit;
+    if (kind === 'include' || kind === 'remove') return applyEdit(row.id,id,{kind});
+    if (kind === 'price') {
+      editBody.innerHTML = `<h3>Edit pack price</h3><form id="priceForm"><label>Price in rupees<input id="priceInput" inputmode="decimal" value="${cell.price}"></label><p id="priceError" role="alert"></p><button>Save price</button></form>`;
+      editBody.querySelector('form').onsubmit = event => {event.preventDefault();const price=C.parseComparisonPrice(editBody.querySelector('input').value); if(price===null){editBody.querySelector('#priceError').textContent='Enter a valid price greater than zero.';return;}applyEdit(row.id,id,{kind:'price',price});editDialog.close();};
+    } else {
+      editBody.innerHTML = `<h3>Choose product · ${esc(cell.platformName)}</h3>${(cell.candidates || []).map((item,index) => `<button class="product choice ${cell.item?.title===item.title && cell.item?.productUrl===item.productUrl ? 'selected' : ''}" data-choice="${index}"><strong>${esc(item.title)}</strong><span>${esc(item.quantity)} · ₹${item.price}</span></button>`).join('') || '<p>No candidates. Search this item again.</p>'}`;
+      editBody.querySelectorAll('[data-choice]').forEach(button => button.onclick=()=>{applyEdit(row.id,id,{kind:'swap',index:Number(button.dataset.choice)});editDialog.close();});
+    }
+    editDialog.showModal();
   });
 
-  // 6. Strategy Matrix Logic
-  if (addToMatrixBtn) {
-    addToMatrixBtn.addEventListener("click", () => {
-      const q = searchInput.value.trim();
-      if (!q || currentResults.length === 0) return;
 
-      const availableStores = currentResults.filter(s => s.isAvailable && s.priceBreakdown && s.priceBreakdown.finalPayable > 0);
-      if (availableStores.length === 0) return;
-
-      let minPrice = Infinity;
-      let cheapestStoreId = null;
-
-      availableStores.forEach(s => {
-        const p = s.priceBreakdown.finalPayable;
-        if (p < minPrice) {
-          minPrice = p;
-          cheapestStoreId = s.platformId;
-        }
-      });
-
-      const storeCells = {};
-      const STORES_LIST = [
-        { id: 'amazon_tez', name: 'Amazon Tez', color: '#FF9900' },
-        { id: 'instamart', name: 'Instamart', color: '#FC8019' },
-        { id: 'zepto', name: 'Zepto', color: '#7C3AED' },
-        { id: 'blinkit', name: 'Blinkit', color: '#F8CB46' },
-        { id: 'amazon_main', name: 'Amazon.in', color: '#FF9900' },
-        { id: 'flipkart', name: 'Flipkart', color: '#2874F0' }
-      ];
-
-      STORES_LIST.forEach(s => {
-        const storeMatch = currentResults.find(r => r.platformId === s.id);
-        const hasPrice = storeMatch && storeMatch.isAvailable && storeMatch.priceBreakdown && storeMatch.priceBreakdown.finalPayable > 0;
-        storeCells[s.id] = {
-          platformId: s.id,
-          platformName: s.name,
-          isAvailable: !!hasPrice,
-          title: hasPrice ? (storeMatch.item?.title || s.name) : '',
-          price: hasPrice ? storeMatch.priceBreakdown.finalPayable : 0,
-          mrp: hasPrice ? (storeMatch.item?.mrp || storeMatch.priceBreakdown.finalPayable) : 0,
-          productUrl: hasPrice ? storeMatch.productUrl : '#',
-          isCheapestInRow: s.id === cheapestStoreId
-        };
-      });
-
-      const newRow = {
-        id: `matrix_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-        query: q,
-        addedAt: Date.now(),
-        stores: storeCells,
-        cheapestPrice: minPrice < Infinity ? minPrice : 0,
-        cheapestStoreId
-      };
-
-      strategyMatrixRows.push(newRow);
-      saveMatrixToStorage();
-
-      // Feedback animation on Add Button
-      const origText = addToMatrixText.textContent;
-      addToMatrixText.textContent = "✅ Added to Matrix!";
-      addToMatrixBtn.style.background = "#10B981";
-      setTimeout(() => {
-        addToMatrixText.textContent = origText;
-        addToMatrixBtn.style.background = "";
-      }, 1800);
-    });
-  }
-
-  function openMatrixModal() {
-    renderMatrixModal();
-    if (matrixModalBackdrop) matrixModalBackdrop.style.display = "flex";
-  }
-
-  function closeMatrixModal() {
-    if (matrixModalBackdrop) matrixModalBackdrop.style.display = "none";
-  }
-
-  if (viewMatrixBtn) viewMatrixBtn.addEventListener("click", openMatrixModal);
-  if (openMatrixBtn) openMatrixBtn.addEventListener("click", openMatrixModal);
-  if (closeMatrixBtn) closeMatrixBtn.addEventListener("click", closeMatrixModal);
-
-  if (clearMatrixBtn) {
-    clearMatrixBtn.addEventListener("click", () => {
-      strategyMatrixRows = [];
-      saveMatrixToStorage();
-      renderMatrixModal();
-    });
-  }
-
-  function renderMatrixModal() {
-    if (!matrixModalBody) return;
-    updateMatrixBadges();
-
-    if (strategyMatrixRows.length === 0) {
-      matrixModalBody.innerHTML = `
-        <div class="matrix-empty">
-          <span style="font-size: 40px;">🛒</span>
-          <h4>Your Basket is Empty</h4>
-          <p>Search groceries and click <strong>"+ Add to Strategy Matrix"</strong> to compare multi-store totals & calculate split savings!</p>
-        </div>
-      `;
-      return;
-    }
-
-    const STORES_LIST = [
-      { id: 'amazon_tez', name: 'Amazon Tez', color: '#FF9900' },
-      { id: 'instamart', name: 'Instamart', color: '#FC8019' },
-      { id: 'zepto', name: 'Zepto', color: '#7C3AED' },
-      { id: 'blinkit', name: 'Blinkit', color: '#F8CB46' },
-      { id: 'amazon_main', name: 'Amazon.in', color: '#FF9900' },
-      { id: 'flipkart', name: 'Flipkart', color: '#2874F0' }
-    ];
-
-    // Totals calculation
-    const storeTotals = {
-      amazon_tez: { total: 0, count: 0 },
-      instamart: { total: 0, count: 0 },
-      zepto: { total: 0, count: 0 },
-      blinkit: { total: 0, count: 0 },
-      amazon_main: { total: 0, count: 0 },
-      flipkart: { total: 0, count: 0 }
-    };
-
-    let optimalSplitTotal = 0;
-
-    strategyMatrixRows.forEach(row => {
-      optimalSplitTotal += row.cheapestPrice > 0 ? row.cheapestPrice : 0;
-      STORES_LIST.forEach(s => {
-        const c = row.stores[s.id];
-        if (c && c.isAvailable && c.price > 0) {
-          storeTotals[s.id].total += c.price;
-          storeTotals[s.id].count += 1;
-        }
-      });
-    });
-
-    let bestSingleStoreId = null;
-    let minSingleTotal = Infinity;
-
-    STORES_LIST.forEach(s => {
-      const st = storeTotals[s.id];
-      if (st.count === strategyMatrixRows.length) {
-        if (st.total < minSingleTotal) {
-          minSingleTotal = st.total;
-          bestSingleStoreId = s.id;
-        }
-      }
-    });
-
-    const bestStoreObj = STORES_LIST.find(s => s.id === bestSingleStoreId);
-    const arbitrageSavings = minSingleTotal < Infinity && optimalSplitTotal > 0 && minSingleTotal > optimalSplitTotal
-      ? minSingleTotal - optimalSplitTotal
-      : 0;
-
-    let html = `
-      <div class="matrix-summary-row">
-        <div class="matrix-stat-card optimal-stat-card">
-          <div class="stat-header">⚡ OPTIMAL SPLIT TOTAL</div>
-          <div class="stat-price">₹${optimalSplitTotal}</div>
-          ${arbitrageSavings > 0 ? `<div class="stat-sub-green">Save ₹${arbitrageSavings} (${Math.round((arbitrageSavings/minSingleTotal)*100)}%) vs single store!</div>` : `<div class="stat-sub">Cheapest combination across stores</div>`}
-        </div>
-
-        ${bestStoreObj ? `
-          <div class="matrix-stat-card">
-            <div class="stat-header">🏬 BEST SINGLE STORE</div>
-            <div class="stat-price">₹${minSingleTotal}</div>
-            <div class="stat-sub" style="color: ${bestStoreObj.color}; font-weight: 700;">${bestStoreObj.name}</div>
-          </div>
-        ` : ''}
-      </div>
-
-      <div class="matrix-table-container">
-        <table class="matrix-table">
-          <thead>
-            <tr>
-              <th class="th-item">Search Item</th>
-              ${STORES_LIST.map(s => `
-                <th class="th-store" style="border-top: 2px solid ${s.color};">
-                  <span class="store-dot" style="background: ${s.color};"></span>
-                  <span style="color: ${s.color}; font-weight: 700;">${s.name}</span>
-                </th>
-              `).join('')}
-            </tr>
-          </thead>
-          <tbody>
-            ${strategyMatrixRows.map((row, idx) => `
-              <tr>
-                <td class="td-item">
-                  <div class="td-item-wrap">
-                    <span class="td-query">${row.query}</span>
-                    <button class="delete-matrix-row-btn" data-row-id="${row.id}" title="Remove item">🗑️</button>
-                  </div>
-                </td>
-                ${STORES_LIST.map(s => {
-                  const c = row.stores[s.id];
-                  const isCheapest = c && c.isCheapestInRow && c.price > 0;
-                  if (c && c.isAvailable && c.price > 0) {
-                    return `
-                      <td class="td-store ${isCheapest ? 'td-cheapest' : ''}">
-                        ${isCheapest ? `<span class="matrix-lowest-badge">🏆 Lowest</span>` : ''}
-                        <div class="td-price">₹${c.price}</div>
-                        ${c.title ? `<div class="td-title" title="${c.title}">${c.title}</div>` : ''}
-                        <a href="${c.productUrl}" target="_blank" class="td-link">Buy →</a>
-                      </td>
-                    `;
-                  } else {
-                    return `
-                      <td class="td-store td-unavailable">
-                        <span class="td-dash">—</span>
-                        <span class="td-unavail-text">Unavailable</span>
-                      </td>
-                    `;
-                  }
-                }).join('')}
-              </tr>
-            `).join('')}
-          </tbody>
-          <tfoot>
-            <tr class="matrix-tfoot-row">
-              <td class="td-item">
-                <strong>Basket Total</strong>
-                <div style="font-size: 10px; color: #64748B;">Single store</div>
-              </td>
-              ${STORES_LIST.map(s => {
-                const st = storeTotals[s.id];
-                const isBest = s.id === bestSingleStoreId;
-                return `
-                  <td class="td-store ${isBest ? 'td-best-single' : ''}">
-                    ${isBest ? `<span class="matrix-lowest-badge">Best Single</span>` : ''}
-                    <div class="td-price" style="${isBest ? 'color: #10B981;' : ''}">₹${st.total}</div>
-                    <div style="font-size: 10px; color: #94A3B8;">${st.count}/${strategyMatrixRows.length} items</div>
-                  </td>
-                `;
-              }).join('')}
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    `;
-
-    matrixModalBody.innerHTML = html;
-
-    // Attach row delete listeners
-    const deleteBtns = matrixModalBody.querySelectorAll(".delete-matrix-row-btn");
-    deleteBtns.forEach(btn => {
-      btn.addEventListener("click", () => {
-        const rowId = btn.getAttribute("data-row-id");
-        strategyMatrixRows = strategyMatrixRows.filter(r => r.id !== rowId);
-        saveMatrixToStorage();
-        renderMatrixModal();
-      });
-    });
-  }
-
-  // 7. Debug Inspector Telemetry
   function updateDebugLogs() {
     // Skip the fetch/stringify/render cycle entirely while the drawer is
     // hidden — it runs on every card arrival otherwise.

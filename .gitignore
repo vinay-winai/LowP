@@ -3,3 +3,4 @@ scratch/
 *.log
 .DS_Store
 Thumbs.db
+output/playwright/

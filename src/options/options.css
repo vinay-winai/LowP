@@ -180,3 +180,5 @@ input {
   font-size: 14px;
   cursor: pointer;
 }
+:root {--bg-primary:#F8FAFC;--bg-card:#FFF;--border-color:#E2E8F0;--text-main:#0F172A;--text-sub:#64748B;--accent-blue:#1D4ED8;}
+p{line-height:1.6;}label{display:block;margin:12px 0 6px;}input,select,button{font:inherit;padding:9px;border:1px solid #CBD5E1;border-radius:6px;background:#FFF;color:#0F172A;}button{color:#1D4ED8;cursor:pointer;}h3{margin:18px 0 8px;font-size:15px;}.tier{display:flex;gap:8px;margin:8px 0;}.tier input{min-width:0;width:36%;}#offerStatus{color:#15803D;margin-top:12px;}

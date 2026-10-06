@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LowP - Hyperlocal Price Comparator</title>
+  <title>LowP - Hunt the lowest price with privacy</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
@@ -11,15 +11,15 @@
     <!-- Top Header -->
     <header class="header">
       <div class="brand">
-        <div class="logo-circle">⚡</div>
+        <img class="brand-logo" src="../../assets/loop-bag-logo.png" alt="LowP">
         <div>
           <h1 class="logo-title">LowP</h1>
-          <span class="logo-sub">Hyperlocal Real-Time Comparator</span>
+          <span class="logo-sub">Hunt the lowest price with privacy</span>
         </div>
       </div>
       <div class="header-actions">
-        <button id="openMatrixBtn" class="clear-cache-btn" title="View Strategy Matrix (Basket Optimizer)">📊 Matrix (<span id="matrixCount">0</span>)</button>
-        <button id="openSettingsBtn" class="settings-btn" title="Settings & Preferences">⚙️</button>
+        <button id="openMatrixBtn" class="clear-cache-btn" title="View comparison">Comparison (<span id="matrixCount">0</span>)</button>
+        <button id="openSettingsBtn" class="settings-btn" title="Settings & Preferences" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 3-1 3-3 1 1 3-2 2 2 2-1 3 3 1 1 3h6l1-3 3-1-1-3 2-2-2-2 1-3-3-1-1-3Z"/><circle cx="12" cy="12" r="3"/></svg></button>
       </div>
     </header>
 
@@ -42,6 +42,7 @@
           placeholder="Search products (e.g. Milky Mist high protein paneer 200g)..." 
           autocomplete="off"
         />
+        <select id="findTitle" aria-label="Find title in one store"><option value="">Find title</option></select>
         <button id="searchBtn" class="search-btn" title="Search">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <circle cx="11" cy="11" r="8"></circle>
@@ -50,16 +51,11 @@
         </button>
       </div>
 
+      <div id="historyList" class="history-list" role="listbox" aria-label="Search history" hidden></div>
+      <div id="titleBanner" class="title-banner" hidden><span id="titleModeText"></span><button id="turnOffTitle">Turn off Find title</button></div>
+      <div id="quickTags" class="quick-tags"></div>
       <!-- Strategy Matrix Action Bar -->
-      <div class="cart-action-bar" id="cartActionBar">
-        <button id="addToMatrixBtn" class="add-to-matrix-btn" disabled>
-          <span class="cart-btn-icon">🛒</span>
-          <span id="addToMatrixText">+ Add to Strategy Matrix</span>
-        </button>
-        <button id="viewMatrixBtn" class="view-matrix-btn">
-          <span>📊 View Matrix</span>
-        </button>
-      </div>
+
     </section>
 
     <!-- Collection Builder Modal -->
@@ -102,8 +98,8 @@
           <div class="matrix-modal-title-box">
             <span class="matrix-modal-icon">🛒</span>
             <div>
-              <h3 class="matrix-modal-title">Strategy Matrix</h3>
-              <span class="matrix-modal-sub" id="matrixItemCountText">0 Items in Basket • Multi-Store Arbitrage</span>
+              <h3 class="matrix-modal-title">Comparison</h3>
+              <span class="matrix-modal-sub" id="matrixItemCountText">0 items in comparison</span>
             </div>
           </div>
           <div class="matrix-modal-actions">
@@ -114,6 +110,7 @@
         <div class="modal-body matrix-modal-body" id="matrixModalBody">
           <!-- Injected dynamically -->
         </div>
+        <div class="comparison-footer"><button id="shareComparison">Copy comparison</button><span id="shareStatus" role="status"></span></div>
       </div>
     </div>
 
@@ -121,7 +118,7 @@
     <main class="results-section" id="resultsSection">
       <div class="loading-state" id="loadingState" style="display: none;">
         <div class="spinner"></div>
-        <p class="loading-text">Comparing live prices across Amazon, Instamart & Zepto...</p>
+        <p class="loading-text">Searching your stores…</p>
       </div>
 
       <div class="cards-grid" id="cardsGrid">
@@ -147,6 +144,8 @@
     </footer>
   </div>
 
+  <dialog id="editDialog"><button id="closeEdit" class="close-modal-btn" aria-label="Close product editor">×</button><div id="editBody"></div></dialog>
+  <script src="../shared/mobile-core.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
