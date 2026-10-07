@@ -484,3 +484,33 @@ test('MatchingEngine.applyTitleLengthBonus awards +20 for closest title length a
 
 
 
+
+
+test('WarmTabPool reuses an owned page without navigation and closes it after inactivity', async () => {
+  const originalTabs = chrome.tabs, originalWindows = chrome.windows;
+  const originalEntries = WarmTabPool.entries, originalHydrated = WarmTabPool.hydrated;
+  const updated = [], removed = [], windowUpdates = [];
+  WarmTabPool.entries = new Map(); WarmTabPool.hydrated = true;
+  chrome.tabs = {
+    get: async id => ({id, url:'https://www.zepto.com/search?query=milk'}),
+    update: async (...args) => updated.push(args)
+  };
+  chrome.windows = {
+    create: async () => ({id:81,tabs:[{id:82}]}),
+    get: async () => ({state: "normal", left: 700, top: 200}),
+    update: async (...args) => windowUpdates.push(args), remove: async id => removed.push(id)
+  };
+  try {
+    const first = await WarmTabPool.acquire('zepto','https://www.zepto.com/search?query=milk',false);
+    const second = await WarmTabPool.acquire('zepto','https://www.zepto.com/search?query=curd',false);
+    assert.equal(first.reused,false); assert.equal(second.reused,true);
+    assert.equal(first.tabId,second.tabId); assert.equal(updated.length,0);
+    assert.equal(windowUpdates.length,0, "Reuse must preserve window position and stacking");
+    await WarmTabPool.closeIdle(Date.now()+60000); assert.equal(removed.length,0);
+    await WarmTabPool.closeIdle(Date.now()+180000); assert.deepEqual(removed,[81]);
+    assert.equal(WarmTabPool.entries.size,0);
+  } finally {
+    chrome.tabs=originalTabs; chrome.windows=originalWindows;
+    WarmTabPool.entries=originalEntries; WarmTabPool.hydrated=originalHydrated;
+  }
+});

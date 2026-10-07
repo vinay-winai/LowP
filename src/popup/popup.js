@@ -685,7 +685,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderCards(results) {
     currentResults = normalizeResults(results);
     if (selectedComparison) currentResults = C.reshuffleMatches(currentResults, selectedComparison);
-    cardsGrid.innerHTML = currentResults.map(store => `<section class="store-card"><div class="card-header"><h3>${esc(store.platformName)}</h3><span class="muted">${store.durationMs != null ? `${(store.durationMs/1000).toFixed(2)}s` : ''}</span></div>
+    cardsGrid.innerHTML = currentResults.map(store => `<section class="store-card" data-store="${esc(store.platformId)}"><div class="card-header"><h3>${esc(store.platformName)}</h3><span class="muted">${store.durationMs != null ? `${(store.durationMs/1000).toFixed(2)}s` : ''}</span></div>
       ${store.candidates.length ? store.candidates.map((item,index) => {
         const selected = selectedComparison?.stores[store.platformId]?.item;
         const active = selected && selected.title === item.title && selected.price === item.price;

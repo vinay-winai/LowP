@@ -299,7 +299,7 @@ class BaseProvider {
   }
 }
 
-async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
+async function inPageExtract(searchQuery, waitMs, expectedUrlToken, skipInitialState = false) {
   function titleKey(str) {
     // Drop parenthetical alt names so "Potato (Aalugadda)" and "Potato"
     // dedupe as the same product at the same price.
@@ -713,7 +713,7 @@ async function inPageExtract(searchQuery, waitMs, expectedUrlToken) {
     // 1. Next.js Structured State (__NEXT_DATA__)
     try {
       const nextEl = document.getElementById('__NEXT_DATA__');
-      if (nextEl && nextEl.textContent) {
+      if (!skipInitialState && nextEl && nextEl.textContent) {
         const nextJson = JSON.parse(nextEl.textContent);
         function walk(o) {
           if (!o || typeof o !== 'object') return;
@@ -1226,7 +1226,7 @@ async function extractDataFromTab(tabId, cleanQ, waitMs = 0, expectedUrlToken = 
 
 // Same as extractDataFromTab but also surfaces the in-page debug snapshot
 // (visibilityState/readyState), which the visibility self-healing uses.
-async function extractDataFromTabDetailed(tabId, cleanQ, waitMs = 0, expectedUrlToken = null) {
+async function extractDataFromTabDetailed(tabId, cleanQ, waitMs = 0, expectedUrlToken = null, skipInitialState = false) {
   let data = null;
   let debugInfo = null;
   let injectionFailed = false;
@@ -1237,7 +1237,7 @@ async function extractDataFromTabDetailed(tabId, cleanQ, waitMs = 0, expectedUrl
       const results = await chrome.scripting.executeScript({
         target: { tabId },
         func: inPageExtract,
-        args: [cleanQ, waitMs, expectedUrlToken]
+        args: [cleanQ, waitMs, expectedUrlToken, skipInitialState]
       });
       const res = results && results[0] ? results[0].result : null;
       if (res) {
@@ -1260,7 +1260,7 @@ async function extractDataFromTabDetailed(tabId, cleanQ, waitMs = 0, expectedUrl
   // that cost when direct injection actually failed — an empty result from a
   // successful injection already walked the same DOM and will be retried by
   // the caller's polling loop anyway.
-  if ((!data || !data.price) && injectionFailed) {
+  if (!skipInitialState && (!data || !data.price) && injectionFailed) {
     try {
       const res = await chrome.tabs.sendMessage(tabId, { action: "GET_PAGE_PRODUCT_DATA", query: cleanQ, waitMs: Math.min(800, waitMs), expectedUrlToken });
       if (res && res.data && res.data.price > 0) {
@@ -1331,7 +1331,7 @@ function firstPositive(promises) {
 // geometry restriction). It is no longer called by the search pipeline;
 // retained only so existing registries can be garbage-collected.
 // ==========================================
-const POOL_IDLE_CLOSE_MS = 60000;
+const POOL_IDLE_CLOSE_MS = 120000;
 const POOL_REGISTRY_KEY = "lowp_tab_pool_registry";
 const POOL_GC_ALARM = "lowp_tabpool_gc";
 
@@ -1399,10 +1399,13 @@ const WarmTabPool = {
     } catch (e) {}
   },
 
-  async acquire(platformId, url) {
+  async acquire(platformId, url, navigate = true) {
     if (typeof chrome === "undefined" || !chrome.tabs) return null;
     await this.hydrate();
 
+    // Cascade newly created windows only; preserve user positioning on reuse.
+    const slot = Math.max(0, ['zepto', 'blinkit', 'amazon_tez', 'instamart', 'amazon_main', 'flipkart'].indexOf(platformId));
+    const bounds = {left: 30, top: 30 + slot * 55, width: 480, height: 640};
     const canCreateWindows = !!(typeof chrome !== "undefined" && chrome.windows && chrome.windows.create);
     const existing = this.entries.get(platformId);
     if (existing) {
@@ -1412,18 +1415,18 @@ const WarmTabPool = {
         // to a real window when possible because hidden background tabs keep
         // document.visibilityState "hidden", which stalls client-side-
         // rendered stores (Swiggy, Zepto) indefinitely.
-        if (tab && !tab.discarded && (existing.windowId || !canCreateWindows)) {
+        if (tab && !tab.discarded && this.platformMatches(platformId, tab.url) && (existing.windowId || !canCreateWindows)) {
           existing.lastUsedAt = Date.now();
           await this._persist();
-          // Heal windows stuck in a frozen minimized/off-screen state. Note:
-          // `state` cannot be combined with bounds in one update call.
-          if (existing.windowId && chrome.windows && chrome.windows.update) {
+          // Preserve size, position and stacking on reuse. Only restore a
+          // minimized window, because minimized store pages can stop rendering.
+          if (existing.windowId && chrome.windows?.get && chrome.windows?.update) {
             try {
-              await chrome.windows.update(existing.windowId, { state: "normal", focused: false });
-              await chrome.windows.update(existing.windowId, { left: -350, top: 60, width: 420, height: 700 });
-            } catch (e) {}
+              const win = await chrome.windows.get(existing.windowId);
+              if (win.state === "minimized") await chrome.windows.update(existing.windowId, {state: "normal", focused: false});
+            } catch (_) {}
           }
-          await chrome.tabs.update(existing.tabId, { url });
+          if (navigate) await chrome.tabs.update(existing.tabId, { url });
           return { tabId: existing.tabId, reused: true, winId: existing.windowId };
         }
       } catch (e) {}
@@ -1433,14 +1436,10 @@ const WarmTabPool = {
     let winId = null;
     let tabId = null;
     if (canCreateWindows) {
-      // Chrome's occlusion tracker treats FULLY off-screen and minimized
-      // windows as hidden (visibilityState "hidden"), which stalls client-
-      // side hydration. A window with a thin sliver on the primary display's
-      // left edge is never occluded, so its renderer stays live, yet it is
-      // effectively invisible. Bounds cannot be reliably combined with a
-      // `state` value across Chrome builds, so `state` is omitted.
+      // Cascade rather than stacking at identical coordinates. This exposes
+      // part of each store window; a maximized host can still cover them.
       const strategies = [
-        { url, type: "popup", focused: false, left: -350, top: 60, width: 420, height: 700 },
+        { url, type: "popup", focused: false, ...bounds },
         { url, type: "popup", focused: false, width: 420, height: 700 },
         { url, type: "popup", focused: false }
       ];
@@ -1517,7 +1516,7 @@ const WarmTabPool = {
     await this.hydrate();
     for (const platformId of Array.from(this.entries.keys())) {
       const entry = this.entries.get(platformId);
-      if (entry && now - entry.lastUsedAt > POOL_IDLE_CLOSE_MS) {
+      if (entry && !storePageJobs.has(platformId) && now - entry.lastUsedAt > POOL_IDLE_CLOSE_MS) {
         await this.evict(platformId);
       }
     }
@@ -1563,81 +1562,84 @@ async function waitForPooledTabNavigation(tabId, expectedUrl, budgetMs) {
   return false;
 }
 
-// Ephemeral extraction strategy, restored verbatim from the known-good
-// 19789fb baseline: a fresh minimized window per store query plus patient
-// 500ms polling. A brand-new renderer hydrates reliably for all four stores,
-// and repeated polling gives slow client-side SPAs all the time they need.
-// Serial numbers for ephemeral scraper windows so concurrent opens do not
-// share one position (see the stagger comment inside fetchViaEphemeralTab).
-let ephemeralWindowSeq = 0;
+// Serialize access to each owned page so overlapping searches cannot scrape
+// or navigate another query's results.
+const storePageJobs = new Map();
+async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 9000) {
+  const platformId = WarmTabPool.detectPlatformId(url);
+  const previous = storePageJobs.get(platformId) || Promise.resolve();
+  const job = previous.catch(() => {}).then(() => fetchViaReusablePage(url, cleanQ, timeoutMs));
+  storePageJobs.set(platformId, job);
+  try { return await job; }
+  finally { if (storePageJobs.get(platformId) === job) storePageJobs.delete(platformId); }
+}
+
+// Runs in the page's main world so the store's own search handlers receive input.
+async function submitWarmStoreSearch(platformId, query) {
+  const configs = {
+    zepto: ['input[placeholder*="Search for"]', '[data-testid="product-card"]', 'query', '/search'],
+    instamart: ['input[data-testid="search-page-header-search-bar-input"]', '[data-testid="item-collection-card-full"]', 'query', '/instamart/search'],
+    blinkit: ['input[placeholder*="Search for"]', 'div[role="button"][id][data-pf]', 'q', '/s/'],
+    amazon_tez: ['input[data-testid="search-input"]', 'div[role="button"]:has(p[role="heading"])', 'searchKeyword', '/tez/browse/search']
+  };
+  const config = configs[platformId];
+  if (!config || location.pathname !== config[3]) return false;
+  const input = document.querySelector(config[0]);
+  const oldCards = Array.from(document.querySelectorAll(config[1]));
+  if (!input || input.disabled || input.readOnly || !oldCards.length) return false;
+  const normalize = value => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  // Refresh identical queries through navigation; do not return stale prices.
+  if (normalize(new URL(location.href).searchParams.get(config[2])) === normalize(query)) return false;
+  const formSubmit = platformId === 'instamart' || platformId === 'amazon_tez';
+  if (formSubmit && !input.form?.requestSubmit) return false;
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, query);
+  input.dispatchEvent(new Event('input', {bubbles: true}));
+  input.dispatchEvent(new Event('change', {bubbles: true}));
+  if (formSubmit) {
+    await new Promise(resolve => setTimeout(resolve, platformId === 'instamart' ? 500 : 100));
+    input.form.requestSubmit();
+  } else {
+    for (const type of ['keydown', 'keyup']) input.dispatchEvent(new KeyboardEvent(type, {key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));
+  }
+  const deadline = Date.now() + 1800;
+  while (Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const current = new URL(location.href).searchParams.get(config[2]);
+    // Require all previous card nodes to disappear. Recycled/ambiguous grids
+    // take the full-navigation fallback rather than risking stale products.
+    if (normalize(current) === normalize(query) &&
+        oldCards.every(card => !card.isConnected) && document.querySelector(config[1])) return true;
+  }
+  return false;
+}
 
 // 9s: enough for warm loads (3-4s typical) plus a cold-load margin;
 // longer budgets just delay the user-facing failure when a store is down.
-async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 9000) {
+async function fetchViaReusablePage(url, cleanQ, timeoutMs = 9000) {
   if (typeof chrome === "undefined" || (!chrome.tabs && !chrome.windows)) {
     return null;
   }
-  let winId = null;
-  let tabId = null;
+  let winId = null, tabId = null, prevWindowId = null;
+  const platformId = WarmTabPool.detectPlatformId(url);
+  const startedAt = Date.now();
+  let warm = false;
   try {
-    logDebug("EphemeralTab", `Opening background window for ${url}`);
-
-    // Create a detached window so the extension popup never loses focus.
-    // It must NOT be minimized: minimized (or fully occluded) windows report
-    // visibilityState "hidden", and several store SPAs (Zepto, Blinkit) refuse
-    // to render their product grid while hidden, yielding empty extractions.
-    // A small unfocused window stays "visible"; we then hand focus straight
-    // back to the user's previous window so the scraper sits BEHIND it.
-    if (chrome.windows && chrome.windows.create) {
+    try { prevWindowId = (await chrome.windows.getLastFocused()).id; } catch (_) {}
+    const entry = await WarmTabPool.acquire(platformId, url, false);
+    if (!entry) return null;
+    ({tabId, winId} = entry);
+    logDebug("TabPool", `${entry.reused ? 'Reusing' : 'Created'} ${platformId} page ${tabId}`);
+    if (entry.reused) {
       try {
-        const prevWindowId = await new Promise((res) => {
-          try { chrome.windows.getLastFocused((w) => res(w ? w.id : null)); } catch (e) { res(null); }
-        });
-        // Stagger concurrent scraper windows: identical positions stack them
-        // perfectly, and a fully-covered window reports visibilityState
-        // "hidden" on Windows, which stops SPA rendering (Zepto/Blinkit).
-        const seq = ephemeralWindowSeq++;
-        const win = await chrome.windows.create({
-          url,
-          type: "popup",
-          focused: false,
-          width: 480,
-          height: 640,
-          top: 60 + (seq % 4) * 110,
-          left: 60 + (seq % 4) * 170
-        });
-        // Push the scraper behind the user's active window again.
-        if (prevWindowId && win && win.id !== prevWindowId) {
-          try { chrome.windows.update(prevWindowId, { focused: true }); } catch (e) {}
-        }
-        winId = win.id;
-        tabId = win.tabs && win.tabs[0] ? win.tabs[0].id : null;
-        // Chrome does not guarantee that windows.create returns populated
-        // tabs. Resolve the newly-created tab by windowId before giving up,
-        // allowing a short propagation delay in the tabs API.
-        if (!tabId && winId && chrome.tabs.query) {
-          const tabLookupDeadline = Date.now() + 1000;
-          while (!tabId && Date.now() < tabLookupDeadline) {
-            const tabs = await chrome.tabs.query({ windowId: winId });
-            tabId = tabs && tabs[0] ? tabs[0].id : null;
-            if (!tabId) await new Promise((resolve) => setTimeout(resolve, 100));
-          }
-        }
-      } catch (winErr) {
-        // Fallback to tab creation if window creation fails
-        try {
-          const tab = await chrome.tabs.create({ url, active: false });
-          tabId = tab.id;
-        } catch (e) { return null; }
+        const result = await chrome.scripting.executeScript({target:{tabId}, world:'MAIN', func:submitWarmStoreSearch, args:[platformId, cleanQ]});
+        warm = result?.[0]?.result === true;
+      } catch (_) {}
+      logDebug("TabPool", `${platformId}: ${warm ? 'Store search accepted' : 'Navigating existing page (safe fallback)'}`);
+      if (!warm) {
+        await chrome.tabs.update(tabId, {url});
+        if (!await waitForPooledTabNavigation(tabId, url, Math.min(4500, timeoutMs - (Date.now() - startedAt)))) return null;
       }
-    } else if (chrome.tabs.create) {
-      try {
-        const tab = await chrome.tabs.create({ url, active: false });
-        tabId = tab.id;
-      } catch (e) { return null; }
     }
-
-    if (!tabId) return null;
 
     // Poll every 250ms up to timeout (returns immediately once data is ready).
     // Each pass is a short single-pass extraction; the in-page MutationObserver
@@ -1650,8 +1652,8 @@ async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 9000) {
     // PARTIAL grid (Blinkit streams rows in). Keep polling and keep the
     // RICHEST result (most candidates) instead of taking the first success.
     let stablePasses = 0;
-    while (Date.now() - startTime < timeoutMs) {
-      const extracted = await extractDataFromTabDetailed(tabId, cleanQ, 0, cleanQ);
+    while (Date.now() - startedAt < timeoutMs) {
+      const extracted = await extractDataFromTabDetailed(tabId, cleanQ, 0, cleanQ, warm);
       const cand = (extracted.data && extracted.data.price > 0)
         ? Object.assign({}, extracted.data, { _nc: ((extracted.data.candidates || []).length + 1) })
         : null;
@@ -1680,7 +1682,7 @@ async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 9000) {
       if (!nudged && passCount >= 10 && winId && chrome.windows && chrome.windows.update) {
         nudged = true;
         try { await chrome.windows.update(winId, { focused: true }); } catch (e) {}
-        logDebug("EphemeralTab", `Window not rendering (likely occluded) — briefly focused: ${url}`);
+        logDebug("EphemeralTab", `No results after repeated checks — focused store window: ${url}`);
       }
       await new Promise((r) => setTimeout(r, 250));
     }
@@ -1694,17 +1696,7 @@ async function fetchViaEphemeralTab(url, cleanQ, timeoutMs = 9000) {
     logDebug("EphemeralTab", `Ephemeral extraction error for ${url}: ${err.message}`);
     return null;
   } finally {
-    if (winId && typeof chrome !== "undefined" && chrome.windows && chrome.windows.remove) {
-      try {
-        await chrome.windows.remove(winId);
-        logDebug("EphemeralTab", `Ephemeral window ${winId} closed successfully`);
-      } catch (e) {}
-    } else if (tabId && typeof chrome !== "undefined" && chrome.tabs && chrome.tabs.remove) {
-      try {
-        await chrome.tabs.remove(tabId);
-        logDebug("EphemeralTab", `Ephemeral tab ${tabId} closed successfully`);
-      } catch (e) {}
-    }
+    WarmTabPool.touch(platformId);
   }
 }
 

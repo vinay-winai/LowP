@@ -1158,3 +1158,11 @@ a {color:#1D4ED8;}.product-actions a {margin-left:auto;font-size:12px;}
   line-height: 1.45;
 }
 .window-performance-notice[hidden] { display: none; }
+
+.store-card[data-store="blinkit"] { background: #fffbea; }
+.store-card[data-store="instamart"] { background: #fff3e8; }
+.store-card[data-store="zepto"] { background: #f6f0ff; }
+.store-card[data-store="amazon_tez"] { background: #ffffff; }
+.store-card[data-store="amazon_main"] { background: #f5eee8; }
+.store-card[data-store="flipkart"] { background: #edf6ff; }
+.store-card[data-store] .product:not(.selected) { background: transparent; }
