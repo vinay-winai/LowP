@@ -11,7 +11,8 @@
     "mobile": "npm --prefix mobile start",
     "build:extension": "node scripts/build-extension-core.cjs",
     "check:extension": "node scripts/build-extension-core.cjs --check",
-    "test:extension": "node scripts/build-extension-core.cjs --check && node tests/extension-ui.smoke.cjs"
+    "test:extension": "node scripts/build-extension-core.cjs --check && node tests/extension-ui.smoke.cjs",
+    "pack:extension": "node scripts/pack-extension.cjs"
   },
   "keywords": [
     "chrome-extension",

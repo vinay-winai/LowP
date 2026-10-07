@@ -53,10 +53,13 @@ A fast, lightweight, and privacy-first real-time price comparator available as a
 ## 🚀 Getting Started
 
 ### Google Chrome Extension
-1. Open **Google Chrome** and navigate to `chrome://extensions`.
-2. Enable **Developer mode** in the top-right corner.
-3. Click **Load unpacked** and select this folder.
-4. Click the **LowP** icon in your toolbar to start comparing!
+Chrome extension zip available for [download](https://github.com/vinay-winai/LowP/releases/tag/v0.2.0).
+
+1. Download and extract **[LowP-Chrome-Extension-v0.2.0.zip](https://github.com/vinay-winai/LowP/releases/download/v0.2.0/LowP-Chrome-Extension-v0.2.0.zip)** (or use this repository folder if running from source).
+2. Open **Google Chrome** and navigate to `chrome://extensions`.
+3. Enable **Developer mode** in the top-right corner.
+4. Click **Load unpacked** and select the unzipped folder (or this repository folder).
+5. Click the **LowP** icon in your toolbar or open the side panel to start comparing!
 
 The extension uses the mobile app's light theme, product-based comparisons,
 effective size-adjusted prices, editable comparison items, store offers, and
