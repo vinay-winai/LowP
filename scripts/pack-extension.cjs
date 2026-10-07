@@ -10,7 +10,8 @@ fs.mkdirSync(outputDir, { recursive: true });
 // Ensure shared mobile-core.js is fresh and built
 execFileSync(process.execPath, [path.join(__dirname, 'build-extension-core.cjs')], { stdio: 'inherit' });
 
-const version = process.env.EXTENSION_VERSION || 'v0.2.0';
+const manifest = JSON.parse(fs.readFileSync(path.join(rootDir, 'manifest.json'), 'utf8'));
+const version = process.env.EXTENSION_VERSION || `v${manifest.version}`;
 const zipName = `LowP-Chrome-Extension-${version}.zip`;
 const zipPath = path.join(outputDir, zipName);
 

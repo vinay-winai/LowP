@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "LowP - Hunt the lowest price with privacy",
   "short_name": "LowP",
-  "version": "2.0.0",
+  "version": "0.3",
   "description": "Hunt the lowest price with privacy. Compare groceries across six stores, build a basket and apply your card discounts and cashback offers.",
   "permissions": [
     "storage",

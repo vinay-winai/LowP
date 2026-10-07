@@ -1,6 +1,6 @@
 {
   "name": "lowp-price-comparator",
-  "version": "2.0.0",
+  "version": "0.3.0",
   "description": "Hyperlocal Real-Time Price Comparator across Amazon, Swiggy Instamart, and Zepto",
   "main": "src/background/service-worker.js",
   "scripts": {
