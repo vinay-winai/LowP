@@ -15,6 +15,23 @@ document.addEventListener("DOMContentLoaded", () => {
   const clearDebugBtn = document.getElementById("clearDebugBtn");
   const resultMeta = document.getElementById("resultMeta");
 
+  const windowPerformanceNotice = document.getElementById("windowPerformanceNotice");
+  function refreshWindowPerformanceNotice() {
+    if (typeof chrome === "undefined" || !chrome.windows?.getCurrent) return;
+    chrome.windows.getCurrent(win => {
+      if (chrome.runtime?.lastError || !windowPerformanceNotice) return;
+      windowPerformanceNotice.hidden = !win || !["maximized", "fullscreen"].includes(win.state);
+    });
+  }
+  refreshWindowPerformanceNotice();
+  // Follow the host window, including when the side panel stays open during resize.
+  const boundsChanged = () => refreshWindowPerformanceNotice();
+  if (typeof chrome !== "undefined") chrome.windows?.onBoundsChanged?.addListener(boundsChanged);
+  window.addEventListener("resize", refreshWindowPerformanceNotice);
+  window.addEventListener("unload", () => {
+    if (typeof chrome !== "undefined") chrome.windows?.onBoundsChanged?.removeListener(boundsChanged);
+  });
+
   function setResultMeta(text) {
     if (!resultMeta) return;
     if (!text) {
