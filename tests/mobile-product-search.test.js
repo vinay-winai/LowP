@@ -29,3 +29,23 @@ test('title selection cards offer title actions only and search with size',()=>{
  nodes.find(node=>node.props?.accessibilityLabel==='Search for Amul Butter 500g').props.onPress();
  assert.deepEqual(selected,[0]);assert.deepEqual(searched,['Amul Butter 500g']);
 });
+test('StoreCard applies platform-specific store background colors matching extension palette',()=>{
+ const react={createElement:(type,props,...children)=>({type,props:{...props,children}})};
+ const rendered={exports:{},require:name=>name==='react'?react:name==='react-native'?{View:'View',Text:'Text',Image:'Image',TouchableOpacity:'TouchableOpacity',ActivityIndicator:'ActivityIndicator',StyleSheet:{create:x=>x},Linking:{openURL:()=>{throw Error('unexpected store navigation')}}}:{productSearchTitle}};
+ vm.runInNewContext(ts.transpileModule(fs.readFileSync(require.resolve('../mobile/src/components/StoreCard.tsx'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React,esModuleInterop:true,target:ts.ScriptTarget.ES2020}}).outputText,rendered);
+ const {STORE_BG_COLORS, StoreCard} = rendered.exports;
+ assert.deepEqual(JSON.parse(JSON.stringify(STORE_BG_COLORS)), {
+  blinkit: '#FFFBEA',
+  instamart: '#FFF3E8',
+  zepto: '#F6F0FF',
+  amazon_tez: '#FFFFFF',
+  amazon_main: '#F5EEE8',
+  flipkart: '#EDF6FF',
+ });
+ for (const [platformId, expectedColor] of Object.entries(STORE_BG_COLORS)) {
+  const card = StoreCard({store: {platformId, platformName: platformId, candidates: []}, isLoading: false, onSelectCandidate: ()=>{}, onSearchTitle: ()=>{}});
+  const styleProp = card.props.style;
+  const styleArray = Array.isArray(styleProp) ? styleProp : [styleProp];
+  assert.ok(styleArray.some(s => s && s.backgroundColor === expectedColor), `Card for ${platformId} must have backgroundColor ${expectedColor}`);
+ }
+});

@@ -12,7 +12,9 @@
     "build:extension": "node scripts/build-extension-core.cjs",
     "check:extension": "node scripts/build-extension-core.cjs --check",
     "test:extension": "node scripts/build-extension-core.cjs --check && node tests/extension-ui.smoke.cjs",
-    "pack:extension": "node scripts/pack-extension.cjs"
+    "pack:extension": "node scripts/pack-extension.cjs",
+    "demo:mobile": "powershell -ExecutionPolicy Bypass -File scripts/record-mobile-demo.ps1",
+    "demo:mobile:native": "powershell -ExecutionPolicy Bypass -File scripts/record-mobile-demo.ps1 -Method native"
   },
   "keywords": [
     "chrome-extension",

@@ -159,7 +159,7 @@ export const DEFAULT_COLLECTIONS: StoreCollection[] = [
 
 export const MAX_COLLECTIONS = 7;
 
-const SEARCH_CACHE_TTL_MS = 90000;
+const SEARCH_CACHE_TTL_MS = 10000;
 const SEARCH_CACHE_MAX_ENTRIES = 30;
 const SEARCH_LIMIT_STORAGE_KEY = 'lowp_limit_parallel_searches';
 const SEARCH_OPTIONS_STORAGE_KEY = 'lowp_search_limit_options_v1';

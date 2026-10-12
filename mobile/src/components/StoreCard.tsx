@@ -3,6 +3,15 @@ import { View, Text, Image, StyleSheet, TouchableOpacity, Linking, ActivityIndic
 import { StoreResult } from '../types';
 import {productSearchTitle} from '../core/ProductSearch';
 
+export const STORE_BG_COLORS: Record<string, string> = {
+  blinkit: '#FFFBEA',
+  instamart: '#FFF3E8',
+  zepto: '#F6F0FF',
+  amazon_tez: '#FFFFFF',
+  amazon_main: '#F5EEE8',
+  flipkart: '#EDF6FF',
+};
+
 interface StoreCardProps {
   store: StoreResult;
   isLoading: boolean;
@@ -15,13 +24,14 @@ interface StoreCardProps {
 
 export const StoreCard: React.FC<StoreCardProps> = ({ store, isLoading, selectionDisabled, onSelectCandidate, onSearchTitle, onOpenLink, selectionMode = 'compare' }) => {
   const candidates = (store.candidates?.length ? store.candidates : store.item ? [store.item] : []).slice(0, 3);
+  const cardBg = (store.platformId && STORE_BG_COLORS[store.platformId]) || '#FFFFFF';
   const open = (url: string, title: string) => {
     if (!url || url === '#') return;
     if (onOpenLink) onOpenLink(url, title, store.logoColor);
     else Linking.openURL(url).catch(() => {});
   };
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, { backgroundColor: cardBg }]}>
       <View style={styles.header}>
         <View style={[styles.dot, { backgroundColor: store.logoColor }]} />
         <Text style={styles.name}>{store.platformName}</Text>
@@ -64,8 +74,8 @@ export const StoreCard: React.FC<StoreCardProps> = ({ store, isLoading, selectio
 };
 const styles = StyleSheet.create({
   titleRow: {flexDirection: 'row', alignItems: 'flex-start', gap: 6}, titleSearch: {minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center'},
-  card: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, marginBottom: 12, overflow: 'hidden' },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14, backgroundColor: '#F8FAFC' },
+  card: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, marginBottom: 12, overflow: 'hidden' },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14, backgroundColor: 'transparent' },
   dot: { width: 8, height: 8, borderRadius: 4 }, name: { flex: 1, color: '#0F172A', fontWeight: '700', fontSize: 14 },
   time: { color: '#64748B', fontSize: 11 }, row: { borderTopWidth: 1, borderTopColor: '#E2E8F0', padding: 14 },
   product: { flexDirection: 'row', gap: 12, minHeight: 76 }, image: { width: 64, height: 64, borderRadius: 8, backgroundColor: '#F8FAFC' },
